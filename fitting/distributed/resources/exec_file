@@ -1,6 +1,0 @@
-#!/usr/bin/env bash	
-
-tar xzf $(ENVPATH)
-source setup.sh bashrc
-
-python3 -m fitting.cli run-config "$@"

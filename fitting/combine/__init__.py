@@ -1,0 +1,1 @@
+"""Higgs Combine output generation."""

@@ -1,100 +1,114 @@
-import argparse
-import fitting.estimate
-import fitting.combine.plot_sensitivity
-import fitting.diagnostics
-import fitting.background_sim
-from rich import print
-import fitting.predictive
-import fitting.gather_results
-from fitting.combine.generate import addDatacardGenerateParser
-from .logging import setupLogging
+"""CLI entry point for fitting2.
+
+Usage:
+    fitting2 run --config config.json
+    fitting2 run --background data/bg.pkl.lz4 [options]
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+from pathlib import Path
+
+import click
+
+from .core.serialization import converter
+from .pipeline import PipelineConfig, runPipeline
+import yaml
+
+logger = logging.getLogger("fitting2")
 
 
-def jsonToNamespace(path, defaults):
-    from types import SimpleNamespace
-    import json
-
-    with open(path, "r") as f:
-        data = json.load(f)
-        data = {**defaults, **data}
-        data = SimpleNamespace(**data)
-    return data
-
-
-def parseAndProcess():
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "-l",
-        "--log",
-        dest="log_level",
-        default="DEBUG",
-        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
-        help="Set the logging level",
+@click.group()
+@click.option("-v", "--verbose", is_flag=True, help="Enable debug logging.")
+def main(verbose: bool) -> None:
+    """GPR Background Estimation for HEP."""
+    level = logging.DEBUG if verbose else logging.INFO
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
+        datefmt="%H:%M:%S",
     )
-    subparsers = parser.add_subparsers()
-    funcs = {}
 
-    def addToCli(f, name):
-        ret = subparsers.add_parser(name)
-        f(ret)
-        funcs[name] = (
-            ret.get_default("func"),
-            {
-                x.dest: x.default
-                for x in ret._actions
-                if isinstance(
-                    x, (argparse._StoreAction, argparse.BooleanOptionalAction)
-                )
-            },
+
+@main.command()
+@click.option(
+    "--config",
+    "-c",
+    type=click.Path(exists=True, path_type=Path),
+    default=None,
+    help="JSON config file.",
+)
+@click.option(
+    "--background",
+    "-b",
+    type=click.Path(exists=True, path_type=Path),
+    default=None,
+    help="Background histogram file.",
+)
+@click.option(
+    "--signal",
+    "-s",
+    type=click.Path(exists=True, path_type=Path),
+    default=None,
+    help="Signal histogram file.",
+)
+@click.option("--signal-name", type=str, default=None, help="Signal name/key.")
+@click.option(
+    "--injection-rate", "-r", type=float, default=0.0, help="Signal injection rate."
+)
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(path_type=Path),
+    default=Path("output"),
+    help="Output directory.",
+)
+@click.option("--rebin", type=int, default=1, help="Rebin factor.")
+@click.option(
+    "--min-counts", type=float, default=10.0, help="Min bin count for fit domain."
+)
+@click.option("--num-iters", type=int, default=500, help="Training iterations.")
+@click.option("--lr", type=float, default=0.01, help="Learning rate.")
+def run(
+    config: Path | None,
+    background: Path | None,
+    signal: Path | None,
+    signal_name: str | None,
+    injection_rate: float,
+    output: Path,
+    rebin: int,
+    min_counts: float,
+    num_iters: int,
+    lr: float,
+) -> None:
+    """Run the background estimation pipeline."""
+    if config is not None:
+        with open(config, "r") as f:
+            raw = yaml.safe_load(f)
+        pipeline_config = converter.structure(raw, PipelineConfig)
+    elif background is not None:
+        from .inference.optimization import OptimizationConfig
+
+        pipeline_config = PipelineConfig(
+            background_path=background,
+            signal_path=signal,
+            signal_name=signal_name,
+            injection_rate=injection_rate,
+            output_dir=output,
+            rebin=rebin,
+            min_counts=min_counts,
+            optimization=OptimizationConfig(
+                num_iters=num_iters,
+                lr=lr,
+            ),
         )
-        return ret
+    else:
+        raise click.UsageError("Must specify either --config or --background.")
 
-    x = addToCli(fitting.estimate.addToParser, "estimate")
-    addToCli(fitting.diagnostics.addDiagnosticsToParser, "plots")
-    addToCli(fitting.diagnostics.addCovarsToParser, "covars")
-    addToCli(fitting.diagnostics.addEigensToParser, "eigens")
-    addToCli(fitting.background_sim.addSimParser, "bkg-smooth")
-    addToCli(fitting.predictive.addPValueParser, "model-checks")
-    addToCli(fitting.gather_results.addGatherParser, "gather")
-    addToCli(fitting.combine.plot_sensitivity.addPlotSensitivityParser, "plot-sens")
-    addToCli(addDatacardGenerateParser, "make-datacard")
-
-    config_parser = subparsers.add_parser("run-config")
-    config_parser.add_argument("input")
-
-    def runConfig(args):
-        from types import SimpleNamespace
-        import json
-
-        with open(args.input, "r") as f:
-            data = json.load(f)
-        if not isinstance(data, list):
-            data = [data]
-        for d in data:
-            command, defaults = funcs[d["command"]]
-            all_data = {**defaults}
-            all_data.update(d)
-            ns = SimpleNamespace(**all_data)
-            command(ns)
-
-    config_parser.set_defaults(func=runConfig)
-
-    args = parser.parse_args()
-    setupLogging(args.log_level)
-
-    # import code
-    # import readline
-    # import rlcompleter
-    #
-    # vars = globals()
-    # vars.update(locals())
-    # readline.set_completer(rlcompleter.Completer(vars).complete)
-    # readline.parse_and_bind("tab: complete")
-    # code.InteractiveConsole(vars).interact()
-
-    args.func(args)
+    runPipeline(pipeline_config)
 
 
 if __name__ == "__main__":
-
-    parseAndProcess()
+    main()
