@@ -1,13 +1,6 @@
-"""Low-level plotting helpers.
-
-Provides utilities used by 1D and 2D diagnostic plots.
-"""
-
 from __future__ import annotations
 
-from collections import Counter
-
-import jax.numpy as jnp
+from pathlib import Path
 import itertools as it
 import matplotlib.pyplot as plt
 import mplhep
@@ -18,7 +11,6 @@ from ..core.data import BinnedData
 
 
 def addAxesToHist(ax, size=0.1, pad=0.1, position="bottom", extend=False):
-    """Add a sub-axis to a histogram plot (e.g., for ratio/pull panel)."""
     new_ax = mplhep.append_axes(ax, size, pad, position, extend)
     current_axes = getattr(ax, f"{position}_axes", [])
     setattr(ax, f"{position}_axes", current_axes + [new_ax])
@@ -26,7 +18,6 @@ def addAxesToHist(ax, size=0.1, pad=0.1, position="bottom", extend=False):
 
 
 def plotBinnedData(ax, data: BinnedData, **kwargs):
-    """Plot BinnedData on an axis."""
     h = data.toHist()
     if data.ndim == 1:
         drop_keys = {"cmin", "cmax", "cmap"}
@@ -37,7 +28,6 @@ def plotBinnedData(ax, data: BinnedData, **kwargs):
 
 
 def plotRaw(ax, edges, X, Y, V=None, **kwargs):
-    """Plot raw data arrays as a histogram."""
     np_edges = tuple(np.asarray(e) for e in edges)
     np_X = np.asarray(X)
     np_Y = np.asarray(Y)
@@ -73,15 +63,6 @@ def plotRaw(ax, edges, X, Y, V=None, **kwargs):
 
 
 def savePlots(plots: dict[str, tuple], save_dir, formats=("pdf", "png")):
-    """Save a dict of (name -> (fig, ax)) plots to a directory in multiple formats.
-
-    Args:
-        plots: Dictionary mapping plot names to (fig, ax) tuples.
-        save_dir: Base output directory.
-        formats: Sequence of image format strings (e.g., ['pdf', 'png']).
-    """
-    from pathlib import Path
-
     save_dir = Path(save_dir)
     save_dir.mkdir(parents=True, exist_ok=True)
     for name, (fig, ax) in plots.items():
@@ -110,7 +91,6 @@ def plotPPD(
     quantile_areas=DEFAULT_QUANTILE_AREAS,
     pvalue: float | None = None,
 ):
-    """Plot the posterior predictive distribution for a test statistic using KDE."""
     import scipy.stats as stats
 
     dist = np.asarray(dist, dtype=float)
@@ -145,7 +125,6 @@ def plotPPD(
     ax.set_xlabel(xlabel)
     ax.set_ylabel("Density")
     ax.legend(loc="upper right")
-    # if using mplhep, sort_legend is nice
     try:
         mplhep.sort_legend(ax=ax)
     except Exception:

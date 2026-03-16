@@ -1,10 +1,3 @@
-"""Window definitions for blinding signal regions.
-
-Window is the base class. Subclasses define different blinding
-geometries. cattrs include_subclasses handles polymorphic
-serialization automatically.
-"""
-
 from __future__ import annotations
 
 import logging
@@ -20,19 +13,8 @@ from ..core.data import BinnedData
 logger = logging.getLogger(__name__)
 
 
-# ---------------------------------------------------------------------------
-# Window hierarchy
-# ---------------------------------------------------------------------------
-
-
 @attrs.define
 class Window(ABC):
-    """Base window class for blinding regions.
-
-    A Window is a callable: given bin centers X, it returns a boolean
-    mask identifying which bins fall inside the blinded region.
-    """
-
     spread: float = 1.0
 
     @abstractmethod
@@ -43,13 +25,6 @@ class Window(ABC):
 
 @attrs.define
 class GaussianWindow(Window):
-    """Gaussian-shaped blinding window.
-
-    Fits a Gaussian to the signal distribution and blinds all bins
-    where the Gaussian value exceeds the value at `spread * sigma`
-    from the center. Works for any dimensionality.
-    """
-
     amplitude: jnp.ndarray = attrs.field(factory=lambda: jnp.array(1.0))
     center: jnp.ndarray = attrs.field(factory=lambda: jnp.array(0.0))
     sigma: jnp.ndarray = attrs.field(factory=lambda: jnp.array(1.0))
@@ -62,9 +37,10 @@ class GaussianWindow(Window):
         ndim = X_norm.shape[-1] if X_norm.ndim > 1 else 1
 
         if ndim == 1:
-            return self.amplitude * jnp.exp(
-                -(((X_norm - self.center) / self.sigma) ** 2)
-            ).ravel()
+            return (
+                self.amplitude
+                * jnp.exp(-(((X_norm - self.center) / self.sigma) ** 2)).ravel()
+            )
         else:
             # 2D Gaussian with optional rotation
             x, y = X_norm[..., 0], X_norm[..., 1]
@@ -72,15 +48,9 @@ class GaussianWindow(Window):
             sx, sy = self.sigma[0], self.sigma[1]
             theta = self.theta or 0.0
 
-            a = jnp.cos(theta) ** 2 / (2 * sx**2) + jnp.sin(theta) ** 2 / (
-                2 * sy**2
-            )
-            b = -jnp.sin(2 * theta) / (4 * sx**2) + jnp.sin(2 * theta) / (
-                4 * sy**2
-            )
-            c = jnp.sin(theta) ** 2 / (2 * sx**2) + jnp.cos(theta) ** 2 / (
-                2 * sy**2
-            )
+            a = jnp.cos(theta) ** 2 / (2 * sx**2) + jnp.sin(theta) ** 2 / (2 * sy**2)
+            b = -jnp.sin(2 * theta) / (4 * sx**2) + jnp.sin(2 * theta) / (4 * sy**2)
+            c = jnp.sin(theta) ** 2 / (2 * sx**2) + jnp.cos(theta) ** 2 / (2 * sy**2)
             g = self.amplitude * jnp.exp(
                 -(a * (x - xo) ** 2 + 2 * b * (x - xo) * (y - yo) + c * (y - yo) ** 2)
             )
@@ -91,8 +61,8 @@ class GaussianWindow(Window):
         # Threshold: value at spread * sigma from center
         ndim = X.shape[-1] if X.ndim > 1 else 1
         if ndim == 1:
-            threshold_point = (
-                self.normalization_scale * (self.center + self.spread * self.sigma)
+            threshold_point = self.normalization_scale * (
+                self.center + self.spread * self.sigma
             )
             threshold = self._gaussianValue(threshold_point.reshape(1, 1))
         else:
@@ -109,8 +79,6 @@ class GaussianWindow(Window):
 
 @attrs.define
 class RectangularWindow(Window):
-    """Rectangular blinding window defined by lower/upper bounds."""
-
     lower: jnp.ndarray = attrs.field(factory=lambda: jnp.array(0.0))
     upper: jnp.ndarray = attrs.field(factory=lambda: jnp.array(1.0))
 
@@ -123,8 +91,6 @@ class RectangularWindow(Window):
 
 @attrs.define
 class EllipseWindow(Window):
-    """Elliptical blinding window."""
-
     center: jnp.ndarray = attrs.field(factory=lambda: jnp.array([0.5, 0.5]))
     axes: jnp.ndarray = attrs.field(factory=lambda: jnp.array([0.1, 0.1]))
 
@@ -144,39 +110,18 @@ def _numpyGaussian1D(X, amplitude, xo, sigma_x):
 
 def _numpyGaussian2D(X, amplitude, xo, yo, sigma_x, sigma_y, theta):
     x, y = X[..., 0], X[..., 1]
-    a = np.cos(theta) ** 2 / (2 * sigma_x**2) + np.sin(theta) ** 2 / (
-        2 * sigma_y**2
-    )
-    b = -np.sin(2 * theta) / (4 * sigma_x**2) + np.sin(2 * theta) / (
-        4 * sigma_y**2
-    )
-    c = np.sin(theta) ** 2 / (2 * sigma_x**2) + np.cos(theta) ** 2 / (
-        2 * sigma_y**2
-    )
+    a = np.cos(theta) ** 2 / (2 * sigma_x**2) + np.sin(theta) ** 2 / (2 * sigma_y**2)
+    b = -np.sin(2 * theta) / (4 * sigma_x**2) + np.sin(2 * theta) / (4 * sigma_y**2)
+    c = np.sin(theta) ** 2 / (2 * sigma_x**2) + np.cos(theta) ** 2 / (2 * sigma_y**2)
     return amplitude * np.exp(
         -(a * (x - xo) ** 2 + 2 * b * (x - xo) * (y - yo) + c * (y - yo) ** 2)
     )
 
 
-def fitGaussianWindow(
-    signal_data: BinnedData, spread: float = 1.3
-) -> GaussianWindow:
-    """Fit a Gaussian to the signal distribution to define a blinding window.
-
-    Args:
-        signal_data: Signal histogram data.
-        spread: Number of sigma to extend the window.
-
-    Returns:
-        A GaussianWindow fitted to the signal shape.
-
-    Raises:
-        RuntimeError: If the Gaussian fit fails.
-    """
+def fitGaussianWindow(signal_data: BinnedData, spread: float = 1.3) -> GaussianWindow:
     X_np = np.asarray(signal_data.X)
     Y_np = np.asarray(signal_data.Y)
 
-    # Normalize X for fitting stability
     scale = np.max(X_np, axis=0)
     X_norm = X_np / scale
 

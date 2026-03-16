@@ -1,9 +1,3 @@
-"""GP model configuration hierarchy.
-
-Each GPModelConfig subclass constructs a gpjax Prior → Posterior chain.
-Supports exact, collapsed sparse (SGPR), and uncollapsed variational (SVGP).
-"""
-
 from __future__ import annotations
 
 import logging
@@ -15,60 +9,22 @@ import gpjax
 import jax.numpy as jnp
 from flax import nnx
 
-from .kernels import (
-    KernelConfig,
-    MultiScaleKernelConfig,
-)
+from .kernels import KernelConfig, NNKernelConfig
 from .likelihoods import FixedGaussianNoiseConfig, LikelihoodConfig
+
+from .means import (
+    MeanFunctionConfig,
+    ZeroMeanConfig,
+)
 
 logger = logging.getLogger(__name__)
 
 
-# ---------------------------------------------------------------------------
-# Mean function configs
-# ---------------------------------------------------------------------------
-
-
-@attrs.define
-class MeanFunctionConfig(ABC):
-    """Base mean function configuration."""
-
-    @abstractmethod
-    def buildMeanFunction(self) -> gpjax.mean_functions.AbstractMeanFunction: ...
-
-
-@attrs.define
-class ZeroMeanConfig(MeanFunctionConfig):
-    """Zero mean function."""
-
-    def buildMeanFunction(self) -> gpjax.mean_functions.AbstractMeanFunction:
-        return gpjax.mean_functions.Zero()
-
-
-@attrs.define
-class ConstantMeanConfig(MeanFunctionConfig):
-    """Constant mean function."""
-
-    def buildMeanFunction(self) -> gpjax.mean_functions.AbstractMeanFunction:
-        return gpjax.mean_functions.Constant()
-
-
-# ---------------------------------------------------------------------------
-# GP Model configs
-# ---------------------------------------------------------------------------
-
-
 @attrs.define
 class GPModelConfig(ABC):
-    """Base GP model configuration.
-
-    Subclasses define how the GP prior and posterior are constructed.
-    cattrs include_subclasses handles polymorphism.
-    """
-
-    kernel: KernelConfig = attrs.Factory(MultiScaleKernelConfig)
+    kernel: KernelConfig = attrs.Factory(NNKernelConfig)
     likelihood: LikelihoodConfig = attrs.Factory(FixedGaussianNoiseConfig)
-    mean_function: MeanFunctionConfig = attrs.Factory(ConstantMeanConfig)
+    mean_function: MeanFunctionConfig = attrs.Factory(ZeroMeanConfig)
 
     @abstractmethod
     def buildModel(
@@ -77,25 +33,11 @@ class GPModelConfig(ABC):
         ndim: int,
         rngs: nnx.Rngs | None = None,
         obs_variance: jnp.ndarray | None = None,
-    ) -> tuple[Any, Any, Any]:
-        """Build GP model, likelihood, and prior.
-
-        Args:
-            dataset: gpjax Dataset with training X and y.
-            ndim: Input dimensionality.
-            rngs: Flax NNX RNG container.
-            obs_variance: Array of variances for each bin (optional).
-
-        Returns:
-            Tuple of (model, likelihood, prior_obj).
-        """
-        ...
+    ) -> tuple[Any, Any, Any]: ...
 
 
 @attrs.define
 class ExactGPConfig(GPModelConfig):
-    """Conjugate (exact) GP model."""
-
     def buildModel(
         self,
         dataset: gpjax.Dataset,
@@ -104,7 +46,7 @@ class ExactGPConfig(GPModelConfig):
         obs_variance: jnp.ndarray | None = None,
     ) -> tuple[Any, Any, Any]:
         kernel = self.kernel.buildKernel(ndim, rngs=rngs)
-        mean_fn = self.mean_function.buildMeanFunction()
+        mean_fn = self.mean_function.buildMeanFunction(ndim, kernel)
 
         kwargs = {"num_datapoints": dataset.n}
         if obs_variance is not None:
@@ -117,6 +59,7 @@ class ExactGPConfig(GPModelConfig):
         logger.info(
             f"Built ExactGP: kernel={type(kernel).__name__}, "
             f"likelihood={type(likelihood).__name__}, "
+            f"mean_function={type(mean_fn).__name__}, "
             f"n_train={dataset.n}"
         )
 
@@ -135,7 +78,7 @@ class SparseGPConfig(GPModelConfig):
         obs_variance: jnp.ndarray | None = None,
     ) -> tuple[Any, Any, Any]:
         kernel = self.kernel.buildKernel(ndim, rngs=rngs)
-        mean_fn = self.mean_function.buildMeanFunction()
+        mean_fn = self.mean_function.buildMeanFunction(ndim, kernel)
         kwargs = {"num_datapoints": dataset.n}
         if obs_variance is not None:
             kwargs["obs_variance"] = obs_variance
@@ -145,10 +88,8 @@ class SparseGPConfig(GPModelConfig):
         prior = gpjax.gps.Prior(mean_function=mean_fn, kernel=kernel)
         posterior = prior * likelihood
 
-        # Select inducing point locations
         z = _selectInducingPoints(dataset, self.num_inducing)
 
-        # Collapsed variational family
         q = gpjax.variational_families.CollapsedVariationalGaussian(
             posterior=posterior,
             inducing_inputs=z,
@@ -164,8 +105,6 @@ class SparseGPConfig(GPModelConfig):
 
 @attrs.define
 class VariationalGPConfig(GPModelConfig):
-    """Variational GP via uncollapsed stochastic variational inference (SVGP)."""
-
     num_inducing: int = 50
 
     def buildModel(
@@ -176,7 +115,7 @@ class VariationalGPConfig(GPModelConfig):
         obs_variance: jnp.ndarray | None = None,
     ) -> tuple[Any, Any, Any]:
         kernel = self.kernel.buildKernel(ndim, rngs=rngs)
-        mean_fn = self.mean_function.buildMeanFunction()
+        mean_fn = self.mean_function.buildMeanFunction(ndim, kernel)
         kwargs = {"num_datapoints": dataset.n}
         if obs_variance is not None:
             kwargs["obs_variance"] = obs_variance
@@ -186,10 +125,8 @@ class VariationalGPConfig(GPModelConfig):
         prior = gpjax.gps.Prior(mean_function=mean_fn, kernel=kernel)
         posterior = prior * likelihood
 
-        # Select inducing point locations
         z = _selectInducingPoints(dataset, self.num_inducing)
 
-        # Uncollapsed variational family
         q = gpjax.variational_families.VariationalGaussian(
             posterior=posterior,
             inducing_inputs=z,
@@ -204,7 +141,6 @@ class VariationalGPConfig(GPModelConfig):
 
 
 def _selectInducingPoints(dataset: gpjax.Dataset, num_inducing: int) -> jnp.ndarray:
-    """Select inducing point locations from the dataset."""
     n_train = dataset.n
     ndim = dataset.X.shape[1]
 

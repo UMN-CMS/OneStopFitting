@@ -1,12 +1,6 @@
-"""Prior configuration hierarchy.
-
-Defines serializable configurations for numpyro distributions.
-"""
-
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any
 
 import attrs
 import numpyro.distributions as dist
@@ -14,18 +8,12 @@ import numpyro.distributions as dist
 
 @attrs.define
 class PriorConfig(ABC):
-    """Base prior configuration."""
-
     @abstractmethod
-    def buildPrior(self) -> dist.Distribution:
-        """Construct the numpyro distribution."""
-        ...
+    def buildPrior(self) -> dist.Distribution: ...
 
 
 @attrs.define
 class LogNormalPriorConfig(PriorConfig):
-    """Log-Normal distribution."""
-
     loc: float = 0.0
     scale: float = 1.0
 
@@ -35,8 +23,6 @@ class LogNormalPriorConfig(PriorConfig):
 
 @attrs.define
 class NormalPriorConfig(PriorConfig):
-    """Normal distribution."""
-
     loc: float = 0.0
     scale: float = 1.0
 
@@ -46,8 +32,6 @@ class NormalPriorConfig(PriorConfig):
 
 @attrs.define
 class HalfNormalPriorConfig(PriorConfig):
-    """Half-Normal distribution."""
-
     scale: float = 1.0
 
     def buildPrior(self) -> dist.Distribution:
@@ -56,8 +40,6 @@ class HalfNormalPriorConfig(PriorConfig):
 
 @attrs.define
 class GammaPriorConfig(PriorConfig):
-    """Gamma distribution."""
-
     concentration: float = 1.0
     rate: float = 1.0
 
@@ -67,8 +49,6 @@ class GammaPriorConfig(PriorConfig):
 
 @attrs.define
 class UniformPriorConfig(PriorConfig):
-    """Uniform distribution."""
-
     low: float = 0.0
     high: float = 1.0
 

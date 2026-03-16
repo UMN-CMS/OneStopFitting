@@ -1,13 +1,12 @@
-"""CLI entry point for fitting2.
+"""CLI entry point for fitting.
 
 Usage:
-    fitting2 run --config config.json
-    fitting2 run --background data/bg.pkl.lz4 [options]
+    fitting run --config config.json
+    fitting run --background data/bg.pkl.lz4 [options]
 """
 
 from __future__ import annotations
 
-import json
 import logging
 from pathlib import Path
 
@@ -17,7 +16,7 @@ from .core.serialization import converter
 from .pipeline import PipelineConfig, runPipeline
 import yaml
 
-logger = logging.getLogger("fitting2")
+logger = logging.getLogger("fitting")
 
 
 @click.group()
@@ -61,13 +60,13 @@ def main(verbose: bool) -> None:
 @click.option(
     "--output",
     "-o",
-    type=click.Path(path_type=Path),
-    default=Path("output"),
-    help="Output directory.",
+    type=str,
+    default="output",
+    help="Output directory format.",
 )
 @click.option("--rebin", type=int, default=1, help="Rebin factor.")
 @click.option(
-    "--min-counts", type=float, default=10.0, help="Min bin count for fit domain."
+    "--min-counts", type=float, default=None, help="Min bin count for fit domain."
 )
 @click.option("--num-iters", type=int, default=500, help="Training iterations.")
 @click.option("--lr", type=float, default=0.01, help="Learning rate.")
@@ -96,7 +95,7 @@ def run(
             signal_path=signal,
             signal_name=signal_name,
             injection_rate=injection_rate,
-            output_dir=output,
+            output_dir_format=str(output),
             rebin=rebin,
             min_counts=min_counts,
             optimization=OptimizationConfig(

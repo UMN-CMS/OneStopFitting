@@ -1,23 +1,19 @@
-"""Core data structures for the fitting2 pipeline.
-
-BinnedData is the fundamental container for N-D binned histogram data.
-AnalysisState is the main data interchange object passed through the pipeline.
-"""
-
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Any
 
 import attrs
 import jax.numpy as jnp
 import numpy as np
 from uhi.numpy_plottable import NumPyPlottableHistogram
+from .formatting import dictToDot, dotFormat
 
 logger = logging.getLogger(__name__)
 
 
-def _jnp_array_validator(instance, attribute, value):
+def _jnpArrayValidator(instance, attribute, value):
     """Validate that the value is a JAX or numpy array."""
     if not isinstance(value, (jnp.ndarray, np.ndarray)):
         raise TypeError(
@@ -25,7 +21,7 @@ def _jnp_array_validator(instance, attribute, value):
         )
 
 
-def _edges_validator(instance, attribute, value):
+def _edgesValidator(instance, attribute, value):
     """Validate edges is a tuple of arrays."""
     if not isinstance(value, tuple):
         raise TypeError(
@@ -54,10 +50,10 @@ class BinnedData:
         edges: Tuple of bin edge arrays, one per axis.
     """
 
-    X: jnp.ndarray = attrs.field(validator=_jnp_array_validator)
-    Y: jnp.ndarray = attrs.field(validator=_jnp_array_validator)
-    V: jnp.ndarray = attrs.field(validator=_jnp_array_validator)
-    edges: tuple[jnp.ndarray, ...] = attrs.field(validator=_edges_validator)
+    X: jnp.ndarray = attrs.field(validator=_jnpArrayValidator)
+    Y: jnp.ndarray = attrs.field(validator=_jnpArrayValidator)
+    V: jnp.ndarray = attrs.field(validator=_jnpArrayValidator)
+    edges: tuple[jnp.ndarray, ...] = attrs.field(validator=_edgesValidator)
     axis_names: tuple[str, ...] = attrs.field(default=())
 
     @property
@@ -123,6 +119,22 @@ def _pointsToPlottable(
 
 
 @attrs.define
+class TrainingResult:
+    posterior: Any
+    likelihood: Any
+    loss_history: list[float]
+    final_loss: float
+    metric_histories: dict[str, list[float]] = attrs.Factory(dict)
+    samples: dict[str, jnp.ndarray] | None = None
+
+
+def floatToStr(f):
+    if isinstance(f, float):
+        return str(f).replace(".", "p")
+    return f
+
+
+@attrs.define
 class AnalysisState:
     """Main data interchange object passed through the entire pipeline.
 
@@ -173,9 +185,8 @@ class AnalysisState:
     transform: Any | None = None  # DataTransformation (forward ref)
 
     # --- After inference ---
-    trained_params: dict | None = None
-    loss_history: list[float] | None = None
-    samples: dict[str, jnp.ndarray] | None = None
+    training_result: TrainingResult | None = None
+    dataset: Any | None = None
 
     # --- After prediction (REAL SPACE) ---
     pred_mean: jnp.ndarray | None = None
@@ -184,3 +195,8 @@ class AnalysisState:
 
     # --- Flexible bookkeeping ---
     metadata: dict[str, Any] = attrs.Factory(dict)
+
+    def getRealOutPath(self):
+        replace_floats = {k: floatToStr(v) for k, v in dictToDot(self.metadata)}
+
+        return Path(dotFormat(self.config.output_dir_format, **replace_floats))

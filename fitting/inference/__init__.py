@@ -3,7 +3,8 @@
 from ..core.serialization import registerHierarchy
 from .kernels import KernelConfig
 from .likelihoods import LikelihoodConfig
-from .models import GPModelConfig, MeanFunctionConfig
+from .means import MeanFunctionConfig
+from .models import GPModelConfig
 
 # Register all inference hierarchies for polymorphic serialization
 registerHierarchy(KernelConfig)

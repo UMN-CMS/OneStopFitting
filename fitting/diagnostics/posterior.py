@@ -21,6 +21,7 @@ import logging
 from typing import Any, Callable
 
 import jax
+from jax import random
 import jax.numpy as jnp
 
 from ..core.data import BinnedData
@@ -86,7 +87,7 @@ TestStatisticFn = Callable[[jnp.ndarray, jnp.ndarray, jnp.ndarray], float]
 def generateReplicatedData(
     posterior_samples: jnp.ndarray,
     obs_variance: jnp.ndarray,
-    key: jax.random.PRNGKey | None = None,
+    rng_key: jax.Array | None = None,
     likelihood: str = "gaussian",
 ) -> jnp.ndarray:
     """Generate replicated observations from posterior predictive samples.
@@ -102,15 +103,15 @@ def generateReplicatedData(
     Returns:
         Replicated data, shape (S, N_bins).
     """
-    if key is None:
-        key = jax.random.PRNGKey(1)
+    if rng_key is None:
+        rng_key = random.key(1)
 
     if likelihood == "gaussian":
-        noise = jax.random.normal(key, shape=posterior_samples.shape)
+        noise = random.normal(rng_key, shape=posterior_samples.shape)
         return posterior_samples + noise * jnp.sqrt(obs_variance)
     elif likelihood == "poisson":
         rates = jnp.clip(posterior_samples, a_min=0.0)
-        return jax.random.poisson(key, rates).astype(posterior_samples.dtype)
+        return jax.random.poisson(rng_key, rates).astype(posterior_samples.dtype)
     else:
         raise ValueError(f"Unsupported likelihood: {likelihood}")
 
@@ -121,7 +122,7 @@ def posteriorPredictiveCheck(
     test_data: BinnedData,
     test_statistics: dict[str, TestStatisticFn] | None = None,
     num_samples: int = 200,
-    key: jax.random.PRNGKey | None = None,
+    rng_key: jax.Array | None = None,
     likelihood: str = "gaussian",
     blind_mask: jnp.ndarray | None = None,
 ) -> dict[str, Any]:
@@ -158,11 +159,11 @@ def posteriorPredictiveCheck(
     if test_statistics is None:
         test_statistics = {"chi2": chi2TestStatistic}
 
-    if key is None:
-        key = jax.random.PRNGKey(0)
+    if rng_key is None:
+        rng_key = random.key(0)
 
     # 1. Sample f* from real-space MVN
-    key, sample_key, rep_key = jax.random.split(key, 3)
+    rng_key, sample_key, rep_key = random.split(rng_key, 3)
 
     # Add small jitter to diagonal for numerical stability of Cholesky
     jitter = 1e-6 * jnp.eye(pred_cov.shape[0])

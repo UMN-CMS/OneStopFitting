@@ -1,5 +1,3 @@
-"""Preprocessing: extract regression data, apply masks, split train/test."""
-
 from __future__ import annotations
 
 import logging
@@ -15,19 +13,10 @@ logger = logging.getLogger(__name__)
 
 def applyDomainMask(
     data: BinnedData,
-    min_counts: float = 10.0,
+    min_counts: float | None = None,
     domain_mask_fn: callable | None = None,
 ) -> tuple[BinnedData, jnp.ndarray]:
-    """Apply domain cuts to remove bins outside the fit region.
-
-    Args:
-        data: Full histogram data.
-        min_counts: Minimum bin count to include.
-        domain_mask_fn: Optional callable(X) -> bool mask for additional cuts.
-
-    Returns:
-        Tuple of (masked data, boolean mask).
-    """
+    min_counts = min_counts if min_counts is not None else -1.0
     mask = data.Y >= min_counts
 
     if domain_mask_fn is not None:
@@ -41,19 +30,6 @@ def splitTrainTest(
     data: BinnedData,
     window: Window | None,
 ) -> tuple[BinnedData, BinnedData, jnp.ndarray]:
-    """Split data into training (outside window) and test (full domain).
-
-    The test data is the full domain data. The training data is the
-    full domain minus the blinded window.
-
-    Args:
-        data: Domain-masked data.
-        window: Blinding window. If None, all data is used for training.
-
-    Returns:
-        Tuple of (train_data, test_data, blind_mask).
-        blind_mask is True for bins inside the window.
-    """
     test_data = data
 
     if window is not None:
@@ -71,23 +47,6 @@ def preprocess(
     min_counts: float = 10.0,
     domain_mask_fn: callable | None = None,
 ) -> AnalysisState:
-    """Run the full preprocessing pipeline on an AnalysisState.
-
-    Steps:
-    1. If signal is available and no window is set, fit a Gaussian window
-    2. Optionally inject signal into background
-    3. Apply domain mask (min counts + custom)
-    4. Split into train/test using the window
-
-    Args:
-        state: AnalysisState with background (and optionally signal) populated.
-        min_counts: Minimum bin count threshold.
-        domain_mask_fn: Optional additional domain mask function.
-
-    Returns:
-        Updated AnalysisState with train_data, test_data, domain_mask,
-        blind_mask, and window populated.
-    """
     if state.background is None:
         raise ValueError(
             "AnalysisState.background must be populated before preprocessing"

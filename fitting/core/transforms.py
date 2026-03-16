@@ -14,7 +14,7 @@ from typing import Any
 
 import attrs
 import jax.numpy as jnp
-from numpyro.distributions.transforms import Transform, AffineTransform, ExpTransform
+from numpyro.distributions.transforms import Transform, AffineTransform
 
 from .data import BinnedData
 
@@ -97,20 +97,6 @@ class DataTransformation:
         histogram: Any,
         rebin: int = 1,
     ) -> dict[str, BinnedData]:
-        """Apply this transform to every variation in a histogram.
-
-        The transform parameters (loc, scale) are NOT recomputed —
-        they are the same ones fitted to 'central'. This ensures
-        all systematic variations live in the same normalized space.
-
-        Args:
-            histogram: A hist.Hist with a StrCategory 'variation' axis.
-            rebin: Rebin factor.
-
-        Returns:
-            Dict mapping variation name → transformed BinnedData.
-        """
-        # Lazy import to avoid circular dep
         from ..data.loading import histToBinnedData, variationNames
 
         result = {}
@@ -120,32 +106,14 @@ class DataTransformation:
         return result
 
 
-# ---------------------------------------------------------------------------
-# TransformConfig hierarchy — ABC base, cattrs include_subclasses
-# ---------------------------------------------------------------------------
-
-
 @attrs.define
 class TransformConfig(ABC):
-    """Base transform configuration.
-
-    Subclasses define different normalization strategies.
-    Use cattrs include_subclasses for polymorphic serialization.
-    """
-
     @abstractmethod
-    def buildTransform(self, data: BinnedData) -> DataTransformation:
-        """Compute the transformation parameters from data."""
-        ...
+    def buildTransform(self, data: BinnedData) -> DataTransformation: ...
 
 
 @attrs.define
 class StandardizationConfig(TransformConfig):
-    """Standardize X to [0, range] and Y to zero-mean, unit-std.
-
-    This is the default transform used in the original fitting package.
-    """
-
     def buildTransform(self, data: BinnedData) -> DataTransformation:
         X, Y = data.X, data.Y
 
@@ -156,14 +124,11 @@ class StandardizationConfig(TransformConfig):
         y_mean = jnp.mean(Y)
         y_std = jnp.std(Y)
 
-        # x' = (x - x_min) / (scale * x_range)
-        # AffineTransform: y = loc + scale * x  (forward)
         transform_x = AffineTransform(
             loc=-x_min / x_range,
             scale=1.0 / x_range,
         )
 
-        # y' = (y - y_mean) / (scale * y_std)
         transform_y = AffineTransform(
             loc=-y_mean / y_std,
             scale=1.0 / y_std,
@@ -174,8 +139,6 @@ class StandardizationConfig(TransformConfig):
 
 @attrs.define
 class MinMaxConfig(TransformConfig):
-    """Scale both X and Y to [0, 1] ranges."""
-
     def buildTransform(self, data: BinnedData) -> DataTransformation:
         X, Y = data.X, data.Y
 
@@ -198,8 +161,6 @@ class MinMaxConfig(TransformConfig):
 
 @attrs.define
 class IdentityTransformConfig(TransformConfig):
-    """No transformation — pass data through unchanged."""
-
     def buildTransform(self, data: BinnedData) -> DataTransformation:
         ndim = data.ndim
         transform_x = AffineTransform(loc=jnp.zeros(ndim), scale=jnp.ones(ndim))
@@ -207,23 +168,9 @@ class IdentityTransformConfig(TransformConfig):
         return DataTransformation(transform_x=transform_x, transform_y=transform_y)
 
 
-# ---------------------------------------------------------------------------
-# Convenience function
-# ---------------------------------------------------------------------------
-
-
 def computeNormalization(
     data: BinnedData, config: TransformConfig | None = None
 ) -> DataTransformation:
-    """Compute a normalization transform from data.
-
-    Args:
-        data: The training data to compute statistics from.
-        config: Transform configuration. Defaults to StandardizationConfig.
-
-    Returns:
-        A DataTransformation that can be applied to any BinnedData.
-    """
     if config is None:
         config = StandardizationConfig()
     return config.buildTransform(data)

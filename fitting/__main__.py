@@ -1,5 +1,6 @@
 """Allow running as python -m fitting2."""
 
-from .cli import main
+from fitting.cli import main
 
-main()
+if __name__ == "__main__":
+    main()

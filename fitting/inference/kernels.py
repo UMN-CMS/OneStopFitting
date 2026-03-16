@@ -46,11 +46,11 @@ class KernelConfig(ABC):
         ...
 
     def _get_param(
-        self, 
-        name: str, 
-        value: Any, 
+        self,
+        name: str,
+        value: Any,
         prior_config: PriorConfig | None = None,
-        param_type: type[gpp.Parameter] = gpp.PositiveReal
+        param_type: type[gpp.Parameter] = gpp.PositiveReal,
     ) -> Any:
         """Wrap a parameter value with a prior if present."""
         if prior_config is not None:
@@ -62,7 +62,6 @@ class KernelConfig(ABC):
 class RBFConfig(KernelConfig):
     """Radial Basis Function (squared exponential) kernel."""
 
-    active_dims: list[int] | None = None
     ard: bool = True
     lengthscale_prior: PriorConfig | None = None
     variance_prior: PriorConfig | None = None
@@ -73,17 +72,12 @@ class RBFConfig(KernelConfig):
         ls_val = [0.25] * ndim if self.ard else 0.25
         lengthscale = self._get_param("lengthscale", ls_val, self.lengthscale_prior)
         variance = self._get_param("variance", 2.0, self.variance_prior)
-        
-        return gpk.RBF(
-            lengthscale=lengthscale, 
-            variance=variance, 
-            active_dims=self.active_dims
-        )
+
+        return gpk.RBF(lengthscale=lengthscale, variance=variance)
 
 
 @attrs.define
 class Matern12Config(KernelConfig):
-    active_dims: list[int] | None = None
     ard: bool = True
     lengthscale_prior: PriorConfig | None = None
     variance_prior: PriorConfig | None = None
@@ -94,16 +88,11 @@ class Matern12Config(KernelConfig):
         ls_val = [0.25] * ndim if self.ard else 0.25
         lengthscale = self._get_param("lengthscale", ls_val, self.lengthscale_prior)
         variance = self._get_param("variance", 2.0, self.variance_prior)
-        return gpk.Matern12(
-            lengthscale=lengthscale, 
-            variance=variance,
-            active_dims=self.active_dims
-        )
+        return gpk.Matern12(lengthscale=lengthscale, variance=variance)
 
 
 @attrs.define
 class Matern32Config(KernelConfig):
-    active_dims: list[int] | None = None
     ard: bool = True
     lengthscale_prior: PriorConfig | None = None
     variance_prior: PriorConfig | None = None
@@ -114,16 +103,11 @@ class Matern32Config(KernelConfig):
         ls_val = [0.25] * ndim if self.ard else 0.25
         lengthscale = self._get_param("lengthscale", ls_val, self.lengthscale_prior)
         variance = self._get_param("variance", 2.0, self.variance_prior)
-        return gpk.Matern32(
-            lengthscale=lengthscale, 
-            variance=variance,
-            active_dims=self.active_dims
-        )
+        return gpk.Matern32(lengthscale=lengthscale, variance=variance)
 
 
 @attrs.define
 class Matern52Config(KernelConfig):
-    active_dims: list[int] | None = None
     ard: bool = True
     lengthscale_prior: PriorConfig | None = None
     variance_prior: PriorConfig | None = None
@@ -134,18 +118,13 @@ class Matern52Config(KernelConfig):
         ls_val = [0.25] * ndim if self.ard else 0.25
         lengthscale = self._get_param("lengthscale", ls_val, self.lengthscale_prior)
         variance = self._get_param("variance", 2.0, self.variance_prior)
-        return gpk.Matern52(
-            lengthscale=lengthscale, 
-            variance=variance,
-            active_dims=self.active_dims
-        )
+        return gpk.Matern52(lengthscale=lengthscale, variance=variance)
 
 
 @attrs.define
 class RationalQuadraticConfig(KernelConfig):
     """Rational Quadratic kernel."""
 
-    active_dims: list[int] | None = None
     ard: bool = True
     lengthscale_prior: PriorConfig | None = None
     variance_prior: PriorConfig | None = None
@@ -159,10 +138,7 @@ class RationalQuadraticConfig(KernelConfig):
         variance = self._get_param("variance", 2.0, self.variance_prior)
         alpha = self._get_param("alpha", 1.0, self.alpha_prior)
         return gpk.RationalQuadratic(
-            lengthscale=lengthscale, 
-            variance=variance,
-            alpha=alpha,
-            active_dims=self.active_dims
+            lengthscale=lengthscale, variance=variance, alpha=alpha
         )
 
 
@@ -170,7 +146,6 @@ class RationalQuadraticConfig(KernelConfig):
 class PeriodicConfig(KernelConfig):
     """Periodic kernel."""
 
-    active_dims: list[int] | None = None
     lengthscale_prior: PriorConfig | None = None
     variance_prior: PriorConfig | None = None
     period_prior: PriorConfig | None = None
@@ -181,23 +156,19 @@ class PeriodicConfig(KernelConfig):
         lengthscale = self._get_param("lengthscale", 1.0, self.lengthscale_prior)
         variance = self._get_param("variance", 1.0, self.variance_prior)
         period = self._get_param("period", 1.0, self.period_prior)
-        return gpk.Periodic(
-            lengthscale=lengthscale,
-            variance=variance,
-            period=period,
-            active_dims=self.active_dims
-        )
+        return gpk.Periodic(lengthscale=lengthscale, variance=variance, period=period)
 
 
 @attrs.define
 class WhiteConfig(KernelConfig):
     """White noise kernel."""
+
     variance_prior: PriorConfig | None = None
 
     def buildKernel(
         self, ndim: int, rngs: nnx.Rngs | None = None
     ) -> gpk.AbstractKernel:
-        variance = self._get_param("variance", 1.0, self.variance_prior)
+        variance = self._get_param("variance", 1e-6, self.variance_prior)
         return gpk.White(variance=variance)
 
 
@@ -205,14 +176,13 @@ class WhiteConfig(KernelConfig):
 class LinearConfig(KernelConfig):
     """Linear kernel."""
 
-    active_dims: list[int] | None = None
     variance_prior: PriorConfig | None = None
 
     def buildKernel(
         self, ndim: int, rngs: nnx.Rngs | None = None
     ) -> gpk.AbstractKernel:
         variance = self._get_param("variance", 1.0, self.variance_prior)
-        return gpk.Linear(variance=variance, active_dims=self.active_dims)
+        return gpk.Linear(variance=variance)
 
 
 @attrs.define
@@ -220,7 +190,6 @@ class PolynomialConfig(KernelConfig):
     """Polynomial kernel."""
 
     degree: int = 2
-    active_dims: list[int] | None = None
     variance_prior: PriorConfig | None = None
     shift_prior: PriorConfig | None = None
 
@@ -229,44 +198,24 @@ class PolynomialConfig(KernelConfig):
     ) -> gpk.AbstractKernel:
         variance = self._get_param("variance", 1.0, self.variance_prior)
         shift = self._get_param("shift", 1.0, self.shift_prior)
-        return gpk.Polynomial(
-            degree=self.degree, 
-            variance=variance,
-            shift=shift,
-            active_dims=self.active_dims
-        )
-
-
-@attrs.define
-class MultiScaleKernelConfig(KernelConfig):
-    ard: bool = True
-    # For composite kernels, we might need a way to pass priors to children
-    # but for common cases we can just use defaults or manual composition.
-
-    def buildKernel(
-        self, ndim: int, rngs: nnx.Rngs | None = None
-    ) -> gpk.AbstractKernel:
-        len_global = [1.0] * ndim if self.ard else 1.0
-        k_global = gpk.Matern52(lengthscale=len_global)
-
-        len_local = [0.1] * ndim if self.ard else 0.1
-        k_local = gpk.Matern52(lengthscale=len_local)
-
-        return k_global + k_local
+        return gpk.Polynomial(degree=self.degree, variance=variance, shift=shift)
 
 
 @attrs.define
 class SumKernelConfig(KernelConfig):
     """Sum of kernels: k1 + k2 + ..."""
 
-    components: list[KernelConfig] = attrs.Factory(list)
+    kernels: list[KernelConfig] = attrs.field(factory=list)
+
+    @kernels.validator
+    def _validateKernels(self, attribute, value):
+        if not value:
+            raise ValueError("SumKernelConfig requires at least one component")
 
     def buildKernel(
         self, ndim: int, rngs: nnx.Rngs | None = None
     ) -> gpk.AbstractKernel:
-        if not self.components:
-            raise ValueError("SumKernelConfig requires at least one component")
-        kernels = [c.buildKernel(ndim, rngs=rngs) for c in self.components]
+        kernels = [c.buildKernel(ndim, rngs=rngs) for c in self.kernels]
         result = kernels[0]
         for k in kernels[1:]:
             result = result + k
@@ -277,14 +226,17 @@ class SumKernelConfig(KernelConfig):
 class ProductKernelConfig(KernelConfig):
     """Product of kernels: k1 * k2 * ..."""
 
-    components: list[KernelConfig] = attrs.Factory(list)
+    kernels: list[KernelConfig] = attrs.field(factory=list)
+
+    @kernels.validator
+    def _validateKernels(self, attribute, value):
+        if not value:
+            raise ValueError("ProductKernelConfig requires at least one component")
 
     def buildKernel(
         self, ndim: int, rngs: nnx.Rngs | None = None
     ) -> gpk.AbstractKernel:
-        if not self.components:
-            raise ValueError("ProductKernelConfig requires at least one component")
-        kernels = [c.buildKernel(ndim, rngs=rngs) for c in self.components]
+        kernels = [c.buildKernel(ndim, rngs=rngs) for c in self.kernels]
         result = kernels[0]
         for k in kernels[1:]:
             result = result * k
@@ -313,7 +265,7 @@ class Network(nnx.Module):
         input_dim: int,
         output_dim: int,
         shape: list[int],
-        activation_name: str = "relu",
+        activation_name: str = "silu",
     ) -> None:
         self.in_layer = nnx.Linear(input_dim, shape[0], rngs=rngs)
         self.layers = nnx.List(
@@ -322,17 +274,25 @@ class Network(nnx.Module):
                 for i in range(len(shape) - 1)
             ]
         )
-        self.out_layer = nnx.Linear(shape[-1], output_dim, rngs=rngs)
+
+        self.out_layer = nnx.Linear(
+            shape[-1],
+            output_dim,
+            rngs=rngs,
+            kernel_init=nnx.initializers.zeros,
+            bias_init=nnx.initializers.zeros,
+        )
         self.activation_name = activation_name
         self.rngs = rngs
 
     def __call__(self, x: jax.Array) -> jax.Array:
         activation = getattr(jax.nn, self.activation_name)
-        x = self.in_layer(x)
+        init = x
+        x = activation(self.in_layer(x))
         for layer in self.layers:
             x = activation(layer(x))
         x = self.out_layer(x)
-        return x
+        return x + init
 
 
 @attrs.define(slots=False)
@@ -348,14 +308,19 @@ class DeepKernelFunction(AbstractKernel):
         yt = self.network(y)
         return self.base_kernel(xt, yt)
 
+    def cross_covariance(self, x: jax.Array, y: jax.Array) -> jax.Array:
+        xt = self.network(x)
+        yt = self.network(y)
+        return self.base_kernel.cross_covariance(xt, yt)
+
 
 @attrs.define
 class NNKernelConfig(KernelConfig):
     base_kernel_config: KernelConfig = attrs.Factory(RBFConfig)
     input_dim: int = 2
     output_dim: int = 2
-    hidden_shapes: list[int] = attrs.Factory(lambda: [8, 8])
-    activation: str = "relu"
+    hidden_shapes: list[int] = attrs.Factory(lambda: [8, 8, 8, 8])
+    activation: str = "silu"
 
     def buildKernel(
         self, ndim: int, rngs: nnx.Rngs | None = None

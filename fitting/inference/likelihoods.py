@@ -29,11 +29,11 @@ class LikelihoodConfig(ABC):
         ...
 
     def _get_param(
-        self, 
-        name: str, 
-        value: Any, 
+        self,
+        name: str,
+        value: Any,
         prior_config: PriorConfig | None = None,
-        param_type: type[gpp.Parameter] = gpp.PositiveReal
+        param_type: type[gpp.Parameter] = gpp.PositiveReal,
     ) -> Any:
         """Wrap a parameter value with a prior if present."""
         if prior_config is not None:
@@ -50,8 +50,7 @@ class UniformGaussianNoiseConfig(LikelihoodConfig):
     def buildLikelihood(self, **kwargs) -> gpl.AbstractLikelihood:
         obs_stddev = self._get_param("obs_stddev", 1.0, self.obs_stddev_prior)
         return gpl.Gaussian(
-            num_datapoints=kwargs["num_datapoints"],
-            obs_stddev=obs_stddev
+            num_datapoints=kwargs["num_datapoints"], obs_stddev=obs_stddev
         )
 
 
@@ -67,7 +66,6 @@ class FixedGaussianNoiseConfig(LikelihoodConfig):
         import jax.numpy as jnp
         from flax import nnx
 
-        # We explicitly supply an array of standard deviations
         obs_var = kwargs["obs_variance"]
         obs_var = jnp.clip(obs_var, a_min=jnp.min(obs_var[obs_var > 0]))
         variances = jnp.atleast_1d(obs_var).reshape(-1, 1)
@@ -75,10 +73,7 @@ class FixedGaussianNoiseConfig(LikelihoodConfig):
             num_datapoints=kwargs["num_datapoints"],
             obs_stddev=jnp.sqrt(variances),
         )
-
-        # Freeze obs_stddev
         likelihood.obs_stddev = nnx.Variable(likelihood.obs_stddev[...])
-
         return likelihood
 
 

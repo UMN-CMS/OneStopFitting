@@ -75,13 +75,4 @@ def dotFormat(template: str, **kwargs: Any) -> str:
 
 
 def formatFromMetadata(template: str, metadata: Mapping[str, Any]) -> str:
-    """Convenience: flatten metadata and format in one call.
-
-    Args:
-        template: Format string with ``{dot.separated}`` placeholders.
-        metadata: Nested metadata dict.
-
-    Returns:
-        Formatted string.
-    """
     return dotFormat(template, **dict(dictToDot(metadata)))

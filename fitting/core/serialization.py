@@ -7,7 +7,6 @@ Uses include_subclasses with tagged unions for all polymorphic class hierarchies
 
 from __future__ import annotations
 
-import json
 import logging
 import pickle
 from functools import partial
@@ -31,12 +30,8 @@ def _makeConverter() -> cattrs.Converter:
     converter = cattrs.Converter()
 
     # --- JAX array hooks ---
-    converter.register_unstructure_hook(
-        jnp.ndarray, lambda v: np.asarray(v).tolist()
-    )
-    converter.register_structure_hook(
-        jnp.ndarray, lambda v, _: jnp.array(v)
-    )
+    converter.register_unstructure_hook(jnp.ndarray, lambda v: np.asarray(v).tolist())
+    converter.register_structure_hook(jnp.ndarray, lambda v, _: jnp.array(v))
 
     # --- numpy array hooks (for any stray numpy arrays) ---
     converter.register_unstructure_hook(np.ndarray, lambda v: v.tolist())
@@ -55,17 +50,13 @@ def _makeConverter() -> cattrs.Converter:
         return {
             "loc": np.asarray(loc).tolist() if hasattr(loc, "tolist") else loc,
             "scale": (
-                np.asarray(scale).tolist()
-                if hasattr(scale, "tolist")
-                else scale
+                np.asarray(scale).tolist() if hasattr(scale, "tolist") else scale
             ),
         }
 
     def _structure_affine(d: dict, _: type) -> AffineTransform:
         loc = jnp.array(d["loc"]) if isinstance(d["loc"], list) else d["loc"]
-        scale = (
-            jnp.array(d["scale"]) if isinstance(d["scale"], list) else d["scale"]
-        )
+        scale = jnp.array(d["scale"]) if isinstance(d["scale"], list) else d["scale"]
         return AffineTransform(loc=loc, scale=scale)
 
     converter.register_unstructure_hook(AffineTransform, _unstructure_affine)
@@ -100,32 +91,32 @@ def save(state: AnalysisState, path: Path) -> None:
     """
     out_dir = Path(path)
     out_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # Save the full state as compressed pickle
     pkl_path = out_dir / "state.pklz4"
     with lz4.frame.open(pkl_path, "wb") as f:
         pickle.dump(state, f)
-        
+
     logger.info(f"Saved analysis state to {pkl_path}")
 
 
 def load(path: Path) -> AnalysisState:
     """Load an AnalysisState from a compressed pickle file.
-    
+
     Args:
-        path: Directory containing 'state.pklz4' or direct path to a file. 
+        path: Directory containing 'state.pklz4' or direct path to a file.
     """
     p = Path(path)
     if p.is_dir():
         pkl_path = p / "state.pklz4"
     else:
         pkl_path = p
-        
+
     if not pkl_path.exists():
         raise FileNotFoundError(f"State file {pkl_path} does not exist.")
 
     with lz4.frame.open(pkl_path, "rb") as f:
         state = pickle.load(f)
-        
+
     logger.info(f"Loaded analysis state from {pkl_path}")
     return state

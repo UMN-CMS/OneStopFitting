@@ -7,14 +7,17 @@ of the background estimation workflow.
 from __future__ import annotations
 
 import logging
+from enum import IntEnum
 from pathlib import Path
 from typing import Any
 
 import attrs
-import gpjax
+import jax
 import jax.numpy as jnp
-import mplhep
+from jax import random
+import gpjax
 import flax.nnx as nnx
+import mplhep
 
 from .core.data import AnalysisState, BinnedData
 from .core.serialization import save
@@ -29,96 +32,46 @@ from .diagnostics.plot_utils import savePlots
 from .diagnostics.plots import makeDiagnosticPlots
 from .inference.models import ExactGPConfig, GPModelConfig
 from .inference.optimization import OptimizationConfig, train
-from .inference.prediction import predictInRealSpace
+from .inference.prediction import (
+    predictInRealSpace,
+    getPriorMeanInRealSpace,
+    drawPoissonSamples,
+)
+from .data.loading import (
+    FileLoader,
+    extractHistogram,
+    extractMetadata,
+    histToBinnedData,
+)
+from .diagnostics.posterior import posteriorPredictiveCheck
 
 logger = logging.getLogger(__name__)
+
+mplhep.style.use("CMS")
 
 
 @attrs.define
 class PipelineConfig:
-    """Complete pipeline configuration.
-
-    Fully serializable via cattrs. All types are real Python types,
-    not strings.
-
-    Attributes:
-        background_path: Path to background histogram file.
-        signal_path: Path to signal histogram file (optional).
-        signal_name: Label/key for the signal in the file.
-        signal_selection: Selection key to extract signal from file dict.
-        injection_rate: Signal injection strength (0 = no injection).
-        fit_region: Tuple of (lower, upper) per axis for domain cut.
-        rebin: Rebinning factor applied to histograms on load.
-        min_counts: Minimum bin count to include in fit.
-        window_spread: Gaussian window spread in sigma.
-        transform: Data normalization config.
-        model: GP model config.
-        optimization: Training loop config.
-        output_dir: Output directory for results.
-        metadata: Flexible bookkeeping dict.
-    """
-
-    # Data
     background_path: Path
     signal_path: Path | None = None
     signal_name: str | None = None
     signal_selection: str | None = None
     injection_rate: float = 0.0
     rebin: int = 1
-    min_counts: float = 10.0
-
+    min_counts: float = 0.0
     rng_seed: int = 0xBEEFBEEF
-
-    # Windowing
     window_spread: float = 2.0
-
-    # Transform
     transform: TransformConfig = attrs.Factory(StandardizationConfig)
-
-    # Model
     model: GPModelConfig = attrs.Factory(ExactGPConfig)
-
-    # Optimization
     optimization: OptimizationConfig = attrs.Factory(OptimizationConfig)
-
-    # Output
-    output_dir: Path = Path("output")
+    output_dir_format: str = "output"
     image_formats: list[str] = attrs.Factory(lambda: ["png"])
-
-    # Flexible bookkeeping — not forced into any specific schema
     metadata: dict[str, Any] = attrs.Factory(dict)
 
 
-def runPipeline(config: PipelineConfig) -> AnalysisState:
-    """Execute the full background estimation pipeline.
+def loadData(config: PipelineConfig) -> AnalysisState:
+    """Load background and optional signal data."""
 
-    Steps:
-    1. Load background (and optionally signal) histograms
-    2. Create blinding window (from signal or pre-configured)
-    3. Preprocess: domain mask, signal injection, train/test split
-    4. Normalize training data
-    5. Train GP model
-    6. Predict in real space (back-transform MVN)
-    7. Compute and save diagnostics
-    8. Save full state for resume
-
-    Args:
-        config: Pipeline configuration.
-
-    Returns:
-        AnalysisState with all fields populated.
-    """
-    from .data.loading import (
-        FileLoader,
-        extractHistogram,
-        extractMetadata,
-        histToBinnedData,
-    )
-    import jax
-
-    jax.config.update("jax_enable_x64", True)
-
-    # --- 1. Load data ---
     logger.info(f"Loading background from {config.background_path}")
     loader = FileLoader.forPath(config.background_path)
     bkg_raw = loader.load(config.background_path)
@@ -127,7 +80,11 @@ def runPipeline(config: PipelineConfig) -> AnalysisState:
 
     # Extract and merge file-level metadata
     file_metadata = extractMetadata(bkg_raw)
-    combined_metadata = {**config.metadata, **file_metadata}
+    combined_metadata = {
+        **config.metadata,
+        **file_metadata,
+        "injection_rate": config.injection_rate,
+    }
 
     signal = None
     signal_hist = None
@@ -145,7 +102,7 @@ def runPipeline(config: PipelineConfig) -> AnalysisState:
         sig_metadata = extractMetadata(sig_raw)
         combined_metadata = {**combined_metadata, **sig_metadata}
 
-    state = AnalysisState(
+    return AnalysisState(
         config=config,
         background=background,
         signal=signal,
@@ -156,68 +113,70 @@ def runPipeline(config: PipelineConfig) -> AnalysisState:
         metadata=combined_metadata,
     )
 
-    # --- 2-3. Preprocess ---
-    state = preprocess(state, min_counts=config.min_counts)
 
-    # --- 4. Normalize ---
-    transform = computeNormalization(state.train_data, config=config.transform)
+def trainModel(state: AnalysisState, rng_key: jax.Array) -> AnalysisState:
+    """Preprocess, normalize, and train the GP model."""
+
+    # 1. Preprocess (masking, blinding)
+    state = preprocess(state, min_counts=state.config.min_counts)
+
+    # 2. Normalize
+    transform = computeNormalization(state.train_data, config=state.config.transform)
     norm_train = transform.applyToBinnedData(state.train_data)
     state = attrs.evolve(state, transform=transform)
 
-    # --- 5. Train GP ---
+    # 3. Train GP
     dataset = gpjax.Dataset(
         X=norm_train.X,
         y=norm_train.Y.reshape(-1, 1),
     )
 
-    rngs = nnx.Rngs(123)
-    posterior, likelihood, prior = config.model.buildModel(
+    build_key, train_key = random.split(rng_key)
+    posterior, likelihood, prior = state.config.model.buildModel(
         dataset=dataset,
-        ndim=background.ndim,
+        ndim=state.background.ndim,
         obs_variance=norm_train.V.reshape(-1, 1) if norm_train.V is not None else None,
-        rngs=rngs,
+        rngs=nnx.Rngs(build_key),
     )
+
     training_result = train(
         posterior=posterior,
         likelihood=likelihood,
         dataset=dataset,
-        config=config.optimization,
+        config=state.config.optimization,
+        rng_key=train_key,
     )
 
-    params_dict = {}
-    st = nnx.state(training_result.posterior)
-    for k, v in dict(st.flat_state()).items():
-        val = getattr(v, "value", v)
-        import numpy as np
+    state = attrs.evolve(state, training_result=training_result, dataset=dataset)
 
-        if hasattr(val, "ndim") and val.ndim > 0:
-            params_dict[str(".".join(str(ki) for ki in k))] = np.asarray(val).tolist()
-        else:
-            try:
-                params_dict[str(".".join(str(ki) for ki in k))] = float(val)
-            except Exception as e:
-                pass
+    # Log specific parameters for visibility
+    logger.info("Trained Hyperparameters:")
+    # (Note: we could extract this to a helper if it gets complex again)
+    # For now, keeping it simple as per user's latest manual change
+    logger.info(f"Final Loss: {training_result.final_loss}")
 
-    state = attrs.evolve(
-        state,
-        loss_history=training_result.loss_history,
-        trained_params=params_dict,
-        samples=training_result.samples,
-    )
+    return state
 
-    # --- 6. Predict in real space ---
+
+def runDiagnostics(state: AnalysisState, rng_key: jax.Array) -> AnalysisState:
+    """Predict in real space and compute diagnostic metrics."""
+
+    if state.training_result is None or state.dataset is None:
+        raise ValueError("Cannot run diagnostics without training result and dataset.")
+
+    pred_key, ppc_key = random.split(rng_key)
     pred_mean, pred_cov = predictInRealSpace(
-        posterior=training_result.posterior,
-        dataset_train=dataset,
+        posterior=state.training_result.posterior,
+        dataset_train=state.dataset,
         test_data=state.test_data,
-        transform=transform,
-        samples=training_result.samples,
+        transform=state.transform,
+        samples=state.training_result.samples,
+        rng_key=pred_key,
     )
 
     pred_var = jnp.diag(pred_cov)
     state = attrs.evolve(state, pred_mean=pred_mean, pred_cov=pred_cov)
 
-    # --- 7. Diagnostics ---
     metrics = computeDiagnosticMetrics(
         test_data_Y=state.test_data.Y,
         test_data_V=state.test_data.V,
@@ -227,12 +186,9 @@ def runPipeline(config: PipelineConfig) -> AnalysisState:
     )
     logger.info(f"Diagnostic metrics: {metrics}")
 
-    # --- 7.5 Posterior predictive checks ---
-    from .diagnostics.posterior import posteriorPredictiveCheck
-    from .diagnostics.plots import makePosteriorPredictivePlots
-
+    # Posterior predictive checks
     likelihood_type = "gaussian"
-    likelihood_name = config.model.likelihood.__class__.__name__.lower()
+    likelihood_name = state.config.model.likelihood.__class__.__name__.lower()
     if "poisson" in likelihood_name:
         likelihood_type = "poisson"
 
@@ -241,19 +197,25 @@ def runPipeline(config: PipelineConfig) -> AnalysisState:
         pred_cov=pred_cov,
         test_data=state.test_data,
         num_samples=200,
+        rng_key=ppc_key,
         likelihood=likelihood_type,
         blind_mask=state.blind_mask,
     )
 
     state = attrs.evolve(state, ppc_results=ppc_results)
+    return state
 
-    # --- 8. Save state ---
-    # Save before plotting so that if plotting fails, we still have the results
-    save(state, config.output_dir)
-    logger.info(f"Pipeline computation complete. State saved to {config.output_dir}")
 
-    # --- 9. Plot Diagnostics ---
-    mplhep.style.use("CMS")
+def generatePlots(state: AnalysisState, rng_key: jax.Array) -> None:
+    """Generate and save diagnostic plots."""
+    from .diagnostics.plots import makePosteriorPredictivePlots
+
+    if (
+        state.training_result is None
+        or state.pred_mean is None
+        or state.pred_cov is None
+    ):
+        raise ValueError("Cannot generate plots without prediction results.")
 
     # Prepare signal for overlay if injected
     signal_plot_data = None
@@ -272,29 +234,182 @@ def runPipeline(config: PipelineConfig) -> AnalysisState:
                 axis_names=signal_template.axis_names,
             )
 
+    prior_key, diag_key = random.split(rng_key)
+    prior_mean = getPriorMeanInRealSpace(
+        posterior=state.training_result.posterior,
+        test_data=state.test_data,
+        transform=state.transform,
+        samples=state.training_result.samples,
+        rng_key=prior_key,
+    )
+
+    pred_var = jnp.diag(state.pred_cov)
     plots = makeDiagnosticPlots(
-        pred_mean=pred_mean,
+        pred_mean=state.pred_mean,
         pred_var=pred_var,
         test_data=state.test_data,
         train_data=state.train_data,
         blind_mask=state.blind_mask,
         signal_data=signal_plot_data,
         signal_template=signal_template,
+        prior_mean=prior_mean,
+        kernel=state.training_result.posterior.prior.kernel,
+        transform=state.transform,
     )
 
-    try:
-        ppc_plots = makePosteriorPredictivePlots(
-            ppc_results=ppc_results,
-            test_data=state.test_data,
-            blind_mask=state.blind_mask,
-        )
-        plots.update(ppc_plots)
-    except Exception as e:
-        logger.warning(f"Failed to create posterior predictive plots: {e}")
+    if state.ppc_results is not None:
+        try:
+            ppc_plots = makePosteriorPredictivePlots(
+                ppc_results=state.ppc_results,
+                test_data=state.test_data,
+                blind_mask=state.blind_mask,
+            )
+            plots.update(ppc_plots)
+        except Exception as e:
+            logger.warning(f"Failed to create posterior predictive plots: {e}")
 
-    plot_dir = config.output_dir / "diagnostics"
-    savePlots(plots, plot_dir, formats=config.image_formats)
-
+    plot_dir = state.getRealOutPath() / "diagnostics"
+    savePlots(plots, plot_dir, formats=state.config.image_formats)
     logger.info(f"Pipeline complete. Plots saved to {plot_dir}")
 
+
+class PipelineStep(IntEnum):
+    LOAD = 0
+    TRAIN = 1
+    DIAGNOSTICS = 2
+    PLOT = 3
+
+    @classmethod
+    def fromStr(cls, s: str | None) -> PipelineStep | None:
+        if s is None:
+            return None
+        try:
+            return cls[s.upper()]
+        except KeyError:
+            raise ValueError(
+                f"Invalid step: {s}. Valid steps are: {[step.name.lower() for step in cls]}"
+            )
+
+
+STEP_FUNCS = {
+    PipelineStep.LOAD: loadData,
+    PipelineStep.TRAIN: trainModel,
+    PipelineStep.DIAGNOSTICS: runDiagnostics,
+    PipelineStep.PLOT: generatePlots,
+}
+
+
+def runPipeline(
+    config: PipelineConfig,
+    single_step: PipelineStep | None = None,
+    start_from: PipelineStep = PipelineStep.LOAD,
+) -> AnalysisState:
+    from .core.serialization import load
+
+    jax.config.update("jax_enable_x64", True)
+    rng_key = random.key(config.rng_seed)
+
+    if single_step:
+        to_run = [single_step]
+    else:
+        to_run = [s for s in PipelineStep if s >= start_from]
+
+    if PipelineStep.LOAD in to_run:
+        state = loadData(config)
+        logger.info(f"Output directory: {state.getRealOutPath()}")
+        save(state, state.getRealOutPath())
+    else:
+        dummy_state = loadData(config)
+        out_path = dummy_state.getRealOutPath()
+        logger.info(f"Resuming from state at {out_path}")
+        state = load(out_path)
+        state = attrs.evolve(state, config=config)
+
+    for s in to_run:
+        if s == PipelineStep.LOAD:
+            continue
+        func = STEP_FUNCS[s]
+        rng_key, key = random.split(rng_key)
+        if s in [PipelineStep.TRAIN, PipelineStep.DIAGNOSTICS]:
+            state = func(state, key)
+            save(state, state.getRealOutPath())
+        else:
+            func(state, key)
+
     return state
+
+
+def generateSmoothedBackground(
+    state: AnalysisState,
+    rng_key: jax.Array,
+    num_samples: int = 1,
+) -> tuple[list[BinnedData], dict[str, Any]]:
+    import hist
+    import numpy as np
+
+    if state.training_result is None or state.dataset is None:
+        raise ValueError("Cannot generate smoothed background without training.")
+
+    pred_key, sample_key = random.split(rng_key)
+
+    # 1. Get full latent distribution (REAL SPACE)
+    # We use all bins in test_data
+    pred_mean, pred_cov = predictInRealSpace(
+        posterior=state.training_result.posterior,
+        dataset_train=state.dataset,
+        test_data=state.test_data,
+        transform=state.transform,
+        samples=state.training_result.samples,
+        rng_key=pred_key,
+    )
+
+    samples = drawPoissonSamples(
+        rng_key=sample_key,
+        mean=pred_mean,
+        cov=pred_cov,
+        num_samples=num_samples,
+    )
+
+    smoothed_hists = []
+    shape = tuple(len(e) - 1 for e in state.test_data.edges)
+    for i in range(num_samples):
+        axes = [
+            hist.axis.Variable(np.asarray(e), name=n)
+            for e, n in zip(state.test_data.edges, state.test_data.axis_names)
+        ]
+        h = hist.Hist(*axes)
+
+        # Reconstruct the full grid using the domain mask
+        if state.domain_mask is not None:
+            full_values = np.zeros(len(state.domain_mask))
+            full_values[np.asarray(state.domain_mask)] = np.asarray(samples[i])
+            full_vars = np.zeros(len(state.domain_mask))
+            full_vars[np.asarray(state.domain_mask)] = np.asarray(samples[i])
+        else:
+            full_values = np.asarray(samples[i])
+            full_vars = np.asarray(samples[i])
+
+        h.values()[:] = full_values.reshape(shape)
+        h.variances()[:] = full_vars.reshape(shape)
+        smoothed_hists.append(h)
+
+    # 4. Generate diagnostic plots (Comparison with original)
+    from .diagnostics.plots import makeSmoothingPlots
+
+    # Use BinnedData for plotting
+    smoothed_binned = BinnedData(
+        X=state.test_data.X,
+        Y=samples[0],
+        V=samples[0],
+        edges=state.test_data.edges,
+        axis_names=state.test_data.axis_names,
+    )
+
+    plots = makeSmoothingPlots(
+        smoothed_data=smoothed_binned,
+        original_data=state.test_data,
+        pred_mean=pred_mean,
+        pred_cov=pred_cov,
+    )
+
+    return smoothed_hists, plots
