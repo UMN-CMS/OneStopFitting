@@ -1,8 +1,3 @@
-"""ROOT histogram export for Combine.
-
-Creates ROOT files containing shape histograms using uproot.
-"""
-
 from __future__ import annotations
 
 import logging
@@ -11,7 +6,7 @@ from pathlib import Path
 import jax.numpy as jnp
 import numpy as np
 
-from ..core.data import BinnedData
+from ..core.data import AnalysisState, BinnedData
 
 logger = logging.getLogger(__name__)
 
@@ -24,21 +19,8 @@ def exportHistograms(
     process_name: str = "background",
     n_eigenvariations: int | None = None,
 ) -> None:
-    """Export prediction histograms to a ROOT file for Combine.
-
-    Creates:
-    - {process_name}: Nominal shape (predicted mean)
-    - {process_name}_{syst}_Up / _Down: Eigenvariation shapes
-
-    Args:
-        pred_mean: Predicted mean in real space.
-        pred_cov: Predicted covariance in real space.
-        test_data: Full-domain test data (for bin edges).
-        output_path: Path for the output ROOT file.
-        process_name: Name of the process in the ROOT file.
-        n_eigenvariations: Number of eigenvariations to write. None = all.
-    """
     from ..inference.prediction import computeScaledEigenvectors
+    import uproot
 
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -55,7 +37,6 @@ def exportHistograms(
         shape = tuple(len(e) - 1 for e in np_edges)
         histograms[process_name] = (np_mean.reshape(shape), np_edges)
 
-    # Eigenvariations
     eigenvalues, scaled_vecs = computeScaledEigenvectors(pred_cov)
     n_vars = scaled_vecs.shape[1]
     if n_eigenvariations is not None:
@@ -87,8 +68,6 @@ def exportHistograms(
                 np_edges,
             )
 
-    import uproot
-
     with uproot.recreate(output_path) as f:
         for name, data in histograms.items():
             f[name] = data
@@ -97,3 +76,117 @@ def exportHistograms(
         f"Wrote {len(histograms)} histograms to {output_path} "
         f"({n_vars} eigenvariations)"
     )
+
+
+UP_POSTFIXES = ["_up", "_Up", "-up", "-Up", "up", "Up"]
+DOWN_POSTFIXES = [
+    "_down",
+    "_Down",
+    "-down",
+    "-Down",
+    "down",
+    "Down",
+    "_dn",
+    "_Dn",
+    "-dn",
+    "-Dn",
+    "dn",
+    "Dn",
+]
+
+
+def normalizeVarName(var_name: str) -> tuple[str, str | None]:
+    if var_name == "central":
+        return "central", None
+    for suffix in UP_POSTFIXES:
+        if var_name.endswith(suffix):
+            return var_name[: -len(suffix)], "Up"
+
+    for suffix in DOWN_POSTFIXES:
+        if var_name.endswith(suffix):
+            return var_name[: -len(suffix)], "Down"
+
+    return var_name, None
+
+
+def exportCombineData(
+    state: AnalysisState,
+    output_path: Path,
+    use_window_mask: bool = True,
+) -> None:
+    import uproot
+    from .eigenvariations import computeEigenvariations
+    from ..data.loading import hasVariationAxis, variationNames, histToBinnedData
+
+    if state.pred_mean is None or state.pred_cov is None:
+        raise ValueError("Cannot export Combine data without prediction results.")
+
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if use_window_mask:
+        blind_mask = state.blind_mask
+    else:
+        blind_mask = jnp.ones_like(state.pred_mean, dtype=bool)
+
+    pred_mean_masked = state.pred_mean[blind_mask]
+    pred_cov_masked = state.pred_cov[blind_mask, :][:, blind_mask]
+
+    num_active_bins = jnp.count_nonzero(blind_mask)
+    linear_edges = np.arange(num_active_bins + 1)
+
+    def doMask(values: jnp.ndarray) -> jnp.ndarray:
+        if state.domain_mask is None:
+            return values
+        return values[state.domain_mask]
+
+    histograms = {}
+
+    histograms["background"] = (np.asarray(pred_mean_masked), linear_edges)
+    variations = computeEigenvariations(pred_mean_masked, pred_cov_masked)
+
+    for var in variations:
+        idx = var["index"]
+        up = np.asarray(var["up"])
+        down = np.asarray(var["down"])
+        histograms[f"background_gpr_eigen{idx}Up"] = (up, linear_edges)
+        histograms[f"background_gpr_eigen{idx}Down"] = (down, linear_edges)
+
+    if state.signal_hist is not None:
+        sig_name = state.signal_name or "signal"
+        if hasVariationAxis(state.signal_hist):
+            for var_name in variationNames(state.signal_hist):
+                sig_binned = histToBinnedData(
+                    state.signal_hist, rebin=state.config.rebin, variation=var_name
+                )
+                full_sig = doMask(sig_binned.Y)[blind_mask]
+                if var_name == "central":
+                    histograms[sig_name] = (np.asarray(full_sig), linear_edges)
+                elif var_name.endswith("_disabled"):
+                    continue
+                else:
+                    base, direction = normalizeVarName(var_name)
+                    name = (
+                        f"{sig_name}_{base}{direction}"
+                        if direction
+                        else f"{sig_name}_{base}"
+                    )
+                    histograms[name] = (
+                        np.asarray(full_sig),
+                        linear_edges,
+                    )
+        else:
+            histograms[sig_name] = (
+                np.asarray(state.signal.Y[blind_mask]),
+                linear_edges,
+            )
+
+    histograms["data_obs"] = (np.asarray(state.test_data.Y[blind_mask]), linear_edges)
+
+    with uproot.recreate(output_path) as f:
+        for name, data in histograms.items():
+            f[name] = data
+
+    logger.info(f"Exported {len(histograms)} histograms to {output_path}")
+
+    return len(variations)

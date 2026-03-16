@@ -1,13 +1,6 @@
-"""Combine datacard generation.
-
-Defines attrs classes for building Higgs Combine datacards
-and writing them to text files.
-"""
-
 from __future__ import annotations
 
 import logging
-from io import StringIO
 from pathlib import Path
 
 import attrs
@@ -17,14 +10,6 @@ logger = logging.getLogger(__name__)
 
 @attrs.define
 class Process:
-    """A physics process in the datacard.
-
-    Attributes:
-        name: Process name (e.g., "signal", "background").
-        rate: Expected event count.
-        index: Process index (0 = signal, >0 = background).
-    """
-
     name: str
     rate: float
     index: int
@@ -32,14 +17,6 @@ class Process:
 
 @attrs.define
 class Systematic:
-    """A systematic uncertainty.
-
-    Attributes:
-        name: Systematic name.
-        distribution: Distribution type (e.g., "lnN", "shape").
-        values: Dict of process_name -> value. Use "-" for no effect.
-    """
-
     name: str
     distribution: str
     values: dict[str, str]
@@ -47,87 +24,93 @@ class Systematic:
 
 @attrs.define
 class Channel:
-    """A single channel (bin) in the datacard.
-
-    Attributes:
-        name: Channel name.
-        observation: Observed event count.
-        processes: List of processes in this channel.
-        shapes_file: Path to ROOT file with shape histograms.
-    """
-
     name: str
     observation: float
     processes: list[Process]
     shapes_file: str | None = None
+    use_auto_mc_stats: bool = True
+
+
+def formatLines(elems: list[list[str]], separator: str = "  ") -> list[str]:
+    if not elems:
+        return []
+    max_row_len = max(len(row) for row in elems)
+    padded_elems = [row + [""] * (max_row_len - len(row)) for row in elems]
+    max_lens = [max(len(str(x)) for x in col) for col in zip(*padded_elems)]
+    row_format = separator.join(f"{{: <{width}}}" for width in max_lens)
+    return [row_format.format(*e).rstrip() for e in padded_elems]
 
 
 @attrs.define
 class DataCard:
-    """Complete Combine datacard.
-
-    Attributes:
-        channels: List of channels.
-        systematics: List of systematic uncertainties.
-    """
-
     channels: list[Channel]
     systematics: list[Systematic] = attrs.Factory(list)
 
     def render(self) -> str:
-        """Render the datacard as a string."""
-        buf = StringIO()
+        lines = []
 
-        # Header
-        buf.write("imax * number of channels\n")
-        buf.write("jmax * number of backgrounds\n")
-        buf.write("kmax * number of nuisance parameters\n")
-        buf.write("-" * 60 + "\n")
+        lines.append("imax * # number of channels")
+        lines.append("jmax * # number of backgrounds")
+        lines.append("kmax * # number of nuisance parameters")
+        lines.append("-" * 60)
 
-        # Shapes
+        shape_rows = []
         for ch in self.channels:
             if ch.shapes_file:
-                buf.write(f"shapes * {ch.name} {ch.shapes_file} $PROCESS $PROCESS_$SYSTEMATIC\n")
-        buf.write("-" * 60 + "\n")
+                shape_rows.append(
+                    [
+                        "shapes",
+                        "*",
+                        ch.name,
+                        ch.shapes_file,
+                        "$PROCESS",
+                        "$PROCESS_$SYSTEMATIC",
+                    ]
+                )
+        if shape_rows:
+            lines.extend(formatLines(shape_rows))
+            lines.append("-" * 60)
 
-        # Observation
-        ch_names = [ch.name for ch in self.channels]
-        obs_vals = [str(ch.observation) for ch in self.channels]
-        buf.write("bin         " + "  ".join(ch_names) + "\n")
-        buf.write("observation " + "  ".join(obs_vals) + "\n")
-        buf.write("-" * 60 + "\n")
+        obs_rows = [["bin"], ["observation"]]
+        for ch in self.channels:
+            obs_rows[0].append(ch.name)
+            obs_rows[1].append(str(ch.observation))
+        lines.extend(formatLines(obs_rows))
+        lines.append("-" * 60)
 
-        # Rates
-        all_bins = []
+        proc_rows = [["bin"], ["process"], ["process"], ["rate"]]
         all_procs = []
-        all_indices = []
-        all_rates = []
         for ch in self.channels:
             for proc in ch.processes:
-                all_bins.append(ch.name)
+                proc_rows[0].append(ch.name)
+                proc_rows[1].append(proc.name)
+                proc_rows[2].append(str(proc.index))
+                proc_rows[3].append(f"{proc.rate:.6g}")
                 all_procs.append(proc.name)
-                all_indices.append(str(proc.index))
-                all_rates.append(f"{proc.rate:.6g}")
 
-        buf.write("bin         " + "  ".join(all_bins) + "\n")
-        buf.write("process     " + "  ".join(all_procs) + "\n")
-        buf.write("process     " + "  ".join(all_indices) + "\n")
-        buf.write("rate        " + "  ".join(all_rates) + "\n")
-        buf.write("-" * 60 + "\n")
+        lines.extend(formatLines(proc_rows))
+        lines.append("-" * 60)
 
-        # Systematics
+        syst_rows = []
         for syst in self.systematics:
-            values = []
+            row = [syst.name, syst.distribution]
             for ch in self.channels:
                 for proc in ch.processes:
                     val = syst.values.get(proc.name, "-")
-                    values.append(val)
-            buf.write(f"{syst.name}  {syst.distribution}  " + "  ".join(values) + "\n")
+                    row.append(str(val))
+            syst_rows.append(row)
 
-        return buf.getvalue()
+        if syst_rows:
+            lines.extend(formatLines(syst_rows))
+            lines.append("-" * 60)
+
+        for ch in self.channels:
+            if ch.use_auto_mc_stats:
+                lines.append(f"{ch.name} autoMCStats 1")
+
+        return "\n".join(lines) + "\n"
 
     def write(self, path: Path) -> None:
-        """Write the datacard to a file."""
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, "w") as f:

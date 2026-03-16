@@ -278,6 +278,7 @@ class PipelineStep(IntEnum):
     TRAIN = 1
     DIAGNOSTICS = 2
     PLOT = 3
+    COMBINE = 4
 
     @classmethod
     def fromStr(cls, s: str | None) -> PipelineStep | None:
@@ -291,11 +292,100 @@ class PipelineStep(IntEnum):
             )
 
 
+def prepareCombine(state: AnalysisState, rng_key: jax.Array) -> None:
+    from .combine.histograms import exportCombineData
+    from .combine.datacard import Process, Channel, Systematic, DataCard
+    import numpy as np
+
+    out_dir = state.getRealOutPath() / "combine"
+    shapes_file = "shapes.root"
+    shapes_path = out_dir / shapes_file
+    datacard_path = out_dir / "datacard.txt"
+
+    logger.info(f"Preparing Combine inputs in {out_dir}")
+
+    n_eigen = exportCombineData(state=state, output_path=shapes_path)
+
+    channels = []
+    ch_name = state.metadata.get("channel", "ch1")
+    observation = float(jnp.sum(state.test_data.Y))  # simplified
+    processes = []
+    bg_rate = float(jnp.sum(state.pred_mean))
+    processes.append(Process(name="background", rate=bg_rate, index=1))
+    if state.signal is not None:
+        sig_name = state.signal_name or "signal"
+        sig_rate = float(jnp.sum(state.signal.Y))
+        processes.append(Process(name=sig_name, rate=sig_rate, index=0))
+
+    channels.append(
+        Channel(
+            name=ch_name,
+            observation=observation,
+            processes=processes,
+            shapes_file=shapes_file,
+        )
+    )
+
+    systematics = []
+    for i in range(n_eigen):
+        syst_values = {"background": "1"}
+        systematics.append(
+            Systematic(
+                name=f"gpr_eigen{i}",
+                distribution="shape",
+                values=syst_values,
+            )
+        )
+
+    if state.signal_hist is not None:
+        from .combine.histograms import normalizeVarName
+        from .data.loading import variationNames
+
+        sig_name = state.signal_name or "signal"
+        all_vars = variationNames(state.signal_hist)
+        sig_systs = set()
+        for v in all_vars:
+            if v == "central" or v.endswith("_disabled"):
+                continue
+
+            base, direction = normalizeVarName(v)
+            sig_systs.add(base)
+
+        for syst_name in sorted(list(sig_systs)):
+            systematics.append(
+                Systematic(
+                    name=syst_name,
+                    distribution="shape",
+                    values={sig_name: "1"},
+                )
+            )
+    systematics.append(
+        Systematic(
+            name="lumi",
+            distribution="lnN",
+            values={p.name: "1.02" for p in processes if p.name != "background"},
+        )
+    )
+
+    card = DataCard(channels=channels, systematics=systematics)
+    card.write(datacard_path)
+
+    # Combine Diagnostics
+    from .diagnostics.combine import plotCombineInputs, verifyEigenvariations
+
+    diag_dir = state.getRealOutPath() / "diagnostics" / "combine"
+    plotCombineInputs(state, diag_dir)
+    verifyEigenvariations(state, diag_dir)
+
+    logger.info(f"Combine preparation complete. Datacard: {datacard_path}")
+
+
 STEP_FUNCS = {
     PipelineStep.LOAD: loadData,
     PipelineStep.TRAIN: trainModel,
     PipelineStep.DIAGNOSTICS: runDiagnostics,
     PipelineStep.PLOT: generatePlots,
+    PipelineStep.COMBINE: prepareCombine,
 }
 
 
@@ -333,6 +423,8 @@ def runPipeline(
         if s in [PipelineStep.TRAIN, PipelineStep.DIAGNOSTICS]:
             state = func(state, key)
             save(state, state.getRealOutPath())
+        elif s == PipelineStep.PLOT:
+            func(state, key)
         else:
             func(state, key)
 
