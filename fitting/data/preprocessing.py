@@ -16,8 +16,11 @@ def applyDomainMask(
     min_counts: float | None = None,
     domain_mask_fn: callable | None = None,
 ) -> tuple[BinnedData, jnp.ndarray]:
-    min_counts = min_counts if min_counts is not None else -1.0
+    min_counts = min_counts if min_counts is not None else 1.0
+
     mask = data.Y >= min_counts
+
+    logger.info(f"Dropping {jnp.count_nonzero(~mask)} bins with < {min_counts} counts")
 
     if domain_mask_fn is not None:
         custom_mask = domain_mask_fn(data.X)
