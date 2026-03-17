@@ -24,8 +24,6 @@ from .inference.optimization import (
     InferenceMode,
     OptimizerType,
     ObjectiveType,
-    MCMCConfig,
-    TwoStageConfig,
 )
 import yaml
 
@@ -66,7 +64,6 @@ def main(verbose: bool) -> None:
     default=None,
     help="Signal histogram file.",
 )
-@click.option("--signal-name", type=str, default=None, help="Signal name/key.")
 @click.option(
     "--injection-rate", "-r", type=float, default=0.0, help="Signal injection rate."
 )
@@ -79,7 +76,7 @@ def main(verbose: bool) -> None:
 )
 @click.option("--rebin", type=int, default=1, help="Rebin factor.")
 @click.option(
-    "--min-counts", type=float, default=10.0, help="Min bin count for fit domain."
+    "--min-counts", type=float, default=1.0, help="Min bin count for fit domain."
 )
 @click.option("--num-iters", type=int, default=500, help="Training iterations.")
 @click.option("--lr", type=float, default=0.01, help="Learning rate.")
@@ -123,7 +120,6 @@ def run(
     config: Path | None,
     background: Path | None,
     signal: Path | None,
-    signal_name: str | None,
     injection_rate: float,
     output: str,
     rebin: int,
@@ -144,19 +140,27 @@ def run(
     step: PipelineStep | None,
     start_from: PipelineStep | None,
 ) -> None:
-    """Run the background estimation pipeline."""
-    # Resolve steps
     start_from_step = start_from or PipelineStep.LOAD
 
     if config is not None:
         with open(config, "r") as f:
             raw = yaml.safe_load(f)
+
+        if background is not None:
+            raw["background_path"] = str(background)
+        if signal is not None:
+            raw["signal_path"] = str(signal)
+        if output is not None:
+            raw["output_dir_format"] = str(output)
+        if injection_rate is not None:
+            raw["injection_rate"] = injection_rate
+
         pipeline_config = converter.structure(raw, PipelineConfig)
+
     elif background is not None:
         pipeline_config = PipelineConfig(
             background_path=background,
             signal_path=signal,
-            signal_name=signal_name,
             injection_rate=injection_rate,
             output_dir_format=output,
             rebin=rebin,
@@ -221,6 +225,64 @@ def smooth(state: Path, output: Path, seed: int, num_samples: int) -> None:
             pickle.dump(hists, f)
 
     logger.info(f"Smoothed background saved to {output}")
+
+
+@main.command()
+@click.option(
+    "--signal",
+    required=True,
+    help="Signal pattern (e.g. '**/signal_{year}_*.pklz4')",
+)
+@click.option(
+    "--background",
+    required=True,
+    help="Background pattern (e.g. '**/bkg_{year}.pklz4')",
+)
+@click.option("--years", multiple=True, required=True, help="Years to process")
+@click.option(
+    "--config",
+    "-c",
+    type=click.Path(exists=True, path_type=Path),
+    help="Static yaml config file",
+)
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(path_type=Path),
+    default=Path("condor_output"),
+    help="Output directory for condor files",
+)
+@click.option("--venv", type=str, help="Path to virtual environment to pack")
+@click.option("--container", type=str, help="Container image to use")
+@click.option(
+    "--combine-cmd",
+    "combine_cmds",
+    multiple=True,
+    help="Combine commands to run after the fit",
+)
+def makecondor(
+    signal: str,
+    background: str,
+    years: tuple[str, ...],
+    config: Path | None,
+    output: Path,
+    venv: str | None,
+    container: str | None,
+    combine_cmds: tuple[str, ...],
+) -> None:
+    """Generate HTCondor submit files for distributed processing."""
+    from .distributed.condor_tools import generateCondorSubmit
+
+    generateCondorSubmit(
+        signal_pattern=signal,
+        background_pattern=background,
+        years=list(years),
+        config_path=config,
+        output_dir=output,
+        venv_path=venv,
+        container=container,
+        combine_cmds=list(combine_cmds),
+    )
 
 
 if __name__ == "__main__":

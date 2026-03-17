@@ -54,7 +54,6 @@ mplhep.style.use("CMS")
 class PipelineConfig:
     background_path: Path
     signal_path: Path | None = None
-    signal_name: str | None = None
     signal_selection: str | None = None
     injection_rate: float = 0.0
     rebin: int = 1
@@ -106,7 +105,6 @@ def loadData(config: PipelineConfig) -> AnalysisState:
         config=config,
         background=background,
         signal=signal,
-        signal_name=config.signal_name,
         injection_rate=config.injection_rate,
         background_hist=bkg_hist,
         signal_hist=signal_hist,
@@ -295,7 +293,8 @@ class PipelineStep(IntEnum):
 def prepareCombine(state: AnalysisState, rng_key: jax.Array) -> None:
     from .combine.histograms import exportCombineData
     from .combine.datacard import Process, Channel, Systematic, DataCard
-    import numpy as np
+    from .combine.histograms import normalizeVarName
+    from .data.loading import variationNames
 
     out_dir = state.getRealOutPath() / "combine"
     shapes_file = "shapes.root"
@@ -307,14 +306,18 @@ def prepareCombine(state: AnalysisState, rng_key: jax.Array) -> None:
     n_eigen = exportCombineData(state=state, output_path=shapes_path)
 
     channels = []
+
+    def doMask(x):
+        return x[state.blind_mask]
+
     ch_name = state.metadata.get("channel", "ch1")
-    observation = float(jnp.sum(state.test_data.Y))  # simplified
+    observation = float(jnp.sum(doMask(state.test_data.Y)))
     processes = []
-    bg_rate = float(jnp.sum(state.pred_mean))
+    bg_rate = float(jnp.sum(doMask(state.pred_mean)))
     processes.append(Process(name="background", rate=bg_rate, index=1))
     if state.signal is not None:
-        sig_name = state.signal_name or "signal"
-        sig_rate = float(jnp.sum(state.signal.Y))
+        sig_name = "signal"
+        sig_rate = float(jnp.sum(doMask(state.signal.Y[state.domain_mask])))
         processes.append(Process(name=sig_name, rate=sig_rate, index=0))
 
     channels.append(
@@ -338,10 +341,7 @@ def prepareCombine(state: AnalysisState, rng_key: jax.Array) -> None:
         )
 
     if state.signal_hist is not None:
-        from .combine.histograms import normalizeVarName
-        from .data.loading import variationNames
-
-        sig_name = state.signal_name or "signal"
+        sig_name = "signal"
         all_vars = variationNames(state.signal_hist)
         sig_systs = set()
         for v in all_vars:

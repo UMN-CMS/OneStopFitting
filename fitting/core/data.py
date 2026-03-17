@@ -136,38 +136,12 @@ def floatToStr(f):
 
 @attrs.define
 class AnalysisState:
-    """Main data interchange object passed through the entire pipeline.
-
-    Fields are populated progressively as pipeline stages run.
-    A None field means that stage hasn't executed yet, enabling
-    save/resume at any point.
-
-    Attributes:
-        background: The input background histogram data.
-        signal: Optional signal histogram data (None for signal-free runs).
-        signal_name: Optional label for the signal.
-        injection_rate: Signal injection strength (0 = no injection).
-        train_data: Training data (background with blinded region removed).
-        test_data: Full domain data for prediction.
-        domain_mask: Boolean mask for bins within the fit domain.
-        blind_mask: Boolean mask identifying the blinded window bins.
-        window: The Window object used for blinding.
-        transform: The normalization transform applied to training data.
-        trained_params: Optimized GP model parameters (serializable dict).
-        loss_history: Training loss values per iteration.
-        pred_mean: Predicted mean in REAL SPACE (un-transformed bin counts).
-        pred_cov: Predicted covariance in REAL SPACE.
-        config: The PipelineConfig that produced this state.
-        metadata: Flexible dict for any additional bookkeeping.
-    """
-
     # --- Config (always present) ---
     config: Any = attrs.field(factory=dict)
 
     # --- Input data ---
     background: BinnedData | None = None
     signal: BinnedData | None = None
-    signal_name: str | None = None
     injection_rate: float = 0.0
 
     # --- Raw histograms (with all variations for downstream use) ---

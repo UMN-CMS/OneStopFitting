@@ -1,0 +1,299 @@
+from __future__ import annotations
+
+import logging
+import glob
+import os
+from pathlib import Path
+
+from .file_tools import tarDirectory, tarFiles
+from attrs import define
+from jinja2 import Environment
+import fitting
+
+logger = logging.getLogger("fitting")
+
+
+@define
+class CondorPackage:
+    container: str
+    transfer_file_list: list[str]
+    setup_script: str
+
+
+COMBINE_SHORT_COMMANDS = {
+    "fit": "combine -M FitDiagnostics -d datacard.txt --saveShapes --saveWithUncertainties --name fit_diag",
+    "multidimfit": "combine -M MultiDimFit -d datacard.txt --saveShapes --saveWithUncertainties --name fit_diag",
+    "limits": "combine -M AsymptoticLimits -d datacard.txt --name limits",
+    "significance": "combine -M Significance -d datacard.txt --name significance",
+    "impacts": "combineTool.py -M Impacts -d datacard.txt -m 125 --doInitialFit --robustFit 1; combineTool.py -M Impacts -d datacard.txt -m 125 --robustFit 1 --doFits; combineTool.py -M Impacts -d datacard.txt -m 125 -o impacts.json; plotImpacts.py -i impacts.json -o impacts",
+}
+
+
+RUN_FIT_TEMPLATE = """#!/usr/bin/env bash
+# GENERATED AUTOMATICALLY 
+echo "STARTING SETUP"
+
+function run_combine {
+    local cmd="$1"
+    echo $PWD
+    echo "RUNNING COMBINE: $cmd"
+    apptainer exec  -B /cvmfs /cvmfs/unpacked.cern.ch/gitlab-registry.cern.ch/cms-analysis/general/combine-container:latest \
+        /bin/bash -c "source /cvmfs/cms.cern.ch/cmsset_default.sh && cd /home/cmsusr/CMSSW_14_1_0_pre4 && cmsenv && cd - && $cmd"
+}
+
+function run_fit {
+    local cmd="$1"
+    echo "RUNNING FIT: $cmd"
+    apptainer exec {{ container }} /bin/bash -c "source {{ venv_activate_path }} && $cmd"
+}
+
+{% for item in files_to_unzip %}
+echo "UNTARRING {{item}}"
+tar zxf {{ item }}
+{% endfor %}
+ls -alhtr
+
+# Fitting Run
+run_fit "python3 -m fitting run --signal \"$SIGNAL\" --background \"$BACKGROUND\" --output \"$OUTPUT_DIR_FORMAT\" {% if config_path %}--config {{ config_path }}{% endif %}"
+
+dir=$(dirname $(find . -iname 'state.pklz4'))
+cd $dir
+echo "Running combine in \"$PWD\""
+
+{% if combine_cmds %}
+# Combine Commands
+{% for cmd in combine_cmds %}
+run_combine "{{ cmd }}"
+{% endfor %}
+{% endif %}
+"""
+
+SUBMIT_TEMPLATE = """
+executable = {{ executable }}
+#{% if container %}+ApptainerImage = "{{ container }}"{% endif %}
+universe = vanilla
+output = {{ output_dir }}/logs/$(cluster)_$(process).out
+error = {{ output_dir }}/logs/$(cluster)_$(process).err
+log = {{ output_dir }}/logs/$(cluster)_$(process).log
+request_memory = 4GB
+request_cpus = 1
+transfer_input_files = {{ transfer_input_files | join(', ') }}, $(signal), $(background)
+transfer_output_files = {{ output_dir }}
+preserve_relative_paths = True
+environment = "CONFIG={{ config_path }} SIGNAL=$(signal) BACKGROUND=$(background) OUTPUT_DIR_FORMAT=$(output_dir_format)"
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+
+queue signal, background, output_dir_format from (
+{%- for job in jobs %}
+    {{ job.signal }}, {{ job.background }}, {{ job.output_dir }}
+{%- endfor %}
+)
+"""
+
+
+def compressNeededFiles(
+    venv_path,
+    condor_temp_loc,
+    extra_files=None,
+):
+    condor_temp_loc.mkdir(exist_ok=True, parents=True)
+    extra_files = extra_files or []
+    compressed_env = condor_temp_loc / "environment.tar.gz"
+    compressed_extra = condor_temp_loc / "extras.tar.gz"
+    compressed_program = condor_temp_loc / "program.tar.gz"
+
+    program_path = Path(fitting.__file__).parent
+
+    if not compressed_env.exists():
+        logger.info(f"Did not find {compressed_env}, creating compressed directory.")
+        logger.info(
+            "Creating compressed virtual environment. This needs to be done only once."
+        )
+        tarDirectory(venv_path, compressed_env)
+
+    logger.info("Creating compressed program")
+    compressed_extra.unlink(missing_ok=True)
+    if extra_files:
+        tarFiles(extra_files, compressed_extra)
+    tarDirectory(program_path, compressed_program)
+
+    transfer_input_files = [str(compressed_env), str(compressed_program)]
+    if extra_files:
+        transfer_input_files.append(str(compressed_extra))
+
+    logger.info(f"Needed files: {transfer_input_files}")
+    return transfer_input_files
+
+
+def getJobs(
+    signal_pattern: str, background_pattern: str, years: list[str], output_dir: Path
+) -> list[dict]:
+    jobs = []
+    for year in years:
+        sig_glob = signal_pattern.format(year=year)
+        bkg_glob = background_pattern.format(year=year)
+        sig_files = glob.glob(sig_glob, recursive=True)
+        bkg_files = list(glob.glob(bkg_glob, recursive=True))
+
+        if not sig_files:
+            logger.warning(
+                f"No signal files found for year {year} with pattern {sig_glob}"
+            )
+            continue
+        if not bkg_files:
+            logger.warning(
+                f"No background files found for year {year} with pattern {bkg_glob}"
+            )
+            continue
+
+        if len(bkg_files) > 1:
+            logger.warning(
+                f"Multiple background files found for year {year} with pattern {bkg_glob}"
+            )
+            continue
+
+        bkg_file = bkg_files[0]
+        if len(bkg_files) > 1:
+            logger.info(f"Multiple background files found for {year}, using {bkg_file}")
+
+        for sig_file in sig_files:
+            sig_name = Path(sig_file).stem
+            jobs.append(
+                {
+                    "signal": sig_file,
+                    "background": bkg_file,
+                    "output_dir": output_dir,
+                }
+            )
+    return jobs
+
+
+def makeRunFitScript(
+    venv_activate_path: str,
+    output_dir: str,
+    config_path: Path | None,
+    files_to_unzip: list[str],
+    container: str | None,
+    combine_cmds: list[str] | None = None,
+):
+    # Expand combine commands
+    expanded_cmds = []
+    if combine_cmds:
+        for cmd in combine_cmds:
+            if cmd in COMBINE_SHORT_COMMANDS:
+                expanded_cmds.append(COMBINE_SHORT_COMMANDS[cmd])
+            else:
+                expanded_cmds.append(cmd)
+
+    env = Environment()
+    template = env.from_string(RUN_FIT_TEMPLATE)
+    run_fit_content = template.render(
+        files_to_unzip=files_to_unzip,
+        venv_activate_path=venv_activate_path,
+        config_path=config_path,
+        container=container,
+        combine_cmds=expanded_cmds,
+    )
+
+    run_fit_path = output_dir / "run_fit.sh"
+    with open(run_fit_path, "w") as f:
+        f.write(run_fit_content)
+    os.chmod(run_fit_path, 0o755)
+
+    logger.info(f"Run fit script generated at {run_fit_path}")
+
+    return run_fit_path
+
+
+def makeSubmitScript(
+    jobs: list[dict],
+    transfer_files: list[str],
+    output_dir: str,
+    executable: str,
+    config_path: Path | None,
+    container: str | None,
+):
+    env = Environment()
+    template = env.from_string(SUBMIT_TEMPLATE)
+    submit_content = template.render(
+        config_path=config_path,
+        executable=executable,
+        jobs=jobs,
+        transfer_input_files=transfer_files,
+        output_dir=output_dir,
+        container=container,
+    )
+
+    submit_path = output_dir / "submit.sub"
+    with open(submit_path, "w") as f:
+        f.write(submit_content)
+
+    logger.info(f"Submit file generated at {submit_path}")
+
+    return submit_path
+
+
+def generateCondorSubmit(
+    signal_pattern: str,
+    background_pattern: str,
+    years: list[str],
+    config_path: Path | None = None,
+    output_dir: Path = Path("condor_output"),
+    venv_path: str | None = None,
+    container: str | None = None,
+    combine_cmds: list[str] | None = None,
+) -> None:
+    container = (
+        container
+        or "/cvmfs/unpacked.cern.ch/registry.hub.docker.com/cmsml/cmsml:3.11-cuda"
+    )
+    output_dir.mkdir(exist_ok=True, parents=True)
+    (output_dir / "logs").mkdir(exist_ok=True, parents=True)
+
+    jobs = getJobs(signal_pattern, background_pattern, years, output_dir)
+    if not jobs:
+        logger.error("No jobs to submit!")
+        return
+
+    jobs = jobs[:1]
+
+    if not venv_path:
+        venv_path = os.environ.get("VIRTUAL_ENV")
+        if not venv_path:
+            logger.warning(
+                "VIRTUAL_ENV not found in environment and not provided. Defaulting to '.venv'."
+            )
+            venv_path = ".venv"
+
+    transfer_files = compressNeededFiles(
+        venv_path=venv_path,
+        condor_temp_loc=Path(".condor_temp/"),
+        extra_files=([config_path] if config_path is not None else []),
+    )
+
+    venv_activate_path = Path(Path(venv_path).name) / "bin" / "activate"
+
+    run_fit_script = makeRunFitScript(
+        venv_activate_path,
+        output_dir,
+        config_path,
+        transfer_files,
+        container=container,
+        combine_cmds=combine_cmds,
+    )
+
+    transfer_files.append(run_fit_script)
+
+    submit_file_path = makeSubmitScript(
+        jobs,
+        transfer_files,
+        output_dir,
+        run_fit_script,
+        config_path=config_path,
+        container=container,
+    )
+
+    logger.info(
+        f"Condor submit file generated at {submit_file_path} with {len(jobs)} jobs."
+    )

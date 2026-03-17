@@ -1,10 +1,3 @@
-"""Serialization utilities using cattrs.
-
-Provides a pre-configured cattrs Converter with hooks for JAX arrays,
-Path objects, and numpyro AffineTransform (using tree_flatten/tree_unflatten).
-Uses include_subclasses with tagged unions for all polymorphic class hierarchies.
-"""
-
 from __future__ import annotations
 
 import logging

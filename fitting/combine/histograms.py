@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
+import re
 import jax.numpy as jnp
 import numpy as np
 
@@ -78,33 +79,29 @@ def exportHistograms(
     )
 
 
-UP_POSTFIXES = ["_up", "_Up", "-up", "-Up", "up", "Up"]
-DOWN_POSTFIXES = [
-    "_down",
-    "_Down",
-    "-down",
-    "-Down",
-    "down",
-    "Down",
-    "_dn",
-    "_Dn",
-    "-dn",
-    "-Dn",
-    "dn",
-    "Dn",
+UP_RES = [
+    "Up$",
+    "_up_",
+    "_up$",
+]
+DOWN_RES = [
+    "Down$",
+    "Dn$",
+    "_down_",
+    "_down$",
 ]
 
 
 def normalizeVarName(var_name: str) -> tuple[str, str | None]:
     if var_name == "central":
         return "central", None
-    for suffix in UP_POSTFIXES:
-        if var_name.endswith(suffix):
-            return var_name[: -len(suffix)], "Up"
+    for expr in UP_RES:
+        if re.search(expr, var_name):
+            return re.sub(expr, "", var_name), "Up"
 
-    for suffix in DOWN_POSTFIXES:
-        if var_name.endswith(suffix):
-            return var_name[: -len(suffix)], "Down"
+    for expr in DOWN_RES:
+        if re.search(expr, var_name):
+            return re.sub(expr, "", var_name), "Down"
 
     return var_name, None
 
@@ -153,7 +150,7 @@ def exportCombineData(
         histograms[f"background_gpr_eigen{idx}Down"] = (down, linear_edges)
 
     if state.signal_hist is not None:
-        sig_name = state.signal_name or "signal"
+        sig_name = "signal"
         if hasVariationAxis(state.signal_hist):
             for var_name in variationNames(state.signal_hist):
                 sig_binned = histToBinnedData(
