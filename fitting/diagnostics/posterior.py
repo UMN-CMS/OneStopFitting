@@ -220,7 +220,10 @@ def posteriorPredictiveCheck(
 
             test_stat_results[name][region_name] = {
                 "obs": obs_val,
-                "rep": rep_vals,
+                "median_rep": float(jnp.median(rep_vals)),
+                "std_rep": float(jnp.std(rep_vals)),
+                "q05_rep": float(jnp.percentile(rep_vals, 5)),
+                "q95_rep": float(jnp.percentile(rep_vals, 95)),
                 "pvalue": pvalue,
             }
 
@@ -231,6 +234,14 @@ def posteriorPredictiveCheck(
 
     # 5. Summary statistics
     summary = {
+        "mean": jnp.mean(samples, axis=0),
+        "std": jnp.std(samples, axis=0),
+        "q05": jnp.percentile(samples, 5, axis=0),
+        "q95": jnp.percentile(samples, 95, axis=0),
+        "median": jnp.median(samples, axis=0),
+    }
+
+    summary_short = {
         "mean": jnp.mean(samples, axis=0),
         "std": jnp.std(samples, axis=0),
         "q05": jnp.percentile(samples, 5, axis=0),

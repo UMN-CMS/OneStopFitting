@@ -108,6 +108,11 @@ def save(state: AnalysisState, path: Path) -> None:
             ),
         }
 
+    if state.ppc_results is not None:
+        summary["ppc"] = {
+            "test_stats": converter.unstructure(state.ppc_results["test_stats"]),
+        }
+
     json_path = out_dir / "summary.json"
     with open(json_path, "w") as f:
         json.dump(summary, f, indent=2)

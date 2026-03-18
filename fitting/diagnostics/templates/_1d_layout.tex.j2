@@ -1,0 +1,50 @@
+{% set summary_path = image_paths["summary"] %}
+{% set ppc_path = image_paths["ppc"] %}
+{% set pulls_path = image_paths["pulls"] %}
+
+\begin{tabularx}{\textwidth}{@{}L L@{}}
+\includegraphics[width=\linewidth]{ {{ summary_path }}} &
+\includegraphics[width=\linewidth]{ {{ ppc_path }}} \\
+\end{tabularx}
+
+\vspace{0.4em}
+
+\begin{tabularx}{\textwidth}{@{}L r@{}}
+\includegraphics[width=0.64\linewidth]{ {{ pulls_path }}} &
+\begin{minipage}[t]{0.33\linewidth}
+\small
+\textbf{Key metrics}\par
+\vspace{0.3em}
+\begin{tabularx}{\linewidth}{@{}l r@{}}
+\toprule
+Metric & Value \\
+\midrule
+{% for key in ["global_chi2_per_bin", "blinded_chi2_per_bin", "global_chi2_pred_var"] %}
+{% if metrics.get(key) is not none %}
+{% set key_safe = key | replace("_", "\\_") %}
+{% set key_value = "%.4g"|format(metrics.get(key)) %}
+{{ key_safe }} & {{ key_value }} \\
+{% endif %}
+{% endfor %}
+\bottomrule
+\end{tabularx}
+
+\vspace{0.6em}
+\textbf{PPC (chi2)}\par
+\vspace{0.2em}
+\begin{tabularx}{\linewidth}{@{}l r@{}}
+\toprule
+Region & p-value \\
+\midrule
+{% set chi2 = ppc.get("test_stats", {}).get("chi2", {}) %}
+{% for region in ["all", "blinded", "unblinded"] %}
+{% if chi2.get(region) is not none %}
+{% set pvalue = "%.3f"|format(chi2.get(region, {}).get("pvalue", 0.0)) }}
+{{ region }} & {{ pvalue }} \\
+{% endif %}
+{% endfor %}
+\bottomrule
+\end{tabularx}
+\end{minipage}
+\\
+\end{tabularx}

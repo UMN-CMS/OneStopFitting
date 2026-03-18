@@ -350,6 +350,7 @@ def makeSmoothingPlots2D(
 ) -> dict[str, tuple]:
     """Generate plots comparing smoothed background to original in 2D."""
     ret = {}
+
     edges = original_data.edges
     X = original_data.X
     pred_Y = np.asarray(pred_mean)

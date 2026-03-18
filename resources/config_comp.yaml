@@ -1,0 +1,23 @@
+injection_rate: 0.0
+min_counts: 1.0
+window_spread: 1.25
+optimization:
+  num_iters: 200
+  lr: 0.01
+domain_window:
+  _type: AndWindow
+  windows:
+    - _type: CutWindow
+      axis: 0
+      lower: 700
+    - _type: CutWindow
+      axis: 1
+      lower: 0.4
+      upper: 1.0
+
+model: 
+  _type: ExactGPConfig
+  kernel: 
+    _type: NNKernelConfig
+    
+    

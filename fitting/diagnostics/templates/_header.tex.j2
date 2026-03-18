@@ -1,0 +1,34 @@
+[- set meta = metadata -]
+[- set other = meta.get("other_data", {}) -]
+[- set era = meta.get("era", {}) -]
+[- set point_dir_safe = point_dir | replace("_", "\\_") -]
+[- set dataset_name_safe = meta.get("dataset_name", "") | replace("_", "\\_") -]
+[- set era_name_safe = era.get("name", "") | replace("_", "\\_") -]
+[- set coupling_safe = other.get("coupling", "") | replace("_", "\\_") -]
+[- set injection_rate = meta.get("injection_rate", "") -]
+[- set stop_mass = other.get("stop_mass", "") -]
+[- set chargino_mass = other.get("chargino_mass", "") -]
+[- set dataset_title = meta.get("dataset_title", "") -]
+
+
+\begin{tabularx}{\textwidth}{@{}X r@{}}
+{\Large \textbf{GPR point summary}} & {\small \texttt{[[ point_dir_safe ]]}} \\
+\end{tabularx}
+
+\vspace{0.25em}
+
+\begin{tabularx}{\textwidth}{@{}L L L@{}}
+
+\kv{Dataset}{\texttt{ [[ dataset_name_safe ]] } }  &
+\kv{Era}{\texttt{ [[ era_name_safe ]]}} &
+\kv{Injection}{$[[ injection_rate ]]$} \\
+\kv{$m_{\tilde{t}}$}{$[[ stop_mass ]]$} &
+\kv{$m_{\tilde{\chi}^{\pm}}$}{$[[ chargino_mass ]]$} &
+\kv{Coupling}{\texttt{ [[ coupling_safe ]] } } \\
+\end{tabularx}
+
+\vspace{0.6em}
+
+\begin{tabularx}{\textwidth}{@{}l X@{}}
+\textbf{Title} & [[ dataset_title ]] \\
+\end{tabularx}

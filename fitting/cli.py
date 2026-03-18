@@ -13,6 +13,16 @@ from pathlib import Path
 import click
 
 from .core.serialization import converter, load
+from .diagnostics.aggregate_plots import (
+    collectPoints,
+    iterSummaryFiles,
+    makeAggregateMassPlanePlot,
+)
+from .diagnostics.point_report import (
+    PointReportConfig,
+    generatePointReport,
+    generatePointReports,
+)
 from .pipeline import (
     PipelineConfig,
     runPipeline,
@@ -233,6 +243,91 @@ def smooth(state: Path, output: Path, seed: int, num_samples: int) -> None:
     logger.info(f"Smoothed background saved to {output}")
 
 
+@main.command(name="aggregate-plot")
+@click.option(
+    "--input",
+    "inputs",
+    multiple=True,
+    required=True,
+    help="Directory, summary.json path, or glob pattern. May be passed multiple times.",
+)
+@click.option(
+    "--metric",
+    "metric_dotpath",
+    required=True,
+    help="Dot-path into summary.json, e.g. 'metrics.blinded_chi2_per_bin'.",
+)
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(path_type=Path),
+    required=True,
+    help="Output directory where plots will be written.",
+)
+@click.option(
+    "--formats",
+    multiple=True,
+    default=("png",),
+    show_default=True,
+    help="Image formats to write (repeatable), e.g. --formats png --formats pdf.",
+)
+@click.option("--title", type=str, default=None, help="Plot title override.")
+@click.option("--cmap", type=str, default="viridis", show_default=True)
+@click.option("--cmin", type=float, default=None, help="Color scale min.")
+@click.option("--cmax", type=float, default=None, help="Color scale max.")
+@click.option(
+    "--smooth-sigma",
+    type=float,
+    default=None,
+    help="Optional Gaussian smoothing sigma (in grid-bin units). If set, uses heatmap rendering.",
+)
+@click.option(
+    "--smooth-truncate",
+    type=float,
+    default=4.0,
+    show_default=True,
+    help="Gaussian filter truncate (in sigmas).",
+)
+def aggregatePlot(
+    inputs: tuple[str, ...],
+    metric_dotpath: str,
+    output: Path,
+    formats: tuple[str, ...],
+    title: str | None,
+    cmap: str,
+    cmin: float | None,
+    cmax: float | None,
+    smooth_sigma: float | None,
+    smooth_truncate: float,
+) -> None:
+    """Create an aggregate 2D mass-plane plot from many summary.json files."""
+    from .diagnostics.plot_utils import savePlots
+
+    summary_files = list(iterSummaryFiles(inputs))
+    if not summary_files:
+        raise click.UsageError("No summary.json files found for given --input(s).")
+
+    points = collectPoints(summary_files, metric_dotpath=metric_dotpath)
+    if not points:
+        raise click.ClickException(
+            f"Found {len(summary_files)} summary.json files, but none contained "
+            f"'{metric_dotpath}' plus required mass metadata."
+        )
+
+    plots = makeAggregateMassPlanePlot(
+        points,
+        metric_name=metric_dotpath,
+        title=title,
+        cmap=cmap,
+        cmin=cmin,
+        cmax=cmax,
+        smooth_sigma=smooth_sigma,
+        smooth_truncate=smooth_truncate,
+    )
+    savePlots(plots, output, formats=formats)
+    logger.info(f"Aggregate plot saved to {output}")
+
+
 @main.command()
 @click.option(
     "--signal",
@@ -296,6 +391,74 @@ def makecondor(
         container=container,
         combine_cmds=list(combine_cmds),
     )
+
+
+@main.command()
+@click.option(
+    "--input",
+    "-i",
+    multiple=True,
+    required=True,
+    help="Directory, summary.json path, or glob pattern. May be passed multiple times.",
+)
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(path_type=Path),
+    help="Output: single PDF or directory (for per-point reports).",
+)
+@click.option(
+    "--single-document",
+    is_flag=True,
+    help="Combine all points into a single PDF document.",
+)
+@click.option(
+    "--latex-engine",
+    default="pdflatex",
+    show_default=True,
+    help="LaTeX engine to use (pdflatex, xelatex, etc.)",
+)
+@click.option(
+    "--keep-build",
+    is_flag=True,
+    help="Keep LaTeX build directory for debugging.",
+)
+@click.option(
+    "--keep-tex",
+    is_flag=True,
+    help="Keep intermediate .tex files.",
+)
+@click.option(
+    "--image-format",
+    default="png",
+    show_default=True,
+    help="Image format for plots (png, pdf, etc.)",
+)
+def report(
+    inputs: tuple[str, ...],
+    output: Path | None,
+    single_document: bool,
+    latex_engine: str,
+    keep_build: bool,
+    keep_tex: bool,
+    image_format: str,
+) -> None:
+    config = PointReportConfig(
+        latex_engine=latex_engine,
+        keep_build=keep_build,
+        keep_tex=keep_tex,
+        image_format=image_format,
+    )
+
+    output_paths = generatePointReports(
+        inputs=inputs,
+        output=output,
+        single_document=single_document,
+        config=config,
+    )
+    logger.info(f"Generated {len(output_paths)} report(s)")
+    for path in output_paths:
+        logger.info(f"  {path}")
 
 
 if __name__ == "__main__":
