@@ -185,6 +185,7 @@ def runDiagnostics(state: AnalysisState, rng_key: jax.Array) -> AnalysisState:
         blind_mask=state.blind_mask,
     )
     logger.info(f"Diagnostic metrics: {metrics}")
+    state = attrs.evolve(state, diagnostic_metrics=metrics)
 
     # Posterior predictive checks
     likelihood_type = "gaussian"

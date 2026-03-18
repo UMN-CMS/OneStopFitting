@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import pickle
+import json
 from functools import partial
 from pathlib import Path
 
@@ -91,6 +92,27 @@ def save(state: AnalysisState, path: Path) -> None:
         pickle.dump(state, f)
 
     logger.info(f"Saved analysis state to {pkl_path}")
+
+    # Save summary as JSON
+    summary = {
+        "metadata": converter.unstructure(state.metadata),
+    }
+    if state.diagnostic_metrics is not None:
+        summary["metrics"] = converter.unstructure(state.diagnostic_metrics)
+
+    if state.training_result is not None:
+        summary["training"] = {
+            "final_loss": float(state.training_result.final_loss),
+            "metric_histories": converter.unstructure(
+                state.training_result.metric_histories
+            ),
+        }
+
+    json_path = out_dir / "summary.json"
+    with open(json_path, "w") as f:
+        json.dump(summary, f, indent=2)
+
+    logger.info(f"Saved summary to {json_path}")
 
 
 def load(path: Path) -> AnalysisState:

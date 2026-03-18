@@ -11,9 +11,11 @@ from flax import nnx
 
 from .kernels import KernelConfig, NNKernelConfig
 from .likelihoods import FixedGaussianNoiseConfig, LikelihoodConfig
-
 from .means import (
     MeanFunctionConfig,
+    ParametricBackgroundMeanConfig,
+    DoubleSidedCrystalBallMeanConfig,
+    GaussianBumpMeanConfig,
     ZeroMeanConfig,
 )
 
@@ -24,7 +26,7 @@ logger = logging.getLogger(__name__)
 class GPModelConfig(ABC):
     kernel: KernelConfig = attrs.Factory(NNKernelConfig)
     likelihood: LikelihoodConfig = attrs.Factory(FixedGaussianNoiseConfig)
-    mean_function: MeanFunctionConfig = attrs.Factory(ZeroMeanConfig)
+    mean_function: MeanFunctionConfig = attrs.Factory(DoubleSidedCrystalBallMeanConfig)
 
     @abstractmethod
     def buildModel(

@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import re
 import glob
+import fnmatch
 import os
 from pathlib import Path
 
@@ -26,6 +27,9 @@ COMBINE_SHORT_COMMANDS = {
     "multidimfit": "combine -M MultiDimFit -d datacard.txt --saveShapes --saveWithUncertainties --name fit_diag",
     "limits": "combine -M AsymptoticLimits -d datacard.txt --name limits",
     "significance": "combine -M Significance -d datacard.txt --name significance",
+    "gof-saturated": "combine -M GoodnessOfFit --algorithm saturated -d datacard.txt --name gof_saturated",
+    "gof-ks": "combine -M GoodnessOfFit --algorithm KS -d datacard.txt --name gof_ks",
+    "gof-ad": "combine -M GoodnessOfFit --algorithm AD -d datacard.txt --name gof_ad",
     "impacts": "combineTool.py -M Impacts -d datacard.txt -m 125 --doInitialFit --robustFit 1; combineTool.py -M Impacts -d datacard.txt -m 125 --robustFit 1 --doFits; combineTool.py -M Impacts -d datacard.txt -m 125 -o impacts.json; plotImpacts.py -i impacts.json -o impacts",
 }
 
@@ -149,10 +153,9 @@ def getJobs(
 ) -> list[dict]:
     jobs = []
     for year in years:
-        sig_glob = signal_pattern.format(year=year)
-        sig_files = glob.glob(sig_glob, recursive=True)
-        # bkg_files = list(glob.glob(bkg_glob, recursive=True))
-
+        sig_glob = signal_pattern.replace("{category}", "*")
+        sig_glob = sig_glob.format(year=year)
+        sig_files = list(glob.glob(sig_glob, recursive=True))
         if not sig_files:
             logger.warning(
                 f"No signal files found for year {year} with pattern {sig_glob}"
@@ -160,9 +163,12 @@ def getJobs(
             continue
 
         for sig_file in sig_files:
-            sig_name = Path(sig_file).stem
             sig_params = getSignal(sig_file)
             category = getCategory(sig_params[1], sig_params[2])
+            if not fnmatch.fnmatch(
+                sig_file, signal_pattern.format(year=year, category=category)
+            ):
+                continue
             bkg_file = background_pattern.format(year=year, category=category)
             jobs.append(
                 {

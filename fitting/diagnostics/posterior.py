@@ -209,6 +209,13 @@ def posteriorPredictiveCheck(
                 ]
             )
 
+            # rep_vals = jnp.array(
+            #     [
+            #         stat_fn(y_rep[r_mask], samples[i][r_mask], v_obs_masked)
+            #         for i, y_rep in enumerate(replicated)
+            #     ]
+            # )
+
             pvalue = float(jnp.mean(rep_vals <= obs_val))
 
             test_stat_results[name][region_name] = {

@@ -124,9 +124,13 @@ def makeDiagnosticPlots(
         for i, nnk in enumerate(nn_kernels):
             suffix = f"_{i}" if len(nn_kernels) > 1 else ""
             if ndim == 1:
-                nk_plots = plotNNTransformation1D(nnk, test_data, transform=transform)
+                nk_plots = plotNNTransformation1D(
+                    nnk, test_data, transform=transform, blind_mask=blind_mask
+                )
             else:
-                nk_plots = plotNNTransformation2D(nnk, test_data, transform=transform)
+                nk_plots = plotNNTransformation2D(
+                    nnk, test_data, transform=transform, blind_mask=blind_mask
+                )
 
             for name, fig_ax in nk_plots.items():
                 plots[f"{name}{suffix}"] = fig_ax

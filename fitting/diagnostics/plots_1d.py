@@ -198,6 +198,7 @@ def plotNNTransformation1D(
     kernel: Any,
     test_data: BinnedData,
     transform: Any | None = None,
+    blind_mask: jnp.ndarray | None = None,
 ) -> dict[str, tuple]:
     from ..inference.kernels import DeepKernelFunction
 
@@ -214,11 +215,22 @@ def plotNNTransformation1D(
 
     fig, ax = plt.subplots(layout="tight")
     ax.plot(X, Xt, color="purple", lw=2)
+
+    if blind_mask is not None and np.any(np.asarray(blind_mask)):
+        np_mask = np.asarray(blind_mask)
+        w_min = X[np_mask].min()
+        w_max = X[np_mask].max()
+        ax.axvspan(w_min, w_max, color="magenta", alpha=0.1, label="Blinded Window")
+        for boundary in [w_min, w_max]:
+            ax.axvline(boundary, ls="--", color="magenta", alpha=0.5)
+
     ax.set_title("NN Kernel Transformation")
     if test_data.axis_names:
         ax.set_xlabel(f"Input: {test_data.axis_names[0]}")
     ax.set_ylabel("Transformed Space")
     ax.grid(True, alpha=0.3)
+    if blind_mask is not None:
+        ax.legend()
 
     return {"nn_transform_1d": (fig, ax)}
 

@@ -4,6 +4,7 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
+import itertools as it
 from ..core.data import BinnedData
 from .metrics import pullDistribution, totalPullDistribution
 from typing import Any
@@ -146,15 +147,17 @@ def makeDiagnosticPlots2D(
     ret["total_pull_map"] = (fig, ax)
 
     # --- Covariance at blinding center ---
-    if pred_cov is not None and blind_mask is not None and np.any(np.asarray(blind_mask)):
+    if (
+        pred_cov is not None
+        and blind_mask is not None
+        and np.any(np.asarray(blind_mask))
+    ):
         mask = np.asarray(blind_mask)
         blinded_X = X[mask]
         center = np.mean(blinded_X, axis=0)
         dist = np.sum((blinded_X - center) ** 2, axis=1)
-        # index in the blinded array
         rel_idx = np.argmin(dist)
-        # absolute index in the full array
-        abs_idx = np.where(mask)[0][rel_idx]
+        abs_idx = mask.nonzero()[0][rel_idx]
 
         cov_row = pred_cov[abs_idx, :]
         fig, ax = plt.subplots(layout="tight")
@@ -165,7 +168,9 @@ def makeDiagnosticPlots2D(
             ax.set_ylabel(test_data.axis_names[1])
         plotBlinding2D(ax, edges, X, blind_mask)
         # Mark the center point
-        ax.scatter(X[abs_idx, 0], X[abs_idx, 1], color="red", marker="x", s=100, label="Center")
+        ax.scatter(
+            X[abs_idx, 0], X[abs_idx, 1], color="red", marker="x", s=100, label="Center"
+        )
         ret["covariance_at_blind_center"] = (fig, ax)
 
     # --- Pull histograms ---
@@ -247,6 +252,7 @@ def plotNNTransformation2D(
     kernel: Any,
     test_data: BinnedData,
     transform: Any | None = None,
+    blind_mask: jnp.ndarray | None = None,
 ) -> dict[str, tuple]:
     from ..inference.kernels import DeepKernelFunction
 
@@ -279,6 +285,55 @@ def plotNNTransformation2D(
         ax.plot(xt[i, :], yt[i, :], color="purple", alpha=0.5, lw=0.5)
     for j in range(ny):
         ax.plot(xt[:, j], yt[:, j], color="purple", alpha=0.5, lw=0.5)
+
+    if blind_mask is not None and jnp.any(blind_mask):
+        np_edges = tuple(np.asarray(e) for e in edges)
+        mask_grid, _ = np.histogramdd(
+            np.asarray(test_data.X), bins=np_edges, weights=blind_mask.astype(float)
+        )
+        mask_grid = mask_grid.astype(bool)
+        ex, ey = np_edges
+        padded = np.pad(
+            mask_grid, ((1, 1), (1, 1)), mode="constant", constant_values=False
+        )
+
+        def transform_pts(pts):
+            pts_norm = pts
+            if transform is not None:
+                pts_norm = transform.applyX(pts)
+            return np.asarray(kernel.network(pts_norm))
+
+        highlight_color = "magenta"
+        highlight_lw = 2
+        n_interp = 10
+
+        for i, j in it.product(range(len(ex) - 1), range(len(ey))):
+            if padded[i + 1, j] != padded[i + 1, j + 1]:
+                seg_x = jnp.linspace(ex[i], ex[i + 1], n_interp)
+                seg_y = jnp.full_like(seg_x, ey[j])
+                pts = jnp.stack([seg_x, seg_y], axis=-1)
+                pts_t = transform_pts(pts)
+                ax.plot(
+                    pts_t[:, 0],
+                    pts_t[:, 1],
+                    color=highlight_color,
+                    lw=highlight_lw,
+                    zorder=10,
+                )
+
+        for j, i in it.product(range(len(ey) - 1), range(len(ex))):
+            if padded[i, j + 1] != padded[i + 1, j + 1]:
+                seg_y = jnp.linspace(ey[j], ey[j + 1], n_interp)
+                seg_x = jnp.full_like(seg_y, ex[i])
+                pts = jnp.stack([seg_x, seg_y], axis=-1)
+                pts_t = transform_pts(pts)
+                ax.plot(
+                    pts_t[:, 0],
+                    pts_t[:, 1],
+                    color=highlight_color,
+                    lw=highlight_lw,
+                    zorder=10,
+                )
 
     ax.set_title("NN Kernel Grid Transformation")
     ax.set_xlabel("Transformed X")

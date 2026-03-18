@@ -166,6 +166,7 @@ class AnalysisState:
     pred_mean: jnp.ndarray | None = None
     pred_cov: jnp.ndarray | None = None
     ppc_results: dict[str, Any] | None = None
+    diagnostic_metrics: dict[str, float] | None = None
 
     # --- Flexible bookkeeping ---
     metadata: dict[str, Any] = attrs.Factory(dict)
