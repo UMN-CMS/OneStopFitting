@@ -19,6 +19,7 @@ def makeDiagnosticPlots2D(
     signal_data: BinnedData | None = None,
     signal_template: BinnedData | None = None,
     prior_mean: jnp.ndarray | None = None,
+    pred_cov: jnp.ndarray | None = None,
 ) -> dict[str, tuple]:
     ret = {}
     edges = test_data.edges
@@ -143,6 +144,29 @@ def makeDiagnosticPlots2D(
         ax.set_ylabel(test_data.axis_names[1])
     plotBlinding2D(ax, edges, X, blind_mask)
     ret["total_pull_map"] = (fig, ax)
+
+    # --- Covariance at blinding center ---
+    if pred_cov is not None and blind_mask is not None and np.any(np.asarray(blind_mask)):
+        mask = np.asarray(blind_mask)
+        blinded_X = X[mask]
+        center = np.mean(blinded_X, axis=0)
+        dist = np.sum((blinded_X - center) ** 2, axis=1)
+        # index in the blinded array
+        rel_idx = np.argmin(dist)
+        # absolute index in the full array
+        abs_idx = np.where(mask)[0][rel_idx]
+
+        cov_row = pred_cov[abs_idx, :]
+        fig, ax = plt.subplots(layout="tight")
+        plotRaw(ax, edges, X, cov_row)
+        ax.set_title("Covariance at Blinding Center")
+        if test_data.axis_names and len(test_data.axis_names) >= 2:
+            ax.set_xlabel(test_data.axis_names[0])
+            ax.set_ylabel(test_data.axis_names[1])
+        plotBlinding2D(ax, edges, X, blind_mask)
+        # Mark the center point
+        ax.scatter(X[abs_idx, 0], X[abs_idx, 1], color="red", marker="x", s=100, label="Center")
+        ret["covariance_at_blind_center"] = (fig, ax)
 
     # --- Pull histograms ---
     bins = np.linspace(-5.0, 5.0, 21)

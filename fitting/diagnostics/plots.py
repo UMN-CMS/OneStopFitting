@@ -64,6 +64,7 @@ def makeDiagnosticPlots(
     prior_mean: jnp.ndarray | None = None,
     kernel: Any | None = None,
     transform: Any | None = None,
+    pred_cov: jnp.ndarray | None = None,
 ) -> dict[str, tuple]:
     ndim = test_data.ndim
 
@@ -75,6 +76,7 @@ def makeDiagnosticPlots(
             blind_mask=blind_mask,
             signal_data=signal_data,
             prior_mean=prior_mean,
+            pred_cov=pred_cov,
         )
     elif ndim == 2:
         plots = makeDiagnosticPlots2D(
@@ -86,6 +88,7 @@ def makeDiagnosticPlots(
             signal_data=signal_data,
             signal_template=signal_template,
             prior_mean=prior_mean,
+            pred_cov=pred_cov,
         )
     else:
         raise NotImplementedError(

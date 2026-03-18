@@ -73,6 +73,7 @@ def makeDiagnosticPlots1D(
     blind_mask: jnp.ndarray | None = None,
     signal_data: BinnedData | None = None,
     prior_mean: jnp.ndarray | None = None,
+    pred_cov: jnp.ndarray | None = None,
 ) -> dict[str, tuple]:
     ret = {}
     X = np.asarray(test_data.X).ravel()

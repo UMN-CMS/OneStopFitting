@@ -88,7 +88,7 @@ def fixCovarianceMatrix(cov: jnp.ndarray) -> jnp.ndarray:
 
 def computeScaledEigenvectors(
     cov: jnp.ndarray,
-    threshold_fraction: float = 0.01,
+    threshold_fraction: float = 0.00,
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
     eigenvalues, eigenvectors = jnp.linalg.eigh(cov)
 

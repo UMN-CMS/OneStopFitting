@@ -180,7 +180,6 @@ def posteriorPredictiveCheck(
     # 4. Compute test statistics
     obs_Y = test_data.Y
     obs_V = test_data.V
-    pred_mean = jnp.mean(samples, axis=0)
 
     test_stat_results: dict[str, dict[str, dict[str, Any]]] = {}
 
@@ -200,14 +199,12 @@ def posteriorPredictiveCheck(
             y_obs_masked = obs_Y[r_mask]
             v_obs_masked = obs_V[r_mask]
             pred_mean_masked = pred_mean[r_mask]
-            pred_variance_masked = pred_variance[r_mask]
 
-            obs_val = stat_fn(y_obs_masked, pred_mean_masked, pred_variance_masked)
+            obs_val = stat_fn(y_obs_masked, pred_mean_masked, v_obs_masked)
 
-            # Mask replicated data as well
             rep_vals = jnp.array(
                 [
-                    stat_fn(y_rep[r_mask], pred_mean_masked, pred_variance_masked)
+                    stat_fn(y_rep[r_mask], pred_mean_masked, v_obs_masked)
                     for y_rep in replicated
                 ]
             )

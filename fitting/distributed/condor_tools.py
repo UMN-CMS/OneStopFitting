@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import glob
 import os
 from pathlib import Path
@@ -54,11 +55,12 @@ tar zxf {{ item }}
 ls -alhtr
 
 # Fitting Run
-run_fit "python3 -m fitting run --signal \"$SIGNAL\" --background \"$BACKGROUND\" --output \"$OUTPUT_DIR_FORMAT\" {% if config_path %}--config {{ config_path }}{% endif %}"
+run_fit "python3 -m fitting run --signal \"$SIGNAL\" --background \"$BACKGROUND\" --output \"$OUTPUT_DIR_FORMAT\" --config \"$CONFIG\"" 
 
 dir=$(dirname $(find . -iname 'state.pklz4'))
-cd $dir
+cd $dir/combine
 echo "Running combine in \"$PWD\""
+ls -alhtr
 
 {% if combine_cmds %}
 # Combine Commands
@@ -80,13 +82,13 @@ request_cpus = 1
 transfer_input_files = {{ transfer_input_files | join(', ') }}, $(signal), $(background)
 transfer_output_files = {{ output_dir }}
 preserve_relative_paths = True
-environment = "CONFIG={{ config_path }} SIGNAL=$(signal) BACKGROUND=$(background) OUTPUT_DIR_FORMAT=$(output_dir_format)"
+environment = "CONFIG=$(config) SIGNAL=$(signal) BACKGROUND=$(background) OUTPUT_DIR_FORMAT=$(output_dir_format)"
 should_transfer_files = YES
 when_to_transfer_output = ON_EXIT
 
-queue signal, background, output_dir_format from (
+queue signal, background, output_dir_format, config from (
 {%- for job in jobs %}
-    {{ job.signal }}, {{ job.background }}, {{ job.output_dir }}
+    {{ job.signal }}, {{ job.background }}, {{ job.output_dir }}, {{ job.config }}
 {%- endfor %}
 )
 """
@@ -126,44 +128,51 @@ def compressNeededFiles(
     return transfer_input_files
 
 
+def getSignal(path):
+    match = re.search(r"signal_.+_(31\d)_(\d+)_(\d+)", str(path))
+    return [match.group(1), int(match.group(2)), int(match.group(3))]
+
+
+def getCategory(mstop, mchi):
+    if mchi / mstop > 0.7:
+        return "comp"
+    else:
+        return "uncomp"
+
+
 def getJobs(
-    signal_pattern: str, background_pattern: str, years: list[str], output_dir: Path
+    signal_pattern: str,
+    background_pattern: str,
+    years: list[str],
+    output_dir: Path,
+    config_pattern: str,
 ) -> list[dict]:
     jobs = []
     for year in years:
         sig_glob = signal_pattern.format(year=year)
-        bkg_glob = background_pattern.format(year=year)
         sig_files = glob.glob(sig_glob, recursive=True)
-        bkg_files = list(glob.glob(bkg_glob, recursive=True))
+        # bkg_files = list(glob.glob(bkg_glob, recursive=True))
 
         if not sig_files:
             logger.warning(
                 f"No signal files found for year {year} with pattern {sig_glob}"
             )
             continue
-        if not bkg_files:
-            logger.warning(
-                f"No background files found for year {year} with pattern {bkg_glob}"
-            )
-            continue
-
-        if len(bkg_files) > 1:
-            logger.warning(
-                f"Multiple background files found for year {year} with pattern {bkg_glob}"
-            )
-            continue
-
-        bkg_file = bkg_files[0]
-        if len(bkg_files) > 1:
-            logger.info(f"Multiple background files found for {year}, using {bkg_file}")
 
         for sig_file in sig_files:
             sig_name = Path(sig_file).stem
+            sig_params = getSignal(sig_file)
+            category = getCategory(sig_params[1], sig_params[2])
+            bkg_file = background_pattern.format(year=year, category=category)
             jobs.append(
                 {
                     "signal": sig_file,
                     "background": bkg_file,
                     "output_dir": output_dir,
+                    "category": category,
+                    "mstop": sig_params[1],
+                    "mchi": sig_params[2],
+                    "config": config_pattern.format(category=category),
                 }
             )
     return jobs
@@ -172,7 +181,6 @@ def getJobs(
 def makeRunFitScript(
     venv_activate_path: str,
     output_dir: str,
-    config_path: Path | None,
     files_to_unzip: list[str],
     container: str | None,
     combine_cmds: list[str] | None = None,
@@ -191,7 +199,6 @@ def makeRunFitScript(
     run_fit_content = template.render(
         files_to_unzip=files_to_unzip,
         venv_activate_path=venv_activate_path,
-        config_path=config_path,
         container=container,
         combine_cmds=expanded_cmds,
     )
@@ -211,13 +218,11 @@ def makeSubmitScript(
     transfer_files: list[str],
     output_dir: str,
     executable: str,
-    config_path: Path | None,
     container: str | None,
 ):
     env = Environment()
     template = env.from_string(SUBMIT_TEMPLATE)
     submit_content = template.render(
-        config_path=config_path,
         executable=executable,
         jobs=jobs,
         transfer_input_files=transfer_files,
@@ -238,8 +243,9 @@ def generateCondorSubmit(
     signal_pattern: str,
     background_pattern: str,
     years: list[str],
-    config_path: Path | None = None,
+    config_pattern: str | None = None,
     output_dir: Path = Path("condor_output"),
+    subdir_format: str = "{era.name}/{dataset_name}/{injection_rate}",
     venv_path: str | None = None,
     container: str | None = None,
     combine_cmds: list[str] | None = None,
@@ -251,12 +257,16 @@ def generateCondorSubmit(
     output_dir.mkdir(exist_ok=True, parents=True)
     (output_dir / "logs").mkdir(exist_ok=True, parents=True)
 
-    jobs = getJobs(signal_pattern, background_pattern, years, output_dir)
+    jobs = getJobs(
+        signal_pattern,
+        background_pattern,
+        years,
+        str(output_dir / subdir_format),
+        config_pattern,
+    )
     if not jobs:
         logger.error("No jobs to submit!")
         return
-
-    jobs = jobs[:1]
 
     if not venv_path:
         venv_path = os.environ.get("VIRTUAL_ENV")
@@ -266,10 +276,11 @@ def generateCondorSubmit(
             )
             venv_path = ".venv"
 
+    configs = list(set(x["config"] for x in jobs))
     transfer_files = compressNeededFiles(
         venv_path=venv_path,
         condor_temp_loc=Path(".condor_temp/"),
-        extra_files=([config_path] if config_path is not None else []),
+        extra_files=configs,
     )
 
     venv_activate_path = Path(Path(venv_path).name) / "bin" / "activate"
@@ -277,7 +288,6 @@ def generateCondorSubmit(
     run_fit_script = makeRunFitScript(
         venv_activate_path,
         output_dir,
-        config_path,
         transfer_files,
         container=container,
         combine_cmds=combine_cmds,
@@ -290,7 +300,6 @@ def generateCondorSubmit(
         transfer_files,
         output_dir,
         run_fit_script,
-        config_path=config_path,
         container=container,
     )
 

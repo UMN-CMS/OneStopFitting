@@ -18,6 +18,7 @@ from jax import random
 import gpjax
 import flax.nnx as nnx
 import mplhep
+from .data.windowing import Window
 
 from .core.data import AnalysisState, BinnedData
 from .core.serialization import save
@@ -59,6 +60,7 @@ class PipelineConfig:
     rebin: int = 1
     min_counts: float = 0.0
     rng_seed: int = 0xBEEFBEEF
+    domain_window: Window | None = None
     window_spread: float = 2.0
     transform: TransformConfig = attrs.Factory(StandardizationConfig)
     model: GPModelConfig = attrs.Factory(ExactGPConfig)
@@ -253,6 +255,7 @@ def generatePlots(state: AnalysisState, rng_key: jax.Array) -> None:
         prior_mean=prior_mean,
         kernel=state.training_result.posterior.prior.kernel,
         transform=state.transform,
+        pred_cov=state.pred_cov,
     )
 
     if state.ppc_results is not None:

@@ -12,9 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 def applyDomainMask(
-    data: BinnedData,
-    min_counts: float | None = None,
-    domain_mask_fn: callable | None = None,
+    data: BinnedData, min_counts: float | None = None, window: Window | None = None
 ) -> tuple[BinnedData, jnp.ndarray]:
     min_counts = min_counts if min_counts is not None else 1.0
 
@@ -22,8 +20,8 @@ def applyDomainMask(
 
     logger.info(f"Dropping {jnp.count_nonzero(~mask)} bins with < {min_counts} counts")
 
-    if domain_mask_fn is not None:
-        custom_mask = domain_mask_fn(data.X)
+    if window is not None:
+        custom_mask = window(data.X)
         mask = mask & custom_mask
 
     return data.masked(mask), mask
@@ -48,7 +46,6 @@ def splitTrainTest(
 def preprocess(
     state: AnalysisState,
     min_counts: float = 10.0,
-    domain_mask_fn: callable | None = None,
 ) -> AnalysisState:
     if state.background is None:
         raise ValueError(
@@ -56,6 +53,8 @@ def preprocess(
         )
 
     # Determine the window
+    domain_window = state.config.domain_window
+
     window = state.window
     if window is None and state.signal is not None:
         logger.info("Fitting Gaussian window from signal data")
@@ -64,6 +63,7 @@ def preprocess(
             if isinstance(state.config, dict)
             else getattr(state.config, "window_spread", 1.3)
         )
+        logger.info(f"Fitting Gaussian window from signal data with spread {spread}")
         window = fitGaussianWindow(state.signal, spread=spread)
 
     # Inject signal if requested
@@ -81,7 +81,7 @@ def preprocess(
 
     # Apply domain mask
     domain_data, domain_mask = applyDomainMask(
-        to_estimate, min_counts=min_counts, domain_mask_fn=domain_mask_fn
+        to_estimate, min_counts=min_counts, window=domain_window
     )
 
     # Split train/test

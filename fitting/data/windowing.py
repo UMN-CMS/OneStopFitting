@@ -15,12 +15,44 @@ logger = logging.getLogger(__name__)
 
 @attrs.define
 class Window(ABC):
-    spread: float = 1.0
-
     @abstractmethod
     def __call__(self, X: jnp.ndarray) -> jnp.ndarray:
         """Return boolean mask: True for bins inside the window."""
         ...
+
+
+@attrs.define
+class AndWindow(Window):
+    windows: list[Window]
+
+    def __call__(self, X: jnp.ndarray) -> jnp.ndarray:
+        return jnp.all(jnp.array([w(X) for w in self.windows]), axis=0)
+
+
+@attrs.define
+class OrWindow(Window):
+    windows: list[Window]
+
+    def __call__(self, X: jnp.ndarray) -> jnp.ndarray:
+        return jnp.any(jnp.array([w(X) for w in self.windows]), axis=0)
+
+
+@attrs.define
+class NotWindow(Window):
+    window: Window
+
+    def __call__(self, X: jnp.ndarray) -> jnp.ndarray:
+        return ~self.window(X)
+
+
+@attrs.define
+class CutWindow(Window):
+    axis: int
+    lower: float = -jnp.inf
+    upper: float = jnp.inf
+
+    def __call__(self, X: jnp.ndarray) -> jnp.ndarray:
+        return (X[:, self.axis] >= self.lower) & (X[:, self.axis] <= self.upper)
 
 
 @attrs.define
@@ -30,6 +62,7 @@ class GaussianWindow(Window):
     sigma: jnp.ndarray = attrs.field(factory=lambda: jnp.array(1.0))
     theta: float | None = None  # rotation angle, 2D only
     normalization_scale: jnp.ndarray = attrs.field(factory=lambda: jnp.array(1.0))
+    spread: float = 1.0
 
     def _gaussianValue(self, X: jnp.ndarray) -> jnp.ndarray:
         """Evaluate the Gaussian at points X."""

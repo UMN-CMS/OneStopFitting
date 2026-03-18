@@ -154,6 +154,12 @@ def run(
             raw["output_dir_format"] = str(output)
         if injection_rate is not None:
             raw["injection_rate"] = injection_rate
+        if num_iters is not None:
+            raw["optimization"]["num_iters"] = num_iters
+        if lr is not None:
+            raw["optimization"]["lr"] = lr
+        if window_spread is not None:
+            raw["window_spread"] = window_spread
 
         pipeline_config = converter.structure(raw, PipelineConfig)
 
@@ -240,10 +246,9 @@ def smooth(state: Path, output: Path, seed: int, num_samples: int) -> None:
 )
 @click.option("--years", multiple=True, required=True, help="Years to process")
 @click.option(
-    "--config",
+    "--config-pattern",
     "-c",
-    type=click.Path(exists=True, path_type=Path),
-    help="Static yaml config file",
+    type=str,
 )
 @click.option(
     "--output",
@@ -251,6 +256,12 @@ def smooth(state: Path, output: Path, seed: int, num_samples: int) -> None:
     type=click.Path(path_type=Path),
     default=Path("condor_output"),
     help="Output directory for condor files",
+)
+@click.option(
+    "--subdir-format",
+    type=str,
+    required=True,
+    help="Format for subdirectory",
 )
 @click.option("--venv", type=str, help="Path to virtual environment to pack")
 @click.option("--container", type=str, help="Container image to use")
@@ -264,8 +275,9 @@ def makecondor(
     signal: str,
     background: str,
     years: tuple[str, ...],
-    config: Path | None,
+    config_pattern: str | None,
     output: Path,
+    subdir_format: str,
     venv: str | None,
     container: str | None,
     combine_cmds: tuple[str, ...],
@@ -277,8 +289,9 @@ def makecondor(
         signal_pattern=signal,
         background_pattern=background,
         years=list(years),
-        config_path=config,
+        config_pattern=config_pattern,
         output_dir=output,
+        subdir_format=subdir_format,
         venv_path=venv,
         container=container,
         combine_cmds=list(combine_cmds),
