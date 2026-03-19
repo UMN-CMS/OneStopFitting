@@ -182,6 +182,7 @@ def posteriorPredictiveCheck(
     obs_V = test_data.V
 
     test_stat_results: dict[str, dict[str, dict[str, Any]]] = {}
+    test_stat_reps: dict[str, dict[str, jnp.ndarray]] = {}
 
     # Pre-calculate region masks
     masks = {"all": jnp.ones_like(obs_Y, dtype=bool)}
@@ -191,6 +192,7 @@ def posteriorPredictiveCheck(
 
     for name, stat_fn in test_statistics.items():
         test_stat_results[name] = {}
+        test_stat_reps[name] = {}
         for region_name, r_mask in masks.items():
             # Skip if region has no valid bins
             if not jnp.any(r_mask) or not jnp.any(obs_V[r_mask] > 0):
@@ -227,6 +229,8 @@ def posteriorPredictiveCheck(
                 "pvalue": pvalue,
             }
 
+            test_stat_reps[name][region_name] = rep_vals
+
             logger.info(
                 f"PPC [{name} - {region_name}]: p-value = {pvalue:.3f} "
                 f"(obs={obs_val:.1f}, median_rep={float(jnp.median(rep_vals)):.1f})"
@@ -253,5 +257,6 @@ def posteriorPredictiveCheck(
         "samples": samples,
         "replicated": replicated,
         "test_stats": test_stat_results,
+        "test_reps": test_stat_reps,
         "summary": summary,
     }

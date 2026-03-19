@@ -209,6 +209,7 @@ def makePosteriorPredictivePlots2D(
     X = test_data.X
 
     summary = ppc_results["summary"]
+    reps = ppc_results["test_reps"]
 
     fig, ax = plt.subplots(layout="tight")
     plotRaw(ax, edges, X, np.asarray(summary["mean"]))
@@ -232,13 +233,13 @@ def makePosteriorPredictivePlots2D(
     for stat_name, regions in test_stats.items():
         for region_name, summary_stats in regions.items():
             obs_val = float(summary_stats["obs"])
-            rep_vals = np.asarray(summary_stats["rep"])
+            rep_vals = reps[stat_name][region_name]
             pvalue = float(summary_stats["pvalue"])
 
             fig, ax = plt.subplots(layout="tight")
             plotPPD(
                 ax,
-                rep_vals,
+                reps[stat_name][region_name],
                 obs_val,
                 xlabel=f"Test Statistic: {stat_name} ({region_name})",
                 pvalue=pvalue,

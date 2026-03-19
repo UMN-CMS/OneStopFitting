@@ -1,10 +1,3 @@
-"""CLI entry point for fitting.
-
-Usage:
-    fitting run --config config.json
-    fitting run --background data/bg.pkl.lz4 [options]
-"""
-
 from __future__ import annotations
 
 import logging
@@ -170,6 +163,8 @@ def run(
             raw["optimization"]["lr"] = lr
         if window_spread is not None:
             raw["window_spread"] = window_spread
+        if mode is not None:
+            raw["optimization"]["mode"] = mode
 
         pipeline_config = converter.structure(raw, PipelineConfig)
 
@@ -457,8 +452,6 @@ def report(
         config=config,
     )
     logger.info(f"Generated {len(output_paths)} report(s)")
-    for path in output_paths:
-        logger.info(f"  {path}")
 
 
 if __name__ == "__main__":

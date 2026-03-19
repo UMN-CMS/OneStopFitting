@@ -5,8 +5,16 @@ import jax.numpy as jnp
 from typing import Any
 
 from ..core.data import BinnedData
-from .plots_1d import makeDiagnosticPlots1D, makePosteriorPredictivePlots1D, makeSmoothingPlots1D
-from .plots_2d import makeDiagnosticPlots2D, makePosteriorPredictivePlots2D, makeSmoothingPlots2D
+from .plots_1d import (
+    makeDiagnosticPlots1D,
+    makePosteriorPredictivePlots1D,
+    makeSmoothingPlots1D,
+)
+from .plots_2d import (
+    makeDiagnosticPlots2D,
+    makePosteriorPredictivePlots2D,
+    makeSmoothingPlots2D,
+)
 
 
 def makeSmoothingPlots(

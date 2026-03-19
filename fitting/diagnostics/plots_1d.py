@@ -20,10 +20,10 @@ def makePosteriorPredictivePlots1D(
 
     X = np.asarray(test_data.X).ravel()
 
-    # --- 1. Percentile Bands Plot ---
     fig, ax = plt.subplots(layout="tight")
 
     summary = ppc_results["summary"]
+    reps = ppc_results["test_reps"]
     q05 = np.asarray(summary["q05"])
     q95 = np.asarray(summary["q95"])
     median = np.asarray(summary["median"])
@@ -50,12 +50,12 @@ def makePosteriorPredictivePlots1D(
     for stat_name, regions in test_stats.items():
         for region_name, summary_stats in regions.items():
             obs_val = float(summary_stats["obs"])
-            rep_vals = np.asarray(summary_stats["rep"])
+            rep_vals = reps
             pvalue = float(summary_stats["pvalue"])
             fig, ax = plt.subplots(layout="tight")
             plotPPD(
                 ax,
-                rep_vals,
+                reps[stat_name][region_name],
                 obs_val,
                 xlabel=f"Test Statistic: {stat_name} ({region_name})",
                 pvalue=pvalue,

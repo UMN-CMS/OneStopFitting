@@ -260,15 +260,12 @@ def generatePlots(state: AnalysisState, rng_key: jax.Array) -> None:
     )
 
     if state.ppc_results is not None:
-        try:
-            ppc_plots = makePosteriorPredictivePlots(
-                ppc_results=state.ppc_results,
-                test_data=state.test_data,
-                blind_mask=state.blind_mask,
-            )
-            plots.update(ppc_plots)
-        except Exception as e:
-            logger.warning(f"Failed to create posterior predictive plots: {e}")
+        ppc_plots = makePosteriorPredictivePlots(
+            ppc_results=state.ppc_results,
+            test_data=state.test_data,
+            blind_mask=state.blind_mask,
+        )
+        plots.update(ppc_plots)
 
     plot_dir = state.getRealOutPath() / "diagnostics"
     savePlots(plots, plot_dir, formats=state.config.image_formats)

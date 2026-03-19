@@ -240,7 +240,6 @@ def generatePointReport(
 
 
 def generatePointReports(
-    *,
     inputs: Iterable[str | Path],
     output: Path | None,
     single_document: bool,
