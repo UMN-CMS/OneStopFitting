@@ -19,10 +19,6 @@ if [[ -n "$SINGULARITY_NAME" ]] || [[ -n "$APPTAINER_NAME" ]]; then
 
 
     SYNC_CMD_EXTRAS=""
-    if [[ "$IS_LPC" == "true" ]]; then
-        echo "LPC environment detected. Enabling lpc and condor extras."
-        SYNC_CMD_EXTRAS="$SYNC_CMD_EXTRAS --extra lpc --extra condor"
-    fi
 
     if [ ! -d ".venv" ]; then
         echo "Creating virtual environment..."
