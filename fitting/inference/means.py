@@ -5,7 +5,9 @@ from abc import ABC, abstractmethod
 
 import attrs
 import gpjax
+import jax
 import jax.numpy as jnp
+import jax.scipy.stats
 from flax import nnx
 
 logger = logging.getLogger(__name__)
@@ -78,6 +80,59 @@ class DoubleSidedCrystalBallMean(gpjax.mean_functions.AbstractMeanFunction):
         return (bump + self.baseline.value).reshape(-1, 1)
 
 
+class AsymmetricGaussianBumpMean(gpjax.mean_functions.AbstractMeanFunction):
+    def __init__(self, ndim: int):
+        super().__init__()
+        self.ndim = ndim
+        self.amplitude = gpjax.parameters.Real(jnp.array(1.0))
+        self.mu = gpjax.parameters.Real(jnp.zeros(ndim))
+        self.log_sigma = gpjax.parameters.Real(jnp.zeros(ndim))
+        self.baseline = gpjax.parameters.Real(jnp.array(0.0))
+
+        n_ltri = ndim * (ndim + 1) // 2
+        # One Cholesky factor per orthant: 2^ndim orthants
+        n_orthants = 2**ndim
+        self.L_raw = gpjax.parameters.Real(jnp.zeros((n_orthants, n_ltri)))
+
+    def _cholesky_precision(self, L_raw_row: jnp.ndarray) -> jnp.ndarray:
+        L = jnp.zeros((self.ndim, self.ndim))
+        rows, cols = jnp.tril_indices(self.ndim)
+        L = L.at[rows, cols].set(L_raw_row)
+        diag_idx = jnp.arange(self.ndim)
+        L = L.at[diag_idx, diag_idx].set(jnp.exp(jnp.diag(L)))
+        return L
+
+    def _orthant_index(self, delta: jnp.ndarray) -> jnp.ndarray:
+        # Map sign pattern of delta to an integer index
+        # e.g. (-, -) -> 0, (+, -) -> 1, (-, +) -> 2, (+, +) -> 3
+        signs = (delta >= 0).astype(jnp.int32)  # (n, ndim)
+        powers = 2 ** jnp.arange(self.ndim)  # (ndim,)
+        return jnp.einsum("nd,d->n", signs, powers)  # (n,)
+
+    def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
+        sigma = jnp.exp(self.log_sigma.value)
+        delta = (x - self.mu.value) / sigma  # (n, ndim)
+
+        orthant_idx = self._orthant_index(delta)  # (n,)
+
+        # Precompute all Cholesky factors
+        all_L = jax.vmap(self._cholesky_precision)(
+            self.L_raw.value
+        )  # (2^ndim, ndim, ndim)
+
+        # Select the right L for each point
+        L_per_point = all_L[orthant_idx]  # (n, ndim, ndim)
+
+        # Mahalanobis per point with its own L
+        Lt_delta = jnp.einsum(
+            "nij,nj->ni", jnp.transpose(L_per_point, (0, 2, 1)), delta
+        )  # (n, ndim)
+        exponent = -0.5 * jnp.sum(Lt_delta**2, axis=-1)
+
+        bump = self.amplitude.value * jnp.exp(exponent)
+        return (bump + self.baseline.value).reshape(-1, 1)
+
+
 class GaussianBumpMean(gpjax.mean_functions.AbstractMeanFunction):
     def __init__(self, ndim: int):
         super().__init__()
@@ -124,6 +179,159 @@ class ParametricBackgroundMean(gpjax.mean_functions.AbstractMeanFunction):
         exponent = linear_term + quad_term + self.b.value
 
         return jnp.exp(exponent).reshape(-1, 1)
+
+
+class SkewedGaussianMean(gpjax.mean_functions.AbstractMeanFunction):
+    def __init__(self, ndim: int):
+        self.amplitude = gpjax.parameters.Real(jnp.array(1.0))
+        self.mu = gpjax.parameters.Real(jnp.zeros(ndim))
+        self.log_sigma = gpjax.parameters.Real(jnp.zeros(ndim))
+        self.log_alpha = gpjax.parameters.Real(jnp.zeros(ndim))
+        self.baseline = gpjax.parameters.Real(jnp.array(0.0))
+
+    def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
+        sigma = jnp.exp(self.log_sigma.value)
+        alpha = jnp.exp(self.log_alpha.value)
+        delta = (x - self.mu.value) / sigma  # (n, ndim)
+        z = -0.5 * jnp.sum(delta**2, axis=-1)
+        skew_term = jnp.prod(1 + jax.scipy.stats.norm.cdf(alpha * delta), axis=-1)
+        bump = self.amplitude.value * jnp.exp(z) * skew_term
+        return (bump + self.baseline.value).reshape(-1, 1)
+
+
+class StudentTBumpMean(gpjax.mean_functions.AbstractMeanFunction):
+    def __init__(self, ndim: int):
+        super().__init__()
+        self.amplitude = gpjax.parameters.Real(jnp.array(1.0))
+        self.mu = gpjax.parameters.Real(jnp.zeros(ndim))
+        self.log_sigma = gpjax.parameters.Real(jnp.zeros(ndim))
+        self.log_nu = gpjax.parameters.Real(jnp.array(2.0))  # log(nu), init at 2.0
+        self.baseline = gpjax.parameters.Real(jnp.array(0.0))
+
+    def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
+        sigma = jnp.exp(self.log_sigma.value)
+        nu = jnp.exp(self.log_nu.value)
+        ndim = x.shape[-1]
+
+        delta = (x - self.mu.value) / sigma
+        z = jnp.sum(delta**2, axis=-1)
+        exponent = -(nu + ndim) / 2.0
+        scale_term = 1 + z / nu
+        bump = self.amplitude.value * jnp.power(scale_term, exponent)
+
+        return (bump + self.baseline.value).reshape(-1, 1)
+
+
+class AsymmetricLaplaceMean(gpjax.mean_functions.AbstractMeanFunction):
+    def __init__(self, ndim: int):
+        super().__init__()
+        self.ndim = ndim
+        self.amplitude = gpjax.parameters.Real(jnp.array(1.0))
+        self.mu = gpjax.parameters.Real(jnp.zeros(ndim))
+        self.log_scale = gpjax.parameters.Real(jnp.zeros(ndim))
+        self.baseline = gpjax.parameters.Real(jnp.array(0.0))
+        n_ltri = ndim * (ndim + 1) // 2
+        n_orthants = 2**ndim
+        self.L_raw = gpjax.parameters.Real(jnp.zeros((n_orthants, n_ltri)))
+
+    def _cholesky_transform(self, L_raw_row: jnp.ndarray) -> jnp.ndarray:
+        L = jnp.zeros((self.ndim, self.ndim))
+        rows, cols = jnp.tril_indices(self.ndim)
+        L = L.at[rows, cols].set(L_raw_row)
+        diag_idx = jnp.arange(self.ndim)
+        L = L.at[diag_idx, diag_idx].set(jnp.exp(jnp.diag(L)))  # Positive diagonal
+        return L
+
+    def _orthant_index(self, delta: jnp.ndarray) -> jnp.ndarray:
+        signs = (delta >= 0).astype(jnp.int32)
+        powers = 2 ** jnp.arange(self.ndim)
+        return jnp.einsum("nd,d->n", signs, powers)
+
+    def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
+        scale = jnp.exp(self.log_scale.value)
+        delta = (x - self.mu.value) / scale
+
+        orthant_idx = self._orthant_index(delta)
+        all_L = jax.vmap(self._cholesky_transform)(self.L_raw.value)
+        L_per_point = all_L[orthant_idx]
+
+        # L1 norm after linear transformation
+        L_delta = jnp.einsum("nij,nj->ni", jnp.transpose(L_per_point, (0, 2, 1)), delta)
+        l1_norm = jnp.sum(jnp.abs(L_delta), axis=-1)
+
+        bump = self.amplitude.value * jnp.exp(-l1_norm)
+        return (bump + self.baseline.value).reshape(-1, 1)
+
+
+class RationalQuadraticBumpMean(gpjax.mean_functions.AbstractMeanFunction):
+    def __init__(self, ndim: int):
+        super().__init__()
+        self.amplitude = gpjax.parameters.Real(jnp.array(1.0))
+        self.mu = gpjax.parameters.Real(jnp.zeros(ndim))
+        self.log_sigma = gpjax.parameters.Real(jnp.zeros(ndim))
+        self.log_alpha = gpjax.parameters.Real(
+            jnp.array(1.0)
+        )  # log(alpha), init at 1.0
+        self.baseline = gpjax.parameters.Real(jnp.array(0.0))
+
+    def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
+        sigma = jnp.exp(self.log_sigma.value)
+        alpha = jnp.exp(self.log_alpha.value)
+
+        delta = (x - self.mu.value) / sigma
+        z = jnp.sum(delta**2, axis=-1)
+        scale_term = 1 + z / (2 * alpha)
+        bump = self.amplitude.value * jnp.power(scale_term, -alpha)
+
+        return (bump + self.baseline.value).reshape(-1, 1)
+
+
+class LogNormalWarpingMean(gpjax.mean_functions.AbstractMeanFunction):
+    def __init__(
+        self,
+        base_mean: gpjax.mean_functions.AbstractMeanFunction,
+        log_dims: list[int] = None,
+    ):
+        super().__init__()
+        self.base_mean = base_mean
+        self.log_dims = log_dims
+        self.offset = gpjax.parameters.Real(jnp.array(1.0))
+
+    def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
+        x_warped = x.copy()
+        if self.log_dims is not None:
+            for dim in self.log_dims:
+                x_warped = x_warped.at[:, dim].set(
+                    jnp.log(x_warped[:, dim] + self.offset.value)
+                )
+
+        return self.base_mean(x_warped)
+
+
+class MixtureOfGaussiansMean(gpjax.mean_functions.AbstractMeanFunction):
+    def __init__(self, ndim: int, n_components: int = 2):
+        super().__init__()
+        self.ndim = ndim
+        self.n_components = n_components
+        self.log_amplitudes = gpjax.parameters.Real(jnp.zeros(n_components))
+        self.mus = gpjax.parameters.Real(jnp.zeros((n_components, ndim)))
+        self.log_sigmas = gpjax.parameters.Real(jnp.zeros((n_components, ndim)))
+        self.baseline = gpjax.parameters.Real(jnp.array(0.0))
+
+    def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
+        amplitudes = jax.nn.softmax(self.log_amplitudes.value)
+
+        total_bump = jnp.zeros(x.shape[0])
+        for k in range(self.n_components):
+            mu_k = self.mus.value[k]
+            sigma_k = jnp.exp(self.log_sigmas.value[k])
+            delta = (x - mu_k) / sigma_k
+            z = -0.5 * jnp.sum(delta**2, axis=-1)
+            component_bump = amplitudes[k] * jnp.exp(z)
+            total_bump += component_bump
+
+        bump = total_bump
+        return (bump + self.baseline.value).reshape(-1, 1)
 
 
 @attrs.define
@@ -186,6 +394,14 @@ class GaussianBumpMeanConfig(MeanFunctionConfig):
 
 
 @attrs.define
+class AsymmetricGaussianBumpMeanConfig(MeanFunctionConfig):
+    def buildMeanFunction(
+        self, ndim: int, kernel: gpjax.kernels.AbstractKernel
+    ) -> gpjax.mean_functions.AbstractMeanFunction:
+        return GaussianBumpMean(ndim)
+
+
+@attrs.define
 class DoubleSidedCrystalBallMeanConfig(MeanFunctionConfig):
     init_mu: jnp.ndarray = jnp.array([0.3, 0.3])
 
@@ -193,3 +409,64 @@ class DoubleSidedCrystalBallMeanConfig(MeanFunctionConfig):
         self, ndim: int, kernel: gpjax.kernels.AbstractKernel
     ) -> gpjax.mean_functions.AbstractMeanFunction:
         return DoubleSidedCrystalBallMean(ndim, self.init_mu)
+
+
+@attrs.define
+class SkewedGaussianMeanConfig(MeanFunctionConfig):
+    def buildMeanFunction(
+        self, ndim: int, kernel: gpjax.kernels.AbstractKernel
+    ) -> gpjax.mean_functions.AbstractMeanFunction:
+        return SkewedGaussianMean(ndim)
+
+
+@attrs.define
+class StudentTBumpMeanConfig(MeanFunctionConfig):
+    def buildMeanFunction(
+        self, ndim: int, kernel: gpjax.kernels.AbstractKernel
+    ) -> gpjax.mean_functions.AbstractMeanFunction:
+        return StudentTBumpMean(ndim)
+
+
+@attrs.define
+class AsymmetricLaplaceMeanConfig(MeanFunctionConfig):
+    def buildMeanFunction(
+        self, ndim: int, kernel: gpjax.kernels.AbstractKernel
+    ) -> gpjax.mean_functions.AbstractMeanFunction:
+        return AsymmetricLaplaceMean(ndim)
+
+@attrs.define
+class AsymmetricGaussianBumpMeanConfig(MeanFunctionConfig):
+    def buildMeanFunction(
+        self, ndim: int, kernel: gpjax.kernels.AbstractKernel
+    ) -> gpjax.mean_functions.AbstractMeanFunction:
+        return AsymmetricGaussianBumpMeanConfig(ndim)
+
+
+@attrs.define
+class RationalQuadraticBumpMeanConfig(MeanFunctionConfig):
+    def buildMeanFunction(
+        self, ndim: int, kernel: gpjax.kernels.AbstractKernel
+    ) -> gpjax.mean_functions.AbstractMeanFunction:
+        return RationalQuadraticBumpMean(ndim)
+
+
+@attrs.define
+class LogNormalWarpingMeanConfig(MeanFunctionConfig):
+    base_mean: MeanFunctionConfig = attrs.Factory(GaussianBumpMeanConfig)
+    log_dims: list[int] = attrs.Factory(lambda: [0])
+
+    def buildMeanFunction(
+        self, ndim: int, kernel: gpjax.kernels.AbstractKernel
+    ) -> gpjax.mean_functions.AbstractMeanFunction:
+        base_mean_func = self.base_mean.buildMeanFunction(ndim, kernel)
+        return LogNormalWarpingMean(base_mean_func, self.log_dims)
+
+
+@attrs.define
+class MixtureOfGaussiansMeanConfig(MeanFunctionConfig):
+    n_components: int = 2
+
+    def buildMeanFunction(
+        self, ndim: int, kernel: gpjax.kernels.AbstractKernel
+    ) -> gpjax.mean_functions.AbstractMeanFunction:
+        return MixtureOfGaussiansMean(ndim, self.n_components)

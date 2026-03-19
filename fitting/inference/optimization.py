@@ -50,6 +50,8 @@ class MCMCConfig:
 class TwoStageConfig:
     stage1_iters: int = 100
     stage2_iters: int = 100
+    stage1_lr: float: 0.1
+    stage2_lr: float: 0.005
 
 
 @attrs.define
