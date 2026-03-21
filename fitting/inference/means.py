@@ -103,8 +103,6 @@ class AsymmetricGaussianBumpMean(gpjax.mean_functions.AbstractMeanFunction):
         return L
 
     def _orthant_index(self, delta: jnp.ndarray) -> jnp.ndarray:
-        # Map sign pattern of delta to an integer index
-        # e.g. (-, -) -> 0, (+, -) -> 1, (-, +) -> 2, (+, +) -> 3
         signs = (delta >= 0).astype(jnp.int32)  # (n, ndim)
         powers = 2 ** jnp.arange(self.ndim)  # (ndim,)
         return jnp.einsum("nd,d->n", signs, powers)  # (n,)
@@ -120,13 +118,10 @@ class AsymmetricGaussianBumpMean(gpjax.mean_functions.AbstractMeanFunction):
             self.L_raw.value
         )  # (2^ndim, ndim, ndim)
 
-        # Select the right L for each point
         L_per_point = all_L[orthant_idx]  # (n, ndim, ndim)
-
-        # Mahalanobis per point with its own L
         Lt_delta = jnp.einsum(
             "nij,nj->ni", jnp.transpose(L_per_point, (0, 2, 1)), delta
-        )  # (n, ndim)
+        )
         exponent = -0.5 * jnp.sum(Lt_delta**2, axis=-1)
 
         bump = self.amplitude.value * jnp.exp(exponent)
@@ -434,6 +429,7 @@ class AsymmetricLaplaceMeanConfig(MeanFunctionConfig):
     ) -> gpjax.mean_functions.AbstractMeanFunction:
         return AsymmetricLaplaceMean(ndim)
 
+
 @attrs.define
 class AsymmetricGaussianBumpMeanConfig(MeanFunctionConfig):
     def buildMeanFunction(
@@ -441,14 +437,12 @@ class AsymmetricGaussianBumpMeanConfig(MeanFunctionConfig):
     ) -> gpjax.mean_functions.AbstractMeanFunction:
         return AsymmetricGaussianBumpMeanConfig(ndim)
 
-
 @attrs.define
 class RationalQuadraticBumpMeanConfig(MeanFunctionConfig):
     def buildMeanFunction(
         self, ndim: int, kernel: gpjax.kernels.AbstractKernel
     ) -> gpjax.mean_functions.AbstractMeanFunction:
         return RationalQuadraticBumpMean(ndim)
-
 
 @attrs.define
 class LogNormalWarpingMeanConfig(MeanFunctionConfig):

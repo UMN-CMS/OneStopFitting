@@ -85,6 +85,7 @@ def loadData(config: PipelineConfig) -> AnalysisState:
         **config.metadata,
         **file_metadata,
         "injection_rate": config.injection_rate,
+        "window_spread": config.window_spread,
     }
 
     signal = None
@@ -115,8 +116,8 @@ def loadData(config: PipelineConfig) -> AnalysisState:
 
 
 def trainModel(state: AnalysisState, rng_key: jax.Array) -> AnalysisState:
-    """Preprocess, normalize, and train the GP model."""
-
+    if state.train_data is None:
+        raise ValueError("Training data not found in state. Cannot train model.")
     # 1. Preprocess (masking, blinding)
     state = preprocess(state, min_counts=state.config.min_counts)
 

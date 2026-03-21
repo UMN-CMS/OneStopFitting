@@ -50,8 +50,8 @@ class MCMCConfig:
 class TwoStageConfig:
     stage1_iters: int = 100
     stage2_iters: int = 100
-    stage1_lr: float: 0.1
-    stage2_lr: float: 0.005
+    stage1_lr: float = 0.1
+    stage2_lr: float = 0.005
 
 
 @attrs.define
@@ -416,6 +416,7 @@ def runHomoscedasticTwoStageFit(
     stage1_config = attrs.evolve(
         config,
         num_iters=config.two_stage.stage1_iters,
+        lr=config.two_stage.stage1_lr,
         log_interval=config.log_interval,
     )
     stage1_result = runMLE(
@@ -445,6 +446,7 @@ def runHomoscedasticTwoStageFit(
     stage2_config = attrs.evolve(
         config,
         num_iters=config.two_stage.stage2_iters,
+        lr=config.two_stage.stage2_lr,
         log_interval=config.log_interval,
     )
     final_result = runMLE(

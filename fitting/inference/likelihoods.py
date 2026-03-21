@@ -40,7 +40,6 @@ class LikelihoodConfig(ABC):
             return param_type(value, prior=prior_config.buildPrior())
         return value
 
-
 @attrs.define
 class UniformGaussianNoiseConfig(LikelihoodConfig):
     """Homoscedastic Gaussian likelihood with a single learned scalar variance."""

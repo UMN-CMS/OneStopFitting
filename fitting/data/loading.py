@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 import logging
 import pickle as pkl
 from abc import ABC, abstractmethod

@@ -4,6 +4,10 @@ import logging
 from pathlib import Path
 
 import click
+import jax
+import lz4.frame
+import pickle
+from .diagnostics.plot_utils import savePlots
 
 from .core.serialization import converter, load
 from .diagnostics.aggregate_plots import (
@@ -11,11 +15,13 @@ from .diagnostics.aggregate_plots import (
     iterSummaryFiles,
     makeAggregateMassPlanePlot,
 )
+
 from .diagnostics.point_report import (
     PointReportConfig,
     generatePointReport,
     generatePointReports,
 )
+
 from .pipeline import (
     PipelineConfig,
     runPipeline,
@@ -84,7 +90,7 @@ def main(verbose: bool) -> None:
 @click.option("--num-iters", type=int, default=500, help="Training iterations.")
 @click.option("--lr", type=float, default=0.01, help="Learning rate.")
 @click.option("--seed", type=int, default=0xBEEFBEEF, help="RNG seed.")
-@click.option("--window-spread", type=float, default=2.0, help="Window spread.")
+@click.option("--window-spread", type=float, default=None, help="Window spread.")
 @click.option(
     "--mode",
     type=click.Choice(InferenceMode, case_sensitive=False),
@@ -130,7 +136,7 @@ def run(
     num_iters: int,
     lr: float,
     seed: int,
-    window_spread: float,
+    window_spread: float | None,
     mode: InferenceMode,
     optimizer: OptimizerType,
     objective: ObjectiveType,
@@ -208,10 +214,6 @@ def run(
 @click.option("--seed", type=int, default=42, help="RNG seed.")
 @click.option("--num-samples", type=int, default=1, help="Number of samples to draw.")
 def smooth(state: Path, output: Path, seed: int, num_samples: int) -> None:
-    import jax
-    import lz4.frame
-    import pickle
-    from .diagnostics.plot_utils import savePlots
 
     jax.config.update("jax_enable_x64", True)
     rng_key = jax.random.key(seed)
@@ -240,6 +242,7 @@ def smooth(state: Path, output: Path, seed: int, num_samples: int) -> None:
 
 @main.command(name="aggregate-plot")
 @click.option(
+    "-i",
     "--input",
     "inputs",
     multiple=True,
@@ -247,19 +250,21 @@ def smooth(state: Path, output: Path, seed: int, num_samples: int) -> None:
     help="Directory, summary.json path, or glob pattern. May be passed multiple times.",
 )
 @click.option(
+    "-m",
     "--metric",
     "metric_dotpath",
     required=True,
     help="Dot-path into summary.json, e.g. 'metrics.blinded_chi2_per_bin'.",
 )
 @click.option(
-    "--output",
     "-o",
+    "--output",
     type=click.Path(path_type=Path),
     required=True,
     help="Output directory where plots will be written.",
 )
 @click.option(
+    "-f",
     "--formats",
     multiple=True,
     default=("png",),
@@ -390,15 +395,16 @@ def makecondor(
 
 @main.command()
 @click.option(
-    "--input",
     "-i",
+    "--input",
+    "inputs",
     multiple=True,
     required=True,
     help="Directory, summary.json path, or glob pattern. May be passed multiple times.",
 )
 @click.option(
-    "--output",
     "-o",
+    "--output",
     type=click.Path(path_type=Path),
     help="Output: single PDF or directory (for per-point reports).",
 )

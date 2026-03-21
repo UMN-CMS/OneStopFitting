@@ -6,6 +6,7 @@
 [- set era_name_safe = era.get("name", "") | replace("_", "\\_") -]
 [- set coupling_safe = other.get("coupling", "") | replace("_", "\\_") -]
 [- set injection_rate = meta.get("injection_rate", "") -]
+[- set window_spread = meta.get("window_spread", "") -]
 [- set stop_mass = other.get("stop_mass", "") -]
 [- set chargino_mass = other.get("chargino_mass", "") -]
 [- set dataset_title = meta.get("dataset_title", "") -]
@@ -17,18 +18,16 @@
 
 \vspace{0.25em}
 
-\begin{tabularx}{\textwidth}{@{}L L L@{}}
-
-\kv{Dataset}{\texttt{ [[ dataset_name_safe ]] } }  &
-\kv{Era}{\texttt{ [[ era_name_safe ]]}} &
-\kv{Injection}{$[[ injection_rate ]]$} \\
+{\large
+\begin{tabularx}{\textwidth}{@{}llllll@{}}
+\kv{Era}{\texttt{[[ era_name_safe ]]}} &
 \kv{$m_{\tilde{t}}$}{$[[ stop_mass ]]$} &
 \kv{$m_{\tilde{\chi}^{\pm}}$}{$[[ chargino_mass ]]$} &
-\kv{Coupling}{\texttt{ [[ coupling_safe ]] } } \\
+\kv{Coupling}{{[[ coupling_safe ]]}} &
+\kv{Injection}{$[[ injection_rate ]]$} 
+\kv{Window}{$[[ window_spread ]]$} 
 \end{tabularx}
+}
 
 \vspace{0.6em}
 
-\begin{tabularx}{\textwidth}{@{}l X@{}}
-\textbf{Title} & [[ dataset_title ]] \\
-\end{tabularx}

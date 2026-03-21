@@ -92,6 +92,7 @@ def _selectPlotNames(
             "signal": "signal_template",
             "observed": "observed_outputs",
             "gpr": "gpr_mean",
+            "predvar": "predicted_variances",
             "pulls": "pull_map",
             "ppc_map": "ppc_mean_map",
             "ppc_blinded": "ppc_dist_chi2_blinded",
@@ -130,7 +131,7 @@ def gatherPointContext(*, point_dir: Path, image_format: str) -> dict[str, Any]:
         image_paths[role] = str(img_path)
 
     return {
-        "point_dir": str(point_dir.resolve()),
+        "point_dir": str(point_dir.relative_to(Path.cwd())),
         "ndim": ndim,
         "metadata": summary.get("metadata", {}),
         "metrics": summary.get("metrics", {}),
@@ -278,7 +279,7 @@ def generatePointReports(
     output_paths = []
     for point_dir in point_dirs:
         if output is None:
-            out_pdf = None
+            out_pdf = Path(point_dir) / "point_report.pdf"
         else:
             out_dir = Path(output)
             if out_dir.suffix.lower() == ".pdf":
