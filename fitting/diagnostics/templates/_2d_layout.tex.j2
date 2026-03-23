@@ -1,0 +1,66 @@
+[- set signal_path = image_paths["signal"] -]
+[- set observed_path = image_paths["observed"] -]
+[- set predvar_path = image_paths["predvar"] -]
+[- set gpr_path = image_paths["gpr"] -]
+[- set pulls_2d_path = image_paths["pulls"] -]
+[- set ppc_map_path = image_paths["ppc_map"] -]
+[- set ppc_blinded_path = image_paths["ppc_blinded"] -]
+[- set ppc_unblinded_path = image_paths["ppc_unblinded"] -]
+
+\begin{tabularx}{\textwidth}{@{}L L L@{}}
+\includegraphics[width=\linewidth]{ [[ signal_path ]]} &
+\includegraphics[width=\linewidth]{ [[ observed_path ]]} &
+\includegraphics[width=\linewidth]{ [[ gpr_path ]]} \\
+\end{tabularx}
+
+\vspace{0.25em}
+
+\begin{tabularx}{\textwidth}{@{}L L L@{}}
+\includegraphics[width=\linewidth]{ [[ pulls_2d_path ]]} &
+\includegraphics[width=\linewidth]{ [[ ppc_map_path ]]} &
+\includegraphics[width=\linewidth]{ [[ ppc_blinded_path ]]} \\
+\end{tabularx}
+
+\vspace{0.25em}
+
+\begin{tabularx}{\textwidth}{@{}L L L@{}}
+\begin{minipage}[t]{\linewidth}
+\small
+\textbf{Key metrics}\par
+\vspace{0.2em}
+\begin{tabular}{@{}l r@{}}
+\toprule
+Metric & Value \\
+\midrule
+[- for key in ["global_chi2_per_bin", "blinded_chi2_per_bin", "global_chi2_pred_var"] -]
+[- if metrics.get(key) is not none -]
+[- set key_safe_2d = key | replace("_", "\\_") -]
+[- set key_value_2d = "%.4g"|format(metrics.get(key)) -]
+[[ key_safe_2d ]] & [[ key_value_2d ]] \\
+[- endif -]
+[- endfor -]
+\bottomrule
+\end{tabular}
+\end{minipage}
+&
+\begin{minipage}[t]{\linewidth}
+\small
+\textbf{PPC (chi2)}\par
+\vspace{0.2em}
+\begin{tabular}{@{}l r@{}}
+\toprule
+Region & p-value \\
+\midrule
+[- set chi2_2d = ppc.get("test_stats", {}).get("chi2", {}) -]
+[- for region in ["blinded", "unblinded"] -]
+[- if chi2_2d.get(region) is not none -]
+[- set pvalue_2d = "%.3f"|format(chi2_2d.get(region, {}).get("pvalue", 0.0)) -]
+[[ region ]] & [[ pvalue_2d ]] \\
+[- endif -]
+[- endfor -]
+\bottomrule
+\end{tabular}
+\end{minipage}
+&
+\includegraphics[width=\linewidth]{ [[ ppc_unblinded_path ]] } \\
+\end{tabularx}

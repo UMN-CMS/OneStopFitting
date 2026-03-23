@@ -54,3 +54,7 @@ analyzer_resources/
 .condor_config
 .inspect_cli_history
 oldpkl/
+old_fitting/
+results/
+exportedhistograms
+test*/

@@ -1,3 +1,0 @@
-#!/usr/bin/env bash	
-
-apptainer exec -B /cvmfs -B /eos -B /afs /cvmfs/unpacked.cern.ch/gitlab-registry.cern.ch/cms-analysis/general/combine-container:latest /bin/bash distributed/combine_script_toys "$@"

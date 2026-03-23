@@ -1,0 +1,36 @@
+\documentclass[10pt]{article}
+\usepackage[margin=0.55in]{geometry}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage{float}
+\usepackage{hyperref}
+\pagenumbering{gobble}
+
+\newcolumntype{L}{>{\raggedright\arraybackslash}X}
+
+%\newcommand{\kv}[2]{\textbf{#1}: #2}
+\def\kv#1#2{\textbf{#1}: #2}
+
+\begin{document}
+
+[- for p in points -]
+[- with metadata=p["metadata"], metrics=p["metrics"], ppc=p["ppc"], image_paths=p["image_paths"], ndim=p["ndim"], point_dir=p["point_dir"] -]
+[- include "_header.tex.j2" -]
+
+\vspace{0.8em}
+
+[- if ndim == 1 -]
+[- include "_1d_layout.tex.j2" -]
+[- else -]
+[- include "_2d_layout.tex.j2" -]
+[- endif -]
+
+[- if not loop.last -]
+\clearpage
+[- endif -]
+[- endwith -]
+[- endfor -]
+
+\end{document}
