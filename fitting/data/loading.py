@@ -119,9 +119,13 @@ def sliceVariation(histogram: hist.Hist, variation: str = "central") -> hist.His
 def histToBinnedData(
     histogram: hist.Hist,
     rebin: int = 1,
-    variation: str = "central",
+    variation: str | None = "central",
 ) -> BinnedData:
-    h = sliceVariation(histogram, variation)
+
+    if variation is not None:
+        h = sliceVariation(histogram, variation)
+    else:
+        h = histogram
 
     if rebin > 1:
         rebin_slice = tuple(slice(None, None, hist.rebin(rebin)) for _ in h.axes)

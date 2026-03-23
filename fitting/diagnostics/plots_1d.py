@@ -297,4 +297,29 @@ def makeSmoothingPlots1D(
 
     ret["smoothing_summary_1d"] = (fig, ax)
 
+    # 2. GPR Uncertainties
+    if pred_cov is not None:
+        pred_var = np.diag(pred_cov)
+        pred_std = np.sqrt(pred_var)
+        rel_unc = pred_std / np.maximum(pred_Y, 1e-10)
+
+        # Absolute Uncertainty (Sigma)
+        fig, ax = plt.subplots(layout="tight")
+        ax.plot(X, pred_std, color="orange", lw=2)
+        ax.set_title(r"GPR Absolute Uncertainty ($\sigma$)")
+        if original_data.axis_names:
+            ax.set_xlabel(original_data.axis_names[0])
+        ax.set_ylabel(r"$\sigma$")
+        ret["smoothing_sigma_1d"] = (fig, ax)
+
+        # Relative Uncertainty (Sigma/Mu)
+        fig, ax = plt.subplots(layout="tight")
+        ax.plot(X, rel_unc, color="orange", lw=2)
+        ax.set_ylim(0, 0.5)
+        ax.set_title(r"GPR Relative Uncertainty ($\sigma/\mu$)")
+        if original_data.axis_names:
+            ax.set_xlabel(original_data.axis_names[0])
+        ax.set_ylabel(r"$\sigma / \mu$")
+        ret["smoothing_rel_unc_1d"] = (fig, ax)
+
     return ret

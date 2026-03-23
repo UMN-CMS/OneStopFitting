@@ -14,6 +14,7 @@ from .likelihoods import FixedGaussianNoiseConfig, LikelihoodConfig
 from .means import (
     MeanFunctionConfig,
     DoubleSidedCrystalBallMeanConfig,
+    ZeroMeanConfig,
 )
 
 logger = logging.getLogger(__name__)
@@ -23,7 +24,7 @@ logger = logging.getLogger(__name__)
 class GPModelConfig(ABC):
     kernel: KernelConfig = attrs.Factory(NNKernelConfig)
     likelihood: LikelihoodConfig = attrs.Factory(FixedGaussianNoiseConfig)
-    mean_function: MeanFunctionConfig = attrs.Factory(DoubleSidedCrystalBallMeanConfig)
+    mean_function: MeanFunctionConfig = attrs.Factory(ZeroMeanConfig)
 
     @abstractmethod
     def buildModel(

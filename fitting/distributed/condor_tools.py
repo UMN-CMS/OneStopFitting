@@ -23,8 +23,8 @@ class CondorPackage:
 
 
 COMBINE_SHORT_COMMANDS = {
-    "fit": "combine -M FitDiagnostics -d datacard.txt --saveWithUncertainties --name fit_diag",
-    "multidimfit": "combine -M MultiDimFit -d datacard.txt --saveWithUncertainties --name fit_diag",
+    "fit": "combine -M FitDiagnostics -d datacard.txt  --name fit_diag",
+    "multidimfit": "combine -M MultiDimFit -d datacard.txt  --name fit_diag",
     "limits": "combine -M AsymptoticLimits -d datacard.txt --name limits",
     "limit": "combine -M AsymptoticLimits -d datacard.txt --name limits",
     "significance": "combine -M Significance -d datacard.txt --name significance",

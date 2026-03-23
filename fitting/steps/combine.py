@@ -19,6 +19,9 @@ logger = logging.getLogger(__name__)
 
 
 def prepareCombine(state: AnalysisState, rng_key: jax.Array) -> None:
+    if not state.config.signal_path:
+        logger.info("Skipping Combine preparation: no signal path")
+        return
     out_dir = state.getRealOutPath() / "combine"
     shapes_file = "shapes.root"
     shapes_path = out_dir / shapes_file

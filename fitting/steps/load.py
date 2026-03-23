@@ -62,4 +62,5 @@ def loadData(config: PipelineConfig) -> AnalysisState:
         background_hist=bkg_hist,
         signal_hist=signal_hist,
         metadata=combined_metadata,
+        background_metadata=file_metadata,
     )

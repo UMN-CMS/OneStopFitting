@@ -162,7 +162,8 @@ class AnalysisState:
     ppc_results: dict[str, Any] | None = None
     diagnostic_metrics: dict[str, float] | None = None
 
-    metadata: dict[str, Any] = attrs.Factory(dict)
+    metadata: dict[str, Any] = attrs.field(factory=dict)
+    background_metadata: dict[str, Any] = attrs.field(factory=dict)
 
     def getRealOutPath(self):
         replace_floats = {k: floatToStr(v) for k, v in dictToDot(self.metadata)}

@@ -137,7 +137,6 @@ def trainModel(state: AnalysisState, rng_key: jax.Array) -> AnalysisState:
         mean_function=pre_fit_mean,
     )
 
-    logger.info("=== Stage 2: Model Training ===")
     logger.info(f"  Training on {dataset.n} data points")
     logger.info(f"  posterior_type={type(posterior).__name__}")
 

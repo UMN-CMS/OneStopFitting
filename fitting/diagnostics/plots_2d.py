@@ -394,4 +394,28 @@ def makeSmoothingPlots2D(
         ax.set_ylabel(original_data.axis_names[1])
     ret["smoothing_resid_2d"] = (fig, ax)
 
+    # 5. GPR Uncertainties
+    if pred_cov is not None:
+        pred_var = np.diag(pred_cov)
+        pred_std = np.sqrt(pred_var)
+        rel_unc = pred_std / np.maximum(pred_Y, 1e-10)
+
+        # Absolute Uncertainty (Sigma)
+        fig, ax = plt.subplots(layout="tight")
+        plotRaw(ax, edges, X, jnp.array(pred_std))
+        ax.set_title(r"GPR Absolute Uncertainty ($\sigma$)")
+        if original_data.axis_names and len(original_data.axis_names) >= 2:
+            ax.set_xlabel(original_data.axis_names[0])
+            ax.set_ylabel(original_data.axis_names[1])
+        ret["smoothing_sigma_2d"] = (fig, ax)
+
+        # Relative Uncertainty (Sigma/Mu)
+        fig, ax = plt.subplots(layout="tight")
+        plotRaw(ax, edges, X, jnp.array(rel_unc), cmin=0, cmax=0.5)
+        ax.set_title(r"GPR Relative Uncertainty ($\sigma/\mu$)")
+        if original_data.axis_names and len(original_data.axis_names) >= 2:
+            ax.set_xlabel(original_data.axis_names[0])
+            ax.set_ylabel(original_data.axis_names[1])
+        ret["smoothing_rel_unc_2d"] = (fig, ax)
+
     return ret
