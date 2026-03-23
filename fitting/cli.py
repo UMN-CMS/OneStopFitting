@@ -642,5 +642,51 @@ def resolveOutput(
     print(output_path)
 
 
+@main.command()
+@click.argument(
+    "summaries",
+    nargs=-1,
+    type=click.Path(exists=True, path_type=Path),
+)
+def harvest(summaries: tuple[Path, ...]) -> None:
+    """Harvest Combine ROOT results into summary.json(s).
+    
+    Accepts multiple summary.json paths, typically via shell globbing
+    e.g., `python -m fitting harvest results/**/summary.json`
+    """
+    from .combine.extract import extractCombineResults
+    import json
+    
+    if not summaries:
+        logger.warning("No summary files provided to harvest.")
+        return
+
+    success_count = 0
+    for summary_path in summaries:
+        combine_dir = summary_path.parent / "combine"
+        
+        if not combine_dir.exists():
+            logger.debug(f"No combine directory found at {combine_dir}")
+            continue
+            
+        extracted = extractCombineResults(combine_dir)
+        if not extracted:
+            logger.debug(f"No Combine results extracted for {summary_path}.")
+            continue
+            
+        with open(summary_path, "r") as f:
+            summary_data = json.load(f)
+            
+        summary_data["combine"] = extracted
+        
+        with open(summary_path, "w") as f:
+            json.dump(summary_data, f, indent=2)
+            
+        logger.info(f"Updated {summary_path} with {list(extracted.keys())}")
+        success_count += 1
+        
+    logger.info(f"Harvest complete. Updated {success_count}/{len(summaries)} summary files.")
+
+
 if __name__ == "__main__":
     main()
