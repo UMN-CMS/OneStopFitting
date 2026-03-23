@@ -2,12 +2,16 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from rich import print
 
+import attrs
 import click
 import jax
 import lz4.frame
 import pickle
 from .diagnostics.plot_utils import savePlots
+from .distributed.batch_tools import generateBatchSubmit
+from .distributed.condor_tools import generateCondorSubmit
 
 from .core.serialization import converter, load
 from .diagnostics.aggregate_plots import (
@@ -18,16 +22,16 @@ from .diagnostics.aggregate_plots import (
 
 from .diagnostics.point_report import (
     PointReportConfig,
-    generatePointReport,
     generatePointReports,
 )
 
 from .pipeline import (
+    CombineConfig,
     PipelineConfig,
     runPipeline,
     PipelineStep,
-    generateSmoothedBackground,
 )
+from .steps.generators import generateSmoothedBackground
 from .inference.optimization import (
     OptimizationConfig,
     InferenceMode,
@@ -87,7 +91,7 @@ def main(verbose: bool) -> None:
 @click.option(
     "--min-counts", type=float, default=1.0, help="Min bin count for fit domain."
 )
-@click.option("--num-iters", type=int, default=500, help="Training iterations.")
+@click.option("--num-iters", type=int, default=None, help="Training iterations.")
 @click.option("--lr", type=float, default=0.01, help="Learning rate.")
 @click.option("--seed", type=int, default=0xBEEFBEEF, help="RNG seed.")
 @click.option("--window-spread", type=float, default=None, help="Window spread.")
@@ -125,6 +129,18 @@ def main(verbose: bool) -> None:
     type=click.Choice(PipelineStep, case_sensitive=False),
     help="Start from a specific step.",
 )
+@click.option(
+    "--combine-command",
+    "combine_commands",
+    multiple=True,
+    default=["limits", "fit", "multidimfit", "significance", "gof-saturated"],
+    help="Combine commands to run (e.g., 'fit', 'limits', 'significance', or full custom commands).",
+)
+@click.option(
+    "--combine-container",
+    type=str,
+    help="Combine container image path.",
+)
 def run(
     config: Path | None,
     background: Path | None,
@@ -148,6 +164,8 @@ def run(
     stage2_iters: int,
     step: PipelineStep | None,
     start_from: PipelineStep | None,
+    combine_commands: tuple[str, ...],
+    combine_container: str | None,
 ) -> None:
     start_from_step = start_from or PipelineStep.LOAD
 
@@ -172,6 +190,13 @@ def run(
         if mode is not None:
             raw["optimization"]["mode"] = mode
 
+        if "combine" not in raw:
+            raw["combine"] = {}
+        if combine_commands:
+            raw["combine"]["combine_commands"] = list(combine_commands)
+        if combine_container:
+            raw["combine"]["combine_container"] = combine_container
+
         pipeline_config = converter.structure(raw, PipelineConfig)
 
     elif background is not None:
@@ -188,6 +213,11 @@ def run(
                 mode=mode,
                 lr=lr,
                 num_iters=num_iters,
+            ),
+            combine=CombineConfig(
+                combine_commands=list(combine_commands) if combine_commands else [],
+                combine_container=combine_container
+                or "/cvmfs/unpacked.cern.ch/gitlab-registry.cern.ch/cms-analysis/general/combine-container:latest",
             ),
         )
     else:
@@ -378,7 +408,6 @@ def makecondor(
     combine_cmds: tuple[str, ...],
 ) -> None:
     """Generate HTCondor submit files for distributed processing."""
-    from .distributed.condor_tools import generateCondorSubmit
 
     generateCondorSubmit(
         signal_pattern=signal,
@@ -391,6 +420,110 @@ def makecondor(
         container=container,
         combine_cmds=list(combine_cmds),
     )
+
+
+@main.command()
+@click.option(
+    "--signal",
+    required=True,
+    help="Signal pattern (e.g. '**/signal_{year}_*.pklz4')",
+)
+@click.option(
+    "--background",
+    required=True,
+    help="Background pattern (e.g. '**/bkg_{year}.pklz4')",
+)
+@click.option("--years", multiple=True, required=True, help="Years to process")
+@click.option(
+    "--config-base",
+    "-c",
+    type=click.Path(exists=True, path_type=Path),
+    help="Base config file to use as template",
+)
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(path_type=Path),
+    default=Path("batch_output"),
+    help="Output directory for batch job files",
+)
+@click.option(
+    "--subdir-format",
+    type=str,
+    default="{era.name}/{dataset_name}/{injection_rate}",
+    show_default=True,
+    help="Base format for output subdirectory (will be extended with batch parameters)",
+)
+@click.option("--venv", type=str, help="Path to virtual environment to pack")
+@click.option("--container", type=str, help="Container image to use")
+@click.option(
+    "--combine-cmd",
+    "combine_cmds",
+    multiple=True,
+    help="Combine commands to run after the fit",
+)
+@click.option(
+    "--rates",
+    type=str,
+    help="Comma-separated injection rates (e.g., '0.0,0.1,0.5')",
+)
+@click.option(
+    "--rebin",
+    type=str,
+    help="Comma-separated rebin factors (e.g., '1,2,4')",
+)
+@click.option(
+    "--min-counts",
+    type=str,
+    help="Comma-separated min counts values (e.g., '1.0,5.0')",
+)
+@click.option(
+    "--window-spread",
+    type=str,
+    help="Comma-separated window spread values (e.g., '1.5,2.0,3.0')",
+)
+def makebatch(
+    signal: str,
+    background: str,
+    years: tuple[str, ...],
+    config_base: Path | None,
+    output: Path,
+    subdir_format: str,
+    venv: str | None,
+    container: str | None,
+    combine_cmds: tuple[str, ...],
+    rates: str | None,
+    rebin: str | None,
+    min_counts: str | None,
+    window_spread: str | None,
+) -> None:
+    """Generate HTCondor submit files for a batch of jobs with parameter sweeps."""
+
+    generateBatchSubmit(
+        signal_pattern=signal,
+        background_pattern=background,
+        years=list(years),
+        config_base=config_base,
+        output_dir=output,
+        subdir_format=subdir_format,
+        venv_path=venv,
+        container=container,
+        combine_cmds=list(combine_cmds),
+        rates=parse_csv_float(rates) if rates else None,
+        rebin=parse_csv_int(rebin) if rebin else None,
+        min_counts=parse_csv_float(min_counts) if min_counts else None,
+        window_spread=parse_csv_float(window_spread) if window_spread else None,
+    )
+
+
+def parse_csv_float(s: str) -> list[float]:
+    """Parse comma-separated string to list of floats."""
+    return [float(x.strip()) for x in s.split(",") if x.strip()]
+
+
+def parse_csv_int(s: str) -> list[int]:
+    """Parse comma-separated string to list of ints."""
+    return [int(x.strip()) for x in s.split(",") if x.strip()]
 
 
 @main.command()
@@ -458,6 +591,55 @@ def report(
         config=config,
     )
     logger.info(f"Generated {len(output_paths)} report(s)")
+
+
+@main.command()
+@click.option(
+    "--background",
+    "-b",
+    type=click.Path(exists=True, path_type=Path),
+    required=True,
+    help="Background histogram file.",
+)
+@click.option(
+    "--signal",
+    "-s",
+    type=click.Path(exists=True, path_type=Path),
+    help="Signal histogram file (optional).",
+)
+@click.option(
+    "--config",
+    "-c",
+    type=click.Path(exists=True, path_type=Path),
+    required=True,
+    help="Config file containing pipeline parameters.",
+)
+@click.option(
+    "--output-format",
+    "-o",
+    type=str,
+    required=True,
+    help="Output format string with placeholders (e.g., 'output/{era.name}/{dataset_name}/{injection_rate}')",
+)
+def resolveOutput(
+    background: Path,
+    signal: Path | None,
+    config: Path,
+    output_format: str,
+) -> None:
+    from .pipeline import PipelineConfig, loadData
+
+    with open(config, "r") as f:
+        config_data = yaml.safe_load(f)
+    pipeline_config = PipelineConfig(
+        background_path=background,
+        signal_path=signal,
+        output_dir_format=output_format,
+    )
+    pipeline_config = attrs.evolve(pipeline_config, **config_data)
+    state = loadData(pipeline_config)
+    output_path = state.getRealOutPath()
+    print(output_path)
 
 
 if __name__ == "__main__":

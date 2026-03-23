@@ -8,7 +8,7 @@ import attrs
 import jax.numpy as jnp
 import numpy as np
 from uhi.numpy_plottable import NumPyPlottableHistogram
-from .formatting import dictToDot, dotFormat
+from ..utils import dictToDot, dotFormat
 
 logger = logging.getLogger(__name__)
 
@@ -139,36 +139,29 @@ class AnalysisState:
     # --- Config (always present) ---
     config: Any = attrs.field(factory=dict)
 
-    # --- Input data ---
     background: BinnedData | None = None
     signal: BinnedData | None = None
     injection_rate: float = 0.0
 
-    # --- Raw histograms (with all variations for downstream use) ---
-    background_hist: Any | None = None  # hist.Hist with variation axis
-    signal_hist: Any | None = None  # hist.Hist with variation axis
+    background_hist: Any | None = None
+    signal_hist: Any | None = None
 
-    # --- After preprocessing ---
     train_data: BinnedData | None = None
     test_data: BinnedData | None = None
     domain_mask: jnp.ndarray | None = None
     blind_mask: jnp.ndarray | None = None
-    window: Any | None = None  # Window type (forward ref to avoid circular import)
+    window: Any | None = None
 
-    # --- After normalization ---
-    transform: Any | None = None  # DataTransformation (forward ref)
+    transform: Any | None = None
 
-    # --- After inference ---
     training_result: TrainingResult | None = None
     dataset: Any | None = None
 
-    # --- After prediction (REAL SPACE) ---
     pred_mean: jnp.ndarray | None = None
     pred_cov: jnp.ndarray | None = None
     ppc_results: dict[str, Any] | None = None
     diagnostic_metrics: dict[str, float] | None = None
 
-    # --- Flexible bookkeeping ---
     metadata: dict[str, Any] = attrs.Factory(dict)
 
     def getRealOutPath(self):

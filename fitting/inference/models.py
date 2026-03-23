@@ -13,10 +13,7 @@ from .kernels import KernelConfig, NNKernelConfig
 from .likelihoods import FixedGaussianNoiseConfig, LikelihoodConfig
 from .means import (
     MeanFunctionConfig,
-    ParametricBackgroundMeanConfig,
     DoubleSidedCrystalBallMeanConfig,
-    GaussianBumpMeanConfig,
-    ZeroMeanConfig,
 )
 
 logger = logging.getLogger(__name__)
@@ -46,9 +43,13 @@ class ExactGPConfig(GPModelConfig):
         ndim: int,
         rngs: nnx.Rngs | None = None,
         obs_variance: jnp.ndarray | None = None,
+        mean_function: MeanFunctionConfig | None = None,
     ) -> tuple[Any, Any, Any]:
         kernel = self.kernel.buildKernel(ndim, rngs=rngs)
-        mean_fn = self.mean_function.buildMeanFunction(ndim, kernel)
+        if mean_function is not None:
+            mean_fn = mean_function
+        else:
+            mean_fn = self.mean_function.buildMeanFunction(ndim, kernel)
 
         kwargs = {"num_datapoints": dataset.n}
         if obs_variance is not None:
@@ -56,7 +57,7 @@ class ExactGPConfig(GPModelConfig):
 
         likelihood = self.likelihood.buildLikelihood(**kwargs)
         prior = gpjax.gps.Prior(mean_function=mean_fn, kernel=kernel)
-        posterior = prior * likelihood  # ConjugatePosterior
+        posterior = prior * likelihood
 
         logger.info(
             f"Built ExactGP: kernel={type(kernel).__name__}, "
@@ -78,9 +79,13 @@ class SparseGPConfig(GPModelConfig):
         ndim: int,
         rngs: nnx.Rngs | None = None,
         obs_variance: jnp.ndarray | None = None,
+        mean_function: MeanFunctionConfig | None = None,
     ) -> tuple[Any, Any, Any]:
         kernel = self.kernel.buildKernel(ndim, rngs=rngs)
-        mean_fn = self.mean_function.buildMeanFunction(ndim, kernel)
+        if mean_function is not None:
+            mean_fn = mean_function
+        else:
+            mean_fn = self.mean_function.buildMeanFunction(ndim, kernel)
         kwargs = {"num_datapoints": dataset.n}
         if obs_variance is not None:
             kwargs["obs_variance"] = obs_variance
@@ -115,9 +120,13 @@ class VariationalGPConfig(GPModelConfig):
         ndim: int,
         rngs: nnx.Rngs | None = None,
         obs_variance: jnp.ndarray | None = None,
+        mean_function: MeanFunctionConfig | None = None,
     ) -> tuple[Any, Any, Any]:
         kernel = self.kernel.buildKernel(ndim, rngs=rngs)
-        mean_fn = self.mean_function.buildMeanFunction(ndim, kernel)
+        if mean_function is not None:
+            mean_fn = mean_function
+        else:
+            mean_fn = self.mean_function.buildMeanFunction(ndim, kernel)
         kwargs = {"num_datapoints": dataset.n}
         if obs_variance is not None:
             kwargs["obs_variance"] = obs_variance

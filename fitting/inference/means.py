@@ -431,18 +431,12 @@ class AsymmetricLaplaceMeanConfig(MeanFunctionConfig):
 
 
 @attrs.define
-class AsymmetricGaussianBumpMeanConfig(MeanFunctionConfig):
-    def buildMeanFunction(
-        self, ndim: int, kernel: gpjax.kernels.AbstractKernel
-    ) -> gpjax.mean_functions.AbstractMeanFunction:
-        return AsymmetricGaussianBumpMeanConfig(ndim)
-
-@attrs.define
 class RationalQuadraticBumpMeanConfig(MeanFunctionConfig):
     def buildMeanFunction(
         self, ndim: int, kernel: gpjax.kernels.AbstractKernel
     ) -> gpjax.mean_functions.AbstractMeanFunction:
         return RationalQuadraticBumpMean(ndim)
+
 
 @attrs.define
 class LogNormalWarpingMeanConfig(MeanFunctionConfig):
@@ -464,3 +458,83 @@ class MixtureOfGaussiansMeanConfig(MeanFunctionConfig):
         self, ndim: int, kernel: gpjax.kernels.AbstractKernel
     ) -> gpjax.mean_functions.AbstractMeanFunction:
         return MixtureOfGaussiansMean(ndim, self.n_components)
+
+
+class InterpolatedMean(gpjax.mean_functions.AbstractMeanFunction):
+    _train_dataset: gpjax.Dataset = nnx.data()
+
+    def __init__(self, posterior, train_dataset):
+        super().__init__()
+        self._posterior = posterior
+        self._train_dataset = train_dataset
+
+    def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
+        latent = self._posterior.predict(x, train_data=self._train_dataset)
+        return jax.lax.stop_gradient(latent.mean).reshape(-1, 1)
+
+
+class LookupTableMean(gpjax.mean_functions.AbstractMeanFunction):
+    _ref_X: jnp.ndarray = nnx.data()
+    _ref_Y: jnp.ndarray = nnx.data()
+
+    def __init__(self, reference_X: jnp.ndarray, reference_Y: jnp.ndarray):
+        super().__init__()
+        self._ref_X = jax.lax.stop_gradient(reference_X)
+        self._ref_Y = jax.lax.stop_gradient(reference_Y)
+
+    def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
+        # Pairwise squared distances: (n_query, n_ref)
+        diffs = x[:, None, :] - self._ref_X[None, :, :]
+        dists = jnp.sum(diffs**2, axis=-1)
+        nearest_idx = jnp.argmin(dists, axis=-1)
+        return self._ref_Y[nearest_idx].reshape(-1, 1)
+
+
+@attrs.define
+class InterpolatedMeanConfig(MeanFunctionConfig):
+    stage1_lengthscale: list[float] = attrs.Factory(lambda: [0.4, 0.4])
+    stage1_variance: float = 2.0
+    stage1_homoscedastic: bool = False
+
+    def needsPreFit(self) -> bool:
+        return True
+
+    def buildMeanFunction(
+        self, ndim: int, kernel: gpjax.kernels.AbstractKernel
+    ) -> gpjax.mean_functions.AbstractMeanFunction:
+        raise RuntimeError(
+            "InterpolatedMeanConfig requires a pre-fit step. "
+            "Use buildStage1Mean() after fitting Stage 1."
+        )
+
+    def buildStage1Mean(
+        self, posterior, train_dataset
+    ) -> gpjax.mean_functions.AbstractMeanFunction:
+        """Build the frozen InterpolatedMean from a fitted Stage 1 posterior."""
+        return InterpolatedMean(posterior, train_dataset)
+
+
+@attrs.define
+class LookupTableMeanConfig(MeanFunctionConfig):
+    stage1_lengthscale: list[float] = attrs.Factory(lambda: [0.4, 0.4])
+    stage1_variance: float = 2.0
+    stage1_homoscedastic: bool = False
+
+    def needsPreFit(self) -> bool:
+        return True
+
+    def buildMeanFunction(
+        self, ndim: int, kernel: gpjax.kernels.AbstractKernel
+    ) -> gpjax.mean_functions.AbstractMeanFunction:
+        raise RuntimeError(
+            "LookupTableMeanConfig requires a pre-fit step. "
+            "Use buildStage1Mean() after fitting Stage 1."
+        )
+
+    def buildStage1Mean(
+        self, posterior, train_dataset
+    ) -> gpjax.mean_functions.AbstractMeanFunction:
+        """Build the frozen LookupTableMean from a fitted Stage 1 posterior."""
+        latent_dist = posterior.predict(train_dataset.X, train_data=train_dataset)
+        ref_Y = jax.lax.stop_gradient(latent_dist.mean.ravel())
+        return LookupTableMean(train_dataset.X, ref_Y)
