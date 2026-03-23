@@ -48,6 +48,11 @@ def generateBatchSubmit(
         COMBINE_SHORT_COMMANDS,
     )
 
+    container = (
+        container
+        or "/cvmfs/unpacked.cern.ch/registry.hub.docker.com/cmsml/cmsml:3.11-cuda"
+    )
+
     # Build parameter grids
     param_grids = {}
     if rates:
@@ -88,7 +93,7 @@ def generateBatchSubmit(
         signal_pattern=signal_pattern,
         background_pattern=background_pattern,
         years=years,
-        output_dir=output_dir,
+        output_dir=str(output_dir / subdir_format),
         config_pattern=str(config_base),
     )
     if not base_jobs:
@@ -157,6 +162,8 @@ def generateBatchSubmit(
 
     transfer_files.append(run_fit_script)
 
+    all_jobs = all_jobs[:1]
+
     submit_file_path = makeSubmitScript(
         jobs=all_jobs,
         transfer_files=transfer_files,
@@ -167,6 +174,6 @@ def generateBatchSubmit(
 
     logger.info(
         f"Batch generation complete. Single submit file at {submit_file_path} "
-        f"with {len(all_jobs)} jobs ({config_index} parameter combinations)"
+        f"with {len(all_jobs)} jobs ({total_configs} configs)"
     )
     logger.info(f"Batch config files saved to {batch_config_dir}")
