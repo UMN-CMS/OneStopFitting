@@ -319,7 +319,7 @@ class NNKernelConfig(KernelConfig):
     base_kernel_config: KernelConfig = attrs.Factory(RBFConfig)
     input_dim: int = 2
     output_dim: int = 2
-    hidden_shapes: list[int] = attrs.Factory(lambda: [8, 8, 8])
+    hidden_shapes: list[int] = attrs.Factory(lambda: [24, 16, 8])
     activation: str = "silu"
 
     def buildKernel(

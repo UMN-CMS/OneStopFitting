@@ -1,13 +1,21 @@
 from __future__ import annotations
 
 import logging
+from collections import defaultdict
 from pathlib import Path
 from typing import Any
 from fitting.utils import evolveCombos
+import functools as ft
 
 import yaml
 
 logger = logging.getLogger("fitting")
+
+
+@ft.cache
+def loadConfig(config_path: str) -> dict[str, Any]:
+    with open(config_path, "r") as f:
+        return yaml.safe_load(f)
 
 
 def writeConfigFile(config: dict[str, Any], output_path: Path) -> None:
@@ -39,11 +47,6 @@ def generateBatchSubmit(
         makeSubmitScript,
         COMBINE_SHORT_COMMANDS,
     )
-
-    base_config = None
-    if config_base is not None:
-        with open(config_base, "r") as f:
-            base_config = yaml.safe_load(f)
 
     # Build parameter grids
     param_grids = {}
@@ -86,7 +89,7 @@ def generateBatchSubmit(
         background_pattern=background_pattern,
         years=years,
         output_dir=output_dir,
-        config_pattern="config_placeholder",
+        config_pattern=str(config_base),
     )
     if not base_jobs:
         logger.error("No base jobs found from signal/background patterns!")
@@ -95,19 +98,27 @@ def generateBatchSubmit(
     batch_config_dir = output_dir / "batch_configs"
     batch_config_dir.mkdir(parents=True, exist_ok=True)
     all_jobs = []
-    config_index = 0
-    for config in evolveCombos(base_config, **param_grids):
-        config_name = f"batch_config_{config_index:04d}.yaml"
-        config_path = batch_config_dir / config_name
-        writeConfigFile(config, config_path)
-        for base_job in base_jobs:
-            job = base_job.copy()
-            job["config"] = str(config_path)
-            all_jobs.append(job)
-        config_index += 1
+    jobs_by_config = defaultdict(list)
+    for j in base_jobs:
+        jobs_by_config[j["config"]].append(j)
+
+    total_configs = 0
+    for i, (config_path, jgroup) in enumerate(jobs_by_config.items()):
+        config_index = 0
+        base_config = loadConfig(config_path)
+        for config in evolveCombos(base_config, **param_grids):
+            total_configs += 1
+            config_name = f"batch_config_{i}_{config_index:04d}.yaml"
+            config_path = batch_config_dir / config_name
+            writeConfigFile(config, config_path)
+            for base_job in jgroup:
+                job = base_job.copy()
+                job["config"] = str(config_path)
+                all_jobs.append(job)
+            config_index += 1
 
     logger.info(
-        f"Generated {len(all_jobs)} total jobs from {config_index} parameter combinations"
+        f"Generated {len(all_jobs)} total jobs from {total_configs} parameter combinations"
     )
     if not venv_path:
         import os

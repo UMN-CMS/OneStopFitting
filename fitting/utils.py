@@ -53,6 +53,18 @@ def dotToNested(dot_dict: Mapping) -> Mapping:
     return nested
 
 
+def iterComboDict(**kwargs):
+    okwargs = OrderedDict(kwargs)
+    for combo in it.product(*okwargs.values()):
+        yield dict(zip(okwargs.keys(), combo))
+
+
+def iterComboDictNested(**kwargs):
+    okwargs = OrderedDict(kwargs)
+    for combo in it.product(*okwargs.values()):
+        yield dotToNested(dict(zip(okwargs.keys(), combo)))
+
+
 def evolveCombos(obj, **kwargs):
     okwargs = OrderedDict(kwargs)
     for combo in it.product(*okwargs.values()):

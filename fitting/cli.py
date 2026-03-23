@@ -439,7 +439,7 @@ def makecondor(
 @click.option(
     "--config-base",
     "-c",
-    type=click.Path(exists=True, path_type=Path),
+    type=str,
     help="Base config file to use as template",
 )
 @click.option(
