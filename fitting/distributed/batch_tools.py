@@ -162,8 +162,6 @@ def generateBatchSubmit(
 
     transfer_files.append(run_fit_script)
 
-    all_jobs = all_jobs[:1]
-
     submit_file_path = makeSubmitScript(
         jobs=all_jobs,
         transfer_files=transfer_files,

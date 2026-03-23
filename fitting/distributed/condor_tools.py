@@ -66,7 +66,7 @@ ACTUAL_OUTPUT=$(run_fit "python3 -m fitting resolveoutput \
     --background \"$BACKGROUND\" \
     --signal \"$SIGNAL\" \
     --config \"$CONFIG\" \
-    --output-format \"$OUTPUT_FORMAT\"")
+    --output-format \"$OUTPUT_DIR_FORMAT\"")
 
 echo "ACTUAL OUTPUT: $ACTUAL_OUTPUT"
 
@@ -78,13 +78,17 @@ cd $dir/combine
 echo "Running combine in \"$PWD\""
 ls -alhtr
 
-COMBINE_SCRIPT="$ACTUAL_OUTPUT/combine/run_combine_commands.sh"
+#COMBINE_SCRIPT="$dir/combine/run_combine_commands.sh"
+COMBINE_SCRIPT="run_combine_commands.sh"
 if [ -f "$COMBINE_SCRIPT" ]; then
     echo "Running combine commands from: $COMBINE_SCRIPT"
     bash "$COMBINE_SCRIPT"
 else
     echo "No combine script found at: $COMBINE_SCRIPT"
 fi
+
+cd $dir
+run_fit "python3 -m fitting harvest summary.json"
 """
 
 SUBMIT_TEMPLATE = """
