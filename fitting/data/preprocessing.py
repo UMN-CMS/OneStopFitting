@@ -78,6 +78,8 @@ def preprocess(
             V=injected_V,
             edges=state.background.edges,
         )
+    else:
+        logger.info("Background only fit, not signal injection")
 
     # Apply domain mask
     domain_data, domain_mask = applyDomainMask(
