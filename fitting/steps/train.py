@@ -14,6 +14,7 @@ from ..core.data import AnalysisState
 from ..data.preprocessing import preprocess
 from ..core.transforms import computeNormalization
 from ..inference.optimization import train, setAtPath
+from ..diagnostics.parameters import logKernelParameters, logLikelihoodParameters
 
 if TYPE_CHECKING:
     from ..pipeline import PipelineConfig
@@ -135,6 +136,7 @@ def trainModel(state: AnalysisState, rng_key: jax.Array) -> AnalysisState:
         obs_variance=norm_train.V.reshape(-1, 1) if norm_train.V is not None else None,
         rngs=nnx.Rngs(build_key),
         mean_function=pre_fit_mean,
+        domain_mask=state.domain_mask,
     )
 
     logger.info(f"  Training on {dataset.n} data points")
@@ -151,6 +153,8 @@ def trainModel(state: AnalysisState, rng_key: jax.Array) -> AnalysisState:
     state = attrs.evolve(state, training_result=training_result, dataset=dataset)
 
     logger.info("Trained Hyperparameters:")
+    logKernelParameters(training_result.posterior)
+    logLikelihoodParameters(training_result.likelihood)
     logger.info(f"Final Loss: {training_result.final_loss}")
 
     return state

@@ -8,14 +8,18 @@ import attrs
 import gpjax
 import jax.numpy as jnp
 from flax import nnx
+import gpjax.kernels as gpk
+import gpjax.parameters as gpp
 
-from .kernels import KernelConfig, NNKernelConfig
+from .kernels import KernelConfig, NNKernelConfig, MCEnsembleKernel
 from .likelihoods import FixedGaussianNoiseConfig, LikelihoodConfig
 from .means import (
     MeanFunctionConfig,
     DoubleSidedCrystalBallMeanConfig,
     ZeroMeanConfig,
+    QCDMCMeanFunction,
 )
+from .priors import PriorConfig, SoftplusNormalPriorConfig, NormalPriorConfig
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +37,7 @@ class GPModelConfig(ABC):
         ndim: int,
         rngs: nnx.Rngs | None = None,
         obs_variance: jnp.ndarray | None = None,
+        **kwargs,
     ) -> tuple[Any, Any, Any]: ...
 
 
@@ -45,18 +50,19 @@ class ExactGPConfig(GPModelConfig):
         rngs: nnx.Rngs | None = None,
         obs_variance: jnp.ndarray | None = None,
         mean_function: MeanFunctionConfig | None = None,
+        **kwargs,
     ) -> tuple[Any, Any, Any]:
-        kernel = self.kernel.buildKernel(ndim, rngs=rngs)
+        kernel = self.kernel.buildKernel(ndim, rngs=rngs, **kwargs)
         if mean_function is not None:
             mean_fn = mean_function
         else:
-            mean_fn = self.mean_function.buildMeanFunction(ndim, kernel)
+            mean_fn = self.mean_function.buildMeanFunction(ndim, kernel, **kwargs)
 
-        kwargs = {"num_datapoints": dataset.n}
+        likelihood_kwargs = {"num_datapoints": dataset.n}
         if obs_variance is not None:
-            kwargs["obs_variance"] = obs_variance
+            likelihood_kwargs["obs_variance"] = obs_variance
 
-        likelihood = self.likelihood.buildLikelihood(**kwargs)
+        likelihood = self.likelihood.buildLikelihood(**likelihood_kwargs)
         prior = gpjax.gps.Prior(mean_function=mean_fn, kernel=kernel)
         posterior = prior * likelihood
 
@@ -72,7 +78,7 @@ class ExactGPConfig(GPModelConfig):
 
 @attrs.define
 class SparseGPConfig(GPModelConfig):
-    num_inducing: int = 50
+    num_inducing: int = 400
 
     def buildModel(
         self,
@@ -81,17 +87,18 @@ class SparseGPConfig(GPModelConfig):
         rngs: nnx.Rngs | None = None,
         obs_variance: jnp.ndarray | None = None,
         mean_function: MeanFunctionConfig | None = None,
+        **kwargs,
     ) -> tuple[Any, Any, Any]:
-        kernel = self.kernel.buildKernel(ndim, rngs=rngs)
+        kernel = self.kernel.buildKernel(ndim, rngs=rngs, **kwargs)
         if mean_function is not None:
             mean_fn = mean_function
         else:
-            mean_fn = self.mean_function.buildMeanFunction(ndim, kernel)
-        kwargs = {"num_datapoints": dataset.n}
+            mean_fn = self.mean_function.buildMeanFunction(ndim, kernel, **kwargs)
+        likelihood_kwargs = {"num_datapoints": dataset.n}
         if obs_variance is not None:
-            kwargs["obs_variance"] = obs_variance
+            likelihood_kwargs["obs_variance"] = obs_variance
 
-        likelihood = self.likelihood.buildLikelihood(**kwargs)
+        likelihood = self.likelihood.buildLikelihood(**likelihood_kwargs)
 
         prior = gpjax.gps.Prior(mean_function=mean_fn, kernel=kernel)
         posterior = prior * likelihood
@@ -122,17 +129,18 @@ class VariationalGPConfig(GPModelConfig):
         rngs: nnx.Rngs | None = None,
         obs_variance: jnp.ndarray | None = None,
         mean_function: MeanFunctionConfig | None = None,
+        **kwargs,
     ) -> tuple[Any, Any, Any]:
-        kernel = self.kernel.buildKernel(ndim, rngs=rngs)
+        kernel = self.kernel.buildKernel(ndim, rngs=rngs, **kwargs)
         if mean_function is not None:
             mean_fn = mean_function
         else:
-            mean_fn = self.mean_function.buildMeanFunction(ndim, kernel)
-        kwargs = {"num_datapoints": dataset.n}
+            mean_fn = self.mean_function.buildMeanFunction(ndim, kernel, **kwargs)
+        likelihood_kwargs = {"num_datapoints": dataset.n}
         if obs_variance is not None:
-            kwargs["obs_variance"] = obs_variance
+            likelihood_kwargs["obs_variance"] = obs_variance
 
-        likelihood = self.likelihood.buildLikelihood(**kwargs)
+        likelihood = self.likelihood.buildLikelihood(**likelihood_kwargs)
 
         prior = gpjax.gps.Prior(mean_function=mean_fn, kernel=kernel)
         posterior = prior * likelihood
@@ -177,3 +185,55 @@ def _selectInducingPoints(dataset: gpjax.Dataset, num_inducing: int) -> jnp.ndar
             z = z[::step][:num_inducing]
 
     return z
+
+
+@attrs.define
+class QCDPriorGPConfig:
+    """
+    Full Bayesian GP using QCD MC as a robust physics prior.
+    
+    - Mean function: QCD MC prediction (with learnable scale + tilt)
+    - Kernel: empirical MC ensemble covariance + stationary residual kernel
+    - Prior on scale: log-normal centred on theory prediction (controlled by theory_scale_uncertainty)
+    
+    The posterior represents beliefs about the background after seeing data,
+    given that QCD MC is the best physics prior.
+    """
+
+    residual_lengthscale: float = 0.3
+    lengthscale_prior: PriorConfig = attrs.Factory(
+        lambda: SoftplusNormalPriorConfig(loc=0.5, scale=0.2)
+    )
+    theory_scale_uncertainty: float = 0.2
+
+    def buildModel(
+        self,
+        mc_X,
+        mc_Y_nominal,
+        mc_Y_ensemble,
+        ndim: int = 2,
+    ):
+        mean_fn = QCDMCMeanFunction(
+            mc_X,
+            mc_Y_nominal,
+            learn_scale=True,
+            learn_tilt=True,
+            ndim=ndim,
+        )
+
+        mc_kernel = MCEnsembleKernel(mc_X, mc_Y_ensemble, mc_Y_nominal)
+        residual_kernel = gpk.Matern32(
+            lengthscale=gpp.PositiveReal(
+                jnp.array([self.residual_lengthscale] * ndim),
+                prior=self.lengthscale_prior.buildPrior(),
+            )
+        )
+        kernel = mc_kernel + residual_kernel
+
+        scale_prior = NormalPriorConfig(loc=0.0, scale=self.theory_scale_uncertainty)
+        mean_fn.log_scale = gpp.Real(
+            jnp.array(0.0),
+            prior=scale_prior.buildPrior(),
+        )
+
+        return gpjax.gps.Prior(mean_function=mean_fn, kernel=kernel)

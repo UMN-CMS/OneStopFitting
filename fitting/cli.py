@@ -273,13 +273,9 @@ def smooth(state: Path, output: Path, seed: int, num_samples: int) -> None:
 
 
 @main.command(name="aggregate-plot")
-@click.option(
-    "-i",
-    "--input",
+@click.argument(
     "inputs",
-    multiple=True,
-    required=True,
-    help="Directory, summary.json path, or glob pattern. May be passed multiple times.",
+    nargs=-1,
 )
 @click.option(
     "-m",

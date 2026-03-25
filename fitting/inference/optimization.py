@@ -15,6 +15,10 @@ from ..core.data import TrainingResult
 from numpyro.infer import MCMC, NUTS
 from gpjax.numpyro_extras import register_parameters
 
+from .kernels import KernelConfig
+from .priors import NormalPriorConfig
+from ..data.loading import FileLoader, extractHistogram, histToBinnedData
+
 logger = logging.getLogger(__name__)
 
 
@@ -190,7 +194,7 @@ def runMLE(
         log_prior_fn = _build_log_prior_fn(posterior)
 
         def objective(model: nnx.Module, data: gpjax.Dataset) -> jnp.ndarray:
-            nlml = -base_objective(model, data)
+            nlml = -jnp.sum(base_objective(model, data))
 
             log_prior = log_prior_fn(model)
             jax.debug.print("Log prior: {}", log_prior)
@@ -199,7 +203,7 @@ def runMLE(
     else:
 
         def objective(p, d):
-            return -base_objective(p, d)
+            return -jnp.sum(base_objective(p, d))
 
     trainable = (gpjax.parameters.Parameter, nnx.Param)
 
@@ -471,3 +475,83 @@ def runHomoscedasticTwoStageFit(
         setAtPath(final_mean_fn, path, original_node)
 
     return final_result
+
+
+def fitHyperpriorsFromMC(
+    mc_path: str,
+    kernel_config: KernelConfig,
+    opt_config: OptimizationConfig,
+    mc_uncertainty_fraction: float = 0.5,
+    domain_mask: jnp.ndarray | None = None,
+    rng_key: jax.Array | None = None,
+    ndim: int = 2,
+) -> dict[str, NormalPriorConfig]:
+    """
+    Fit a zero-mean GP to QCD MC to learn hyperparameter distributions.
+
+    These learned distributions can be used as priors in the actual data fit.
+    This provides a 'data-driven with physics-informed priors' approach, where
+    the MC informs the smoothness structure but does not anchor the mean shape.
+
+    Returns a dictionary of paths mapped to NormalPriorConfig instances.
+    """
+    if rng_key is None:
+        rng_key = jax.random.key(0)
+
+    logger.info(f"Fitting hyperpriors from MC data at {mc_path}")
+
+    loader = FileLoader.forPath(mc_path)
+    raw_data = loader.load(mc_path)
+    histogram = extractHistogram(raw_data)
+
+    binned_data = histToBinnedData(histogram, variation="central")
+    if domain_mask is not None:
+        masked_data = binned_data.masked(domain_mask)
+    else:
+        masked_data = binned_data
+
+    dataset = gpjax.Dataset(X=masked_data.X, y=masked_data.Y.reshape(-1, 1))
+
+    # Fit GP to MC with zero mean — we want the kernel to learn
+    # the background shape, not a parametric mean
+    from .models import ExactGPConfig
+    from .means import ZeroMeanConfig
+    from .likelihoods import UniformGaussianNoiseConfig
+
+    model_config = ExactGPConfig(
+        kernel=kernel_config,
+        likelihood=UniformGaussianNoiseConfig(),
+        mean_function=ZeroMeanConfig(),
+    )
+
+    posterior, likelihood, prior = model_config.buildModel(
+        dataset, ndim=ndim, rngs=nnx.Rngs(rng_key)
+    )
+
+    # Run MLE
+    result = runMLE(posterior, likelihood, dataset, config=opt_config, rng_key=rng_key)
+
+    # Extract learned hyperparameters mapping path -> float value
+    learned_params = {}
+    for path, node in nnx.graph.iter_graph(result.posterior):
+        if isinstance(node, gpjax.parameters.Parameter):
+            learned_params[path] = float(node.value)
+
+    # Build Gaussian priors centred on MC-learned values
+    # Wider prior = more data-driven, narrower = more MC-dependent
+    hyperpriors = {
+        path: NormalPriorConfig(
+            loc=val,
+            scale=jnp.abs(val) * mc_uncertainty_fraction,
+        )
+        for path, val in learned_params.items()
+    }
+
+    logger.info(
+        "Extracted MC hyperpriors: "
+        + ", ".join(
+            f"{k[-1]}={v.loc:.4f}" for k, v in hyperpriors.items() if len(k) > 0
+        )
+    )
+
+    return hyperpriors

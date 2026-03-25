@@ -54,3 +54,15 @@ class UniformPriorConfig(PriorConfig):
 
     def buildPrior(self) -> dist.Distribution:
         return dist.Uniform(low=self.low, high=self.high)
+
+
+@attrs.define
+class SoftplusNormalPriorConfig(PriorConfig):
+    loc: float = 0.0
+    scale: float = 1.0
+
+    def buildPrior(self) -> dist.Distribution:
+        return dist.TransformedDistribution(
+            dist.Normal(loc=self.loc, scale=self.scale),
+            dist.transforms.SoftplusTransform(),
+        )

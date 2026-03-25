@@ -26,6 +26,7 @@ from .steps.train import trainModel
 from .steps.diagnostics import runDiagnostics
 from .steps.plot import generatePlots
 from .steps.combine import prepareCombine
+from .steps.report import runPointReport
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +69,7 @@ class PipelineStep(IntEnum):
     DIAGNOSTICS = 2
     PLOT = 3
     COMBINE = 4
+    REPORT = 5
 
     @classmethod
     def fromStr(cls, s: str | None) -> PipelineStep | None:
@@ -87,6 +89,7 @@ STEP_FUNCS = {
     PipelineStep.DIAGNOSTICS: runDiagnostics,
     PipelineStep.PLOT: generatePlots,
     PipelineStep.COMBINE: prepareCombine,
+    PipelineStep.REPORT: runPointReport,
 }
 
 

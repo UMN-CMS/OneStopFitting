@@ -10,6 +10,8 @@ import jax.numpy as jnp
 import jax.scipy.stats
 from flax import nnx
 
+from ..data.loading import FileLoader, extractHistogram, histToBinnedData
+
 logger = logging.getLogger(__name__)
 
 
@@ -333,14 +335,14 @@ class MixtureOfGaussiansMean(gpjax.mean_functions.AbstractMeanFunction):
 class MeanFunctionConfig(ABC):
     @abstractmethod
     def buildMeanFunction(
-        self, ndim: int, kernel: gpjax.kernels.AbstractKernel
+        self, ndim: int, kernel: gpjax.kernels.AbstractKernel, **kwargs
     ) -> gpjax.mean_functions.AbstractMeanFunction: ...
 
 
 @attrs.define
 class ZeroMeanConfig(MeanFunctionConfig):
     def buildMeanFunction(
-        self, ndim: int, kernel: gpjax.kernels.AbstractKernel
+        self, ndim: int, kernel: gpjax.kernels.AbstractKernel, **kwargs
     ) -> gpjax.mean_functions.AbstractMeanFunction:
         return gpjax.mean_functions.Zero()
 
@@ -348,7 +350,7 @@ class ZeroMeanConfig(MeanFunctionConfig):
 @attrs.define
 class ConstantMeanConfig(MeanFunctionConfig):
     def buildMeanFunction(
-        self, ndim: int, kernel: gpjax.kernels.AbstractKernel
+        self, ndim: int, kernel: gpjax.kernels.AbstractKernel, **kwargs
     ) -> gpjax.mean_functions.AbstractMeanFunction:
         return gpjax.mean_functions.Constant()
 
@@ -358,16 +360,18 @@ class DeepMeanFunctionConfig(MeanFunctionConfig):
     base_mean: MeanFunctionConfig
 
     def buildMeanFunction(
-        self, ndim: int, kernel: gpjax.kernels.AbstractKernel
+        self, ndim: int, kernel: gpjax.kernels.AbstractKernel, **kwargs
     ) -> gpjax.mean_functions.AbstractMeanFunction:
         network = kernel.network
-        return DeepMeanFunction(self.base_mean.buildMeanFunction(ndim, kernel), network)
+        return DeepMeanFunction(
+            self.base_mean.buildMeanFunction(ndim, kernel, **kwargs), network
+        )
 
 
 @attrs.define
 class ParametricBackgroundMeanConfig(MeanFunctionConfig):
     def buildMeanFunction(
-        self, ndim: int, kernel: gpjax.kernels.AbstractKernel
+        self, ndim: int, kernel: gpjax.kernels.AbstractKernel, **kwargs
     ) -> gpjax.mean_functions.AbstractMeanFunction:
         return ParametricBackgroundMean(ndim)
 
@@ -375,7 +379,7 @@ class ParametricBackgroundMeanConfig(MeanFunctionConfig):
 @attrs.define
 class PolynomialBackgroundMeanConfig(MeanFunctionConfig):
     def buildMeanFunction(
-        self, ndim: int, kernel: gpjax.kernels.AbstractKernel
+        self, ndim: int, kernel: gpjax.kernels.AbstractKernel, **kwargs
     ) -> gpjax.mean_functions.AbstractMeanFunction:
         return PolynomialBackgroundMean(ndim)
 
@@ -383,7 +387,7 @@ class PolynomialBackgroundMeanConfig(MeanFunctionConfig):
 @attrs.define
 class GaussianBumpMeanConfig(MeanFunctionConfig):
     def buildMeanFunction(
-        self, ndim: int, kernel: gpjax.kernels.AbstractKernel
+        self, ndim: int, kernel: gpjax.kernels.AbstractKernel, **kwargs
     ) -> gpjax.mean_functions.AbstractMeanFunction:
         return GaussianBumpMean(ndim)
 
@@ -391,7 +395,7 @@ class GaussianBumpMeanConfig(MeanFunctionConfig):
 @attrs.define
 class AsymmetricGaussianBumpMeanConfig(MeanFunctionConfig):
     def buildMeanFunction(
-        self, ndim: int, kernel: gpjax.kernels.AbstractKernel
+        self, ndim: int, kernel: gpjax.kernels.AbstractKernel, **kwargs
     ) -> gpjax.mean_functions.AbstractMeanFunction:
         return GaussianBumpMean(ndim)
 
@@ -401,7 +405,7 @@ class DoubleSidedCrystalBallMeanConfig(MeanFunctionConfig):
     init_mu: jnp.ndarray = jnp.array([0.3, 0.3])
 
     def buildMeanFunction(
-        self, ndim: int, kernel: gpjax.kernels.AbstractKernel
+        self, ndim: int, kernel: gpjax.kernels.AbstractKernel, **kwargs
     ) -> gpjax.mean_functions.AbstractMeanFunction:
         return DoubleSidedCrystalBallMean(ndim, self.init_mu)
 
@@ -409,7 +413,7 @@ class DoubleSidedCrystalBallMeanConfig(MeanFunctionConfig):
 @attrs.define
 class SkewedGaussianMeanConfig(MeanFunctionConfig):
     def buildMeanFunction(
-        self, ndim: int, kernel: gpjax.kernels.AbstractKernel
+        self, ndim: int, kernel: gpjax.kernels.AbstractKernel, **kwargs
     ) -> gpjax.mean_functions.AbstractMeanFunction:
         return SkewedGaussianMean(ndim)
 
@@ -417,7 +421,7 @@ class SkewedGaussianMeanConfig(MeanFunctionConfig):
 @attrs.define
 class StudentTBumpMeanConfig(MeanFunctionConfig):
     def buildMeanFunction(
-        self, ndim: int, kernel: gpjax.kernels.AbstractKernel
+        self, ndim: int, kernel: gpjax.kernels.AbstractKernel, **kwargs
     ) -> gpjax.mean_functions.AbstractMeanFunction:
         return StudentTBumpMean(ndim)
 
@@ -425,7 +429,7 @@ class StudentTBumpMeanConfig(MeanFunctionConfig):
 @attrs.define
 class AsymmetricLaplaceMeanConfig(MeanFunctionConfig):
     def buildMeanFunction(
-        self, ndim: int, kernel: gpjax.kernels.AbstractKernel
+        self, ndim: int, kernel: gpjax.kernels.AbstractKernel, **kwargs
     ) -> gpjax.mean_functions.AbstractMeanFunction:
         return AsymmetricLaplaceMean(ndim)
 
@@ -433,7 +437,7 @@ class AsymmetricLaplaceMeanConfig(MeanFunctionConfig):
 @attrs.define
 class RationalQuadraticBumpMeanConfig(MeanFunctionConfig):
     def buildMeanFunction(
-        self, ndim: int, kernel: gpjax.kernels.AbstractKernel
+        self, ndim: int, kernel: gpjax.kernels.AbstractKernel, **kwargs
     ) -> gpjax.mean_functions.AbstractMeanFunction:
         return RationalQuadraticBumpMean(ndim)
 
@@ -444,9 +448,9 @@ class LogNormalWarpingMeanConfig(MeanFunctionConfig):
     log_dims: list[int] = attrs.Factory(lambda: [0])
 
     def buildMeanFunction(
-        self, ndim: int, kernel: gpjax.kernels.AbstractKernel
+        self, ndim: int, kernel: gpjax.kernels.AbstractKernel, **kwargs
     ) -> gpjax.mean_functions.AbstractMeanFunction:
-        base_mean_func = self.base_mean.buildMeanFunction(ndim, kernel)
+        base_mean_func = self.base_mean.buildMeanFunction(ndim, kernel, **kwargs)
         return LogNormalWarpingMean(base_mean_func, self.log_dims)
 
 
@@ -455,7 +459,7 @@ class MixtureOfGaussiansMeanConfig(MeanFunctionConfig):
     n_components: int = 2
 
     def buildMeanFunction(
-        self, ndim: int, kernel: gpjax.kernels.AbstractKernel
+        self, ndim: int, kernel: gpjax.kernels.AbstractKernel, **kwargs
     ) -> gpjax.mean_functions.AbstractMeanFunction:
         return MixtureOfGaussiansMean(ndim, self.n_components)
 
@@ -500,7 +504,7 @@ class InterpolatedMeanConfig(MeanFunctionConfig):
         return True
 
     def buildMeanFunction(
-        self, ndim: int, kernel: gpjax.kernels.AbstractKernel
+        self, ndim: int, kernel: gpjax.kernels.AbstractKernel, **kwargs
     ) -> gpjax.mean_functions.AbstractMeanFunction:
         raise RuntimeError(
             "InterpolatedMeanConfig requires a pre-fit step. "
@@ -524,7 +528,7 @@ class LookupTableMeanConfig(MeanFunctionConfig):
         return True
 
     def buildMeanFunction(
-        self, ndim: int, kernel: gpjax.kernels.AbstractKernel
+        self, ndim: int, kernel: gpjax.kernels.AbstractKernel, **kwargs
     ) -> gpjax.mean_functions.AbstractMeanFunction:
         raise RuntimeError(
             "LookupTableMeanConfig requires a pre-fit step. "
@@ -538,3 +542,86 @@ class LookupTableMeanConfig(MeanFunctionConfig):
         latent_dist = posterior.predict(train_dataset.X, train_data=train_dataset)
         ref_Y = jax.lax.stop_gradient(latent_dist.mean.ravel())
         return LookupTableMean(train_dataset.X, ref_Y)
+
+
+class QCDMCMeanFunction(gpjax.mean_functions.AbstractMeanFunction):
+    """
+    Uses QCD MC prediction as the GP mean function.
+
+    The GP then models residuals/corrections to the MC prediction.
+    This anchors the extrapolation into the blinded window to the MC
+    prediction, rather than to zero or an arbitrary parametric form.
+    The GP only needs to learn corrections, which are typically small and smooth.
+    """
+
+    _mc_X: jnp.ndarray = nnx.data()
+    _mc_Y: jnp.ndarray = nnx.data()
+
+    def __init__(
+        self,
+        mc_X: jnp.ndarray,
+        mc_Y: jnp.ndarray,
+        learn_scale: bool = True,
+        learn_tilt: bool = True,
+        ndim: int = 2,
+    ):
+        super().__init__()
+        self._mc_X = jax.lax.stop_gradient(mc_X)
+        self._mc_Y = jax.lax.stop_gradient(mc_Y)
+        self.log_scale = gpjax.parameters.Real(jnp.array(0.0))
+
+        if learn_tilt:
+            self.tilt = gpjax.parameters.Real(jnp.zeros(ndim))
+        else:
+            self.tilt = None
+
+    def _interpolate_mc(self, x: jnp.ndarray) -> jnp.ndarray:
+        diffs = x[:, None, :] - self._mc_X[None, :, :]  # (n, n_ref, ndim)
+        dists = jnp.sum(diffs**2, axis=-1)  # (n, n_ref)
+        nearest = jnp.argmin(dists, axis=-1)  # (n,)
+        return self._mc_Y[nearest]  # (n,)
+
+    def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
+        mc_pred = self._interpolate_mc(x)  # (n,)
+        scale = jnp.exp(self.log_scale.value)
+
+        if self.tilt is not None:
+            tilt_correction = jnp.exp(x @ self.tilt.value)
+            return (scale * tilt_correction * mc_pred).reshape(-1, 1)
+
+        return (scale * mc_pred).reshape(-1, 1)
+
+
+@attrs.define
+class QCDMCMeanConfig(MeanFunctionConfig):
+    mc_path: str = attrs.Factory(lambda: "")
+    learn_scale: bool = True
+    learn_tilt: bool = True
+
+    def buildMeanFunction(
+        self, ndim: int, kernel: gpjax.kernels.AbstractKernel, **kwargs
+    ) -> gpjax.mean_functions.AbstractMeanFunction:
+        if not self.mc_path:
+            raise ValueError("QCDMCMeanConfig requires a valid mc_path")
+
+        loader = FileLoader.forPath(self.mc_path)
+        raw_data = loader.load(self.mc_path)
+        histogram = extractHistogram(raw_data)
+
+        # Extract central variation and convert to BinnedData
+        binned_data = histToBinnedData(histogram, variation="central")
+
+        # Apply domain mask if provided
+        domain_mask = kwargs.get("domain_mask", None)
+        if domain_mask is not None:
+            masked_data = binned_data.masked(domain_mask)
+        else:
+            masked_data = binned_data
+
+        return QCDMCMeanFunction(
+            mc_X=masked_data.X,
+            mc_Y=masked_data.Y,
+            learn_scale=self.learn_scale,
+            learn_tilt=self.learn_tilt,
+            ndim=ndim,
+        )

@@ -11,6 +11,7 @@ from abc import ABC, abstractmethod
 import attrs
 from flax import nnx
 import jax
+import jax.numpy as jnp
 import gpjax.kernels as gpk
 import gpjax.parameters as gpp
 from typing import Any
@@ -22,6 +23,13 @@ from gpjax.kernels.computations import (
 from gpjax.kernels.base import AbstractKernel
 from .priors import PriorConfig
 
+from ..data.loading import (
+    FileLoader,
+    extractHistogram,
+    histToBinnedData,
+    variationNames,
+)
+
 
 @attrs.define
 class KernelConfig(ABC):
@@ -32,7 +40,7 @@ class KernelConfig(ABC):
 
     @abstractmethod
     def buildKernel(
-        self, ndim: int, rngs: nnx.Rngs | None = None
+        self, ndim: int, rngs: nnx.Rngs | None = None, **kwargs
     ) -> gpk.AbstractKernel:
         """Construct the gpjax kernel.
 
@@ -67,7 +75,7 @@ class RBFConfig(KernelConfig):
     variance_prior: PriorConfig | None = None
 
     def buildKernel(
-        self, ndim: int, rngs: nnx.Rngs | None = None
+        self, ndim: int, rngs: nnx.Rngs | None = None, **kwargs
     ) -> gpk.AbstractKernel:
         ls_val = [0.25] * ndim if self.ard else 0.25
         lengthscale = self._get_param("lengthscale", ls_val, self.lengthscale_prior)
@@ -83,7 +91,7 @@ class Matern12Config(KernelConfig):
     variance_prior: PriorConfig | None = None
 
     def buildKernel(
-        self, ndim: int, rngs: nnx.Rngs | None = None
+        self, ndim: int, rngs: nnx.Rngs | None = None, **kwargs
     ) -> gpk.AbstractKernel:
         ls_val = [0.25] * ndim if self.ard else 0.25
         lengthscale = self._get_param("lengthscale", ls_val, self.lengthscale_prior)
@@ -98,7 +106,7 @@ class Matern32Config(KernelConfig):
     variance_prior: PriorConfig | None = None
 
     def buildKernel(
-        self, ndim: int, rngs: nnx.Rngs | None = None
+        self, ndim: int, rngs: nnx.Rngs | None = None, **kwargs
     ) -> gpk.AbstractKernel:
         ls_val = [0.25] * ndim if self.ard else 0.25
         lengthscale = self._get_param("lengthscale", ls_val, self.lengthscale_prior)
@@ -113,7 +121,7 @@ class Matern52Config(KernelConfig):
     variance_prior: PriorConfig | None = None
 
     def buildKernel(
-        self, ndim: int, rngs: nnx.Rngs | None = None
+        self, ndim: int, rngs: nnx.Rngs | None = None, **kwargs
     ) -> gpk.AbstractKernel:
         ls_val = [0.25] * ndim if self.ard else 0.25
         lengthscale = self._get_param("lengthscale", ls_val, self.lengthscale_prior)
@@ -131,7 +139,7 @@ class RationalQuadraticConfig(KernelConfig):
     alpha_prior: PriorConfig | None = None
 
     def buildKernel(
-        self, ndim: int, rngs: nnx.Rngs | None = None
+        self, ndim: int, rngs: nnx.Rngs | None = None, **kwargs
     ) -> gpk.AbstractKernel:
         ls_val = [0.25] * ndim if self.ard else 0.25
         lengthscale = self._get_param("lengthscale", ls_val, self.lengthscale_prior)
@@ -151,7 +159,7 @@ class PeriodicConfig(KernelConfig):
     period_prior: PriorConfig | None = None
 
     def buildKernel(
-        self, ndim: int, rngs: nnx.Rngs | None = None
+        self, ndim: int, rngs: nnx.Rngs | None = None, **kwargs
     ) -> gpk.AbstractKernel:
         lengthscale = self._get_param("lengthscale", 1.0, self.lengthscale_prior)
         variance = self._get_param("variance", 1.0, self.variance_prior)
@@ -166,7 +174,7 @@ class WhiteConfig(KernelConfig):
     variance_prior: PriorConfig | None = None
 
     def buildKernel(
-        self, ndim: int, rngs: nnx.Rngs | None = None
+        self, ndim: int, rngs: nnx.Rngs | None = None, **kwargs
     ) -> gpk.AbstractKernel:
         variance = self._get_param("variance", 1e-6, self.variance_prior)
         return gpk.White(variance=variance)
@@ -179,7 +187,7 @@ class LinearConfig(KernelConfig):
     variance_prior: PriorConfig | None = None
 
     def buildKernel(
-        self, ndim: int, rngs: nnx.Rngs | None = None
+        self, ndim: int, rngs: nnx.Rngs | None = None, **kwargs
     ) -> gpk.AbstractKernel:
         variance = self._get_param("variance", 1.0, self.variance_prior)
         return gpk.Linear(variance=variance)
@@ -194,7 +202,7 @@ class PolynomialConfig(KernelConfig):
     shift_prior: PriorConfig | None = None
 
     def buildKernel(
-        self, ndim: int, rngs: nnx.Rngs | None = None
+        self, ndim: int, rngs: nnx.Rngs | None = None, **kwargs
     ) -> gpk.AbstractKernel:
         variance = self._get_param("variance", 1.0, self.variance_prior)
         shift = self._get_param("shift", 1.0, self.shift_prior)
@@ -213,9 +221,9 @@ class SumKernelConfig(KernelConfig):
             raise ValueError("SumKernelConfig requires at least one component")
 
     def buildKernel(
-        self, ndim: int, rngs: nnx.Rngs | None = None
+        self, ndim: int, rngs: nnx.Rngs | None = None, **kwargs
     ) -> gpk.AbstractKernel:
-        kernels = [c.buildKernel(ndim, rngs=rngs) for c in self.kernels]
+        kernels = [c.buildKernel(ndim, rngs=rngs, **kwargs) for c in self.kernels]
         result = kernels[0]
         for k in kernels[1:]:
             result = result + k
@@ -234,9 +242,9 @@ class ProductKernelConfig(KernelConfig):
             raise ValueError("ProductKernelConfig requires at least one component")
 
     def buildKernel(
-        self, ndim: int, rngs: nnx.Rngs | None = None
+        self, ndim: int, rngs: nnx.Rngs | None = None, **kwargs
     ) -> gpk.AbstractKernel:
-        kernels = [c.buildKernel(ndim, rngs=rngs) for c in self.kernels]
+        kernels = [c.buildKernel(ndim, rngs=rngs, **kwargs) for c in self.kernels]
         result = kernels[0]
         for k in kernels[1:]:
             result = result * k
@@ -251,9 +259,9 @@ class ScaledKernelConfig(KernelConfig):
     scale_prior: PriorConfig | None = None
 
     def buildKernel(
-        self, ndim: int, rngs: nnx.Rngs | None = None
+        self, ndim: int, rngs: nnx.Rngs | None = None, **kwargs
     ) -> gpk.AbstractKernel:
-        kernel = self.base.buildKernel(ndim, rngs=rngs)
+        kernel = self.base.buildKernel(ndim, rngs=rngs, **kwargs)
         scale_val = self._get_param("constant", 1.0, self.scale_prior)
         return gpk.Constant(constant=scale_val) * kernel
 
@@ -319,15 +327,15 @@ class NNKernelConfig(KernelConfig):
     base_kernel_config: KernelConfig = attrs.Factory(RBFConfig)
     input_dim: int = 2
     output_dim: int = 2
-    hidden_shapes: list[int] = attrs.Factory(lambda: [24, 16, 8])
+    hidden_shapes: list[int] = attrs.Factory(lambda: [20, 10, 5])
     activation: str = "silu"
 
     def buildKernel(
-        self, ndim: int, rngs: nnx.Rngs | None = None
+        self, ndim: int, rngs: nnx.Rngs | None = None, **kwargs
     ) -> gpk.AbstractKernel:
         if rngs is None:
             raise ValueError("NNKernelConfig requires rngs for network initialization")
-        base_kernel = self.base_kernel_config.buildKernel(ndim, rngs=rngs)
+        base_kernel = self.base_kernel_config.buildKernel(ndim, rngs=rngs, **kwargs)
         forward_linear = Network(
             rngs=rngs,
             input_dim=self.input_dim,
@@ -338,4 +346,93 @@ class NNKernelConfig(KernelConfig):
         return DeepKernelFunction(
             base_kernel=base_kernel,
             network=forward_linear,
+        )
+
+
+class MCEnsembleKernel(gpk.AbstractKernel):
+    """
+    K(x, x') = Cov_MC[f(x), f(x')] / (f_nom(x) * f_nom(x'))
+    """
+
+    _ensemble_X: jnp.ndarray = nnx.data()
+    _ensemble_cov: jnp.ndarray = nnx.data()
+
+    compute_engine: AbstractKernelComputation = attrs.field(
+        factory=DenseKernelComputation
+    )
+
+    def __init__(self, ensemble_X, ensemble_Y, nominal_Y, nugget=1e-6):
+        super().__init__()
+        self._ensemble_X = jax.lax.stop_gradient(ensemble_X)
+        frac_variations = ensemble_Y / nominal_Y[None, :]  # (n_var, n_ref)
+        emp_cov = jnp.cov(frac_variations, rowvar=False)  # (n_ref, n_ref)
+        emp_cov += nugget * jnp.eye(len(nominal_Y))
+        self._ensemble_cov = jax.lax.stop_gradient(emp_cov)
+        self.log_amplitude = gpp.Real(jnp.array(0.0))
+
+    def _interpolate_cov(self, x1, x2):
+        diffs1 = x1[:, None, :] - self._ensemble_X[None, :, :]
+        i1 = jnp.argmin(jnp.sum(diffs1**2, axis=-1), axis=-1)
+        diffs2 = x2[:, None, :] - self._ensemble_X[None, :, :]
+        i2 = jnp.argmin(jnp.sum(diffs2**2, axis=-1), axis=-1)
+        return self._ensemble_cov[i1[:, None], i2[None, :]]
+
+    def __call__(self, x, y):
+        amp = jnp.exp(self.log_amplitude.value)
+        return amp * self._interpolate_cov(x.reshape(1, -1), y.reshape(1, -1))[0, 0]
+
+    def cross_covariance(self, x, y):
+        amp = jnp.exp(self.log_amplitude.value)
+        return amp * self._interpolate_cov(x, y)
+
+
+@attrs.define
+class MCEnsembleKernelConfig(KernelConfig):
+    mc_path: str = attrs.Factory(lambda: "")
+    nugget: float = 1e-6
+
+    def buildKernel(
+        self, ndim: int, rngs: nnx.Rngs | None = None, **kwargs
+    ) -> gpk.AbstractKernel:
+        if not self.mc_path:
+            raise ValueError("MCEnsembleKernelConfig requires a valid mc_path")
+
+        loader = FileLoader.forPath(self.mc_path)
+        raw_data = loader.load(self.mc_path)
+        histogram = extractHistogram(raw_data)
+
+        central_data = histToBinnedData(histogram, variation="central")
+        domain_mask = kwargs.get("domain_mask", None)
+        if domain_mask is not None:
+            masked_central = central_data.masked(domain_mask)
+        else:
+            masked_central = central_data
+
+        mc_X = masked_central.X
+        nominal_Y = masked_central.Y
+        ensemble_Y_list = []
+        variations = variationNames(histogram)
+        for var in variations:
+            if var == "central":
+                continue
+            var_data = histToBinnedData(histogram, variation=var)
+            if domain_mask is not None:
+                masked_var_Y = var_data.Y[domain_mask]
+            else:
+                masked_var_Y = var_data.Y
+            ensemble_Y_list.append(masked_var_Y)
+
+        if not ensemble_Y_list:
+            raise ValueError(
+                f"No non-central variations found in {self.mc_path}. "
+                "MCEnsembleKernel requires an ensemble of variations."
+            )
+
+        ensemble_Y = jnp.stack(ensemble_Y_list, axis=0)  # (n_variations, n_ref)
+
+        return MCEnsembleKernel(
+            ensemble_X=mc_X,
+            ensemble_Y=ensemble_Y,
+            nominal_Y=nominal_Y,
+            nugget=self.nugget,
         )
