@@ -77,9 +77,9 @@ class RBFConfig(KernelConfig):
     def buildKernel(
         self, ndim: int, rngs: nnx.Rngs | None = None, **kwargs
     ) -> gpk.AbstractKernel:
-        ls_val = [0.25] * ndim if self.ard else 0.25
+        ls_val = [0.1] * ndim if self.ard else 0.1
         lengthscale = self._get_param("lengthscale", ls_val, self.lengthscale_prior)
-        variance = self._get_param("variance", 2.0, self.variance_prior)
+        variance = self._get_param("variance", 0.5, self.variance_prior)
 
         return gpk.RBF(lengthscale=lengthscale, variance=variance)
 
@@ -143,7 +143,7 @@ class RationalQuadraticConfig(KernelConfig):
     ) -> gpk.AbstractKernel:
         ls_val = [0.25] * ndim if self.ard else 0.25
         lengthscale = self._get_param("lengthscale", ls_val, self.lengthscale_prior)
-        variance = self._get_param("variance", 2.0, self.variance_prior)
+        variance = self._get_param("variance", 0.5, self.variance_prior)
         alpha = self._get_param("alpha", 1.0, self.alpha_prior)
         return gpk.RationalQuadratic(
             lengthscale=lengthscale, variance=variance, alpha=alpha
@@ -327,7 +327,7 @@ class NNKernelConfig(KernelConfig):
     base_kernel_config: KernelConfig = attrs.Factory(RBFConfig)
     input_dim: int = 2
     output_dim: int = 2
-    hidden_shapes: list[int] = attrs.Factory(lambda: [20, 10, 5])
+    hidden_shapes: list[int] = attrs.Factory(lambda: [20, 20])
     activation: str = "silu"
 
     def buildKernel(

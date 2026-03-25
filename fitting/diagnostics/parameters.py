@@ -22,15 +22,8 @@ USEFUL_PARAMETER_NAMES = {
 
 
 def logParameters(model: nnx.Module, header: str = "Parameters"):
-    """Generic parameter logger for GPJax/NNX modules.
-
-    Filters for 'useful' parameters like lengthscales and variances while
-    skipping internal neural network weights or other high-dimensional
-    auxiliary parameters.
-    """
     logger.info(f"--- {header} ---")
 
-    # Look for parameters and variables in the NNX graph
     parameter_filter = (gpjax.parameters.Parameter, nnx.Param, nnx.Variable)
 
     found = False
@@ -72,7 +65,6 @@ def logParameters(model: nnx.Module, header: str = "Parameters"):
 
 
 def logKernelParameters(posterior: Any):
-    """Log useful hyperparameters from the posterior's kernel."""
     if hasattr(posterior, "prior") and hasattr(posterior.prior, "kernel"):
         kernel = posterior.prior.kernel
     elif hasattr(posterior, "posterior") and hasattr(posterior.posterior, "prior"):

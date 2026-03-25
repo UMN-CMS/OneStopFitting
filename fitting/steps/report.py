@@ -19,8 +19,9 @@ def runPointReport(state: AnalysisState, rng_key: jax.Array) -> AnalysisState:
         image_format="png",
     )
 
-    generatePointReport(
-        point_dir=Path(state.getRealOutPath()).absolute(),
-        output_pdf=Path(state.getRealOutPath()).absolute() / "report.pdf",
-        config=config,
-    )
+    if state.signal is not None:
+        generatePointReport(
+            point_dir=Path(state.getRealOutPath()).absolute(),
+            output_pdf=Path(state.getRealOutPath()).absolute() / "report.pdf",
+            config=config,
+        )

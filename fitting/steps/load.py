@@ -54,6 +54,25 @@ def loadData(config: PipelineConfig) -> AnalysisState:
         sig_metadata = extractMetadata(sig_raw)
         combined_metadata = {**combined_metadata, **sig_metadata}
 
+    # FIXME: Quick and dirty sqrt transform (removable)
+    if True:
+        import jax.numpy as jnp
+        from ..core.data import BinnedData
+
+        def _sqrt_transform(data: BinnedData) -> BinnedData:
+            return BinnedData(
+                X=data.X,
+                Y=jnp.sqrt(jnp.maximum(data.Y, 0)),
+                V=0.25 * jnp.ones_like(data.Y),
+                edges=data.edges,
+                axis_names=data.axis_names,
+            )
+
+        background = _sqrt_transform(background)
+        if signal is not None:
+            signal = _sqrt_transform(signal)
+    # END QUICK AND DIRTY
+
     return AnalysisState(
         config=config,
         background=background,

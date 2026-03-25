@@ -41,6 +41,7 @@ def predictInRealSpace(
     else:
         norm_mean, norm_cov = computePrediction(posterior, dataset_train, norm_test_X)
     real_mean, real_cov = transform.invertMVN(norm_mean, norm_cov)
+    real_cov = fixCovarianceMatrix(real_cov)
 
     logger.info(
         f"Prediction complete: {len(real_mean)} bins, "

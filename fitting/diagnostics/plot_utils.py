@@ -62,7 +62,7 @@ def plotRaw(ax, edges, X, Y, V=None, **kwargs):
         return mplhep.hist2dplot(h, ax=ax, flow=None, **kwargs)
 
 
-def savePlots(plots: dict[str, tuple], save_dir, formats=("pdf", "png")):
+def savePlots(plots: dict[str, tuple], save_dir, formats=("pdf",)):
     save_dir = Path(save_dir)
     save_dir.mkdir(parents=True, exist_ok=True)
     for name, (fig, ax) in plots.items():

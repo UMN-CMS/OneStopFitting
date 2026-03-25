@@ -295,7 +295,7 @@ def smooth(state: Path, output: Path, seed: int, num_samples: int) -> None:
     "-f",
     "--formats",
     multiple=True,
-    default=("png",),
+    default=("pdf",),
     show_default=True,
     help="Image formats to write (repeatable), e.g. --formats png --formats pdf.",
 )
@@ -562,7 +562,7 @@ def parse_csv_int(s: str) -> list[int]:
 )
 @click.option(
     "--image-format",
-    default="png",
+    default="pdf",
     show_default=True,
     help="Image format for plots (png, pdf, etc.)",
 )

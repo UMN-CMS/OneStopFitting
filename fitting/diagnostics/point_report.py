@@ -94,7 +94,10 @@ def _selectPlotNames(
             "gpr": "gpr_mean",
             "predvar": "predicted_variances",
             "pulls": "pull_map",
+            "covar_center": "covariance_at_blind_center",
+            "rel_unc": "relative_uncertainty",
             "ppc_map": "ppc_mean_map",
+            "total_pulls": "total_pulls_hist",
             "ppc_blinded": "ppc_dist_chi2_blinded",
             "ppc_unblinded": "ppc_dist_chi2_unblinded",
         }

@@ -11,6 +11,8 @@ def chi2PerBin(
 ) -> float:
     if mask is not None:
         obs, exp, var = obs[mask], exp[mask], var[mask]
+    zero_mask = var == 0
+    obs, exp, var = obs[~zero_mask], exp[~zero_mask], var[~zero_mask]
     n = obs.shape[0]
     if n == 0:
         return float("nan")

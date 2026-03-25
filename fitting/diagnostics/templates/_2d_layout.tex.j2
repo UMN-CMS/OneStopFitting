@@ -1,66 +1,121 @@
-[- set signal_path = image_paths["signal"] -]
-[- set observed_path = image_paths["observed"] -]
-[- set predvar_path = image_paths["predvar"] -]
-[- set gpr_path = image_paths["gpr"] -]
-[- set pulls_2d_path = image_paths["pulls"] -]
-[- set ppc_map_path = image_paths["ppc_map"] -]
-[- set ppc_blinded_path = image_paths["ppc_blinded"] -]
+%% ============================================================
+%%  GPR point summary template
+%% ============================================================
+
+[- set signal_path       = image_paths["signal"]       -]
+[- set observed_path     = image_paths["observed"]      -]
+[- set gpr_path          = image_paths["gpr"]           -]
+[- set pulls_2d_path     = image_paths["pulls"]         -]
+[- set ppc_map_path      = image_paths["ppc_map"]       -]
+[- set predvar_path      = image_paths["predvar"]       -]
+[- set ppc_blinded_path  = image_paths["ppc_blinded"]   -]
 [- set ppc_unblinded_path = image_paths["ppc_unblinded"] -]
+[- set covar_center_path = image_paths["covar_center"]  -]
+[- set rel_unc_path      = image_paths["rel_unc"]       -]
+[- set total_pulls_path  = image_paths["total_pulls"]   -]
 
-\begin{tabularx}{\textwidth}{@{}L L L@{}}
-\includegraphics[width=\linewidth]{ [[ signal_path ]]} &
-\includegraphics[width=\linewidth]{ [[ observed_path ]]} &
-\includegraphics[width=\linewidth]{ [[ gpr_path ]]} \\
+%% ------------------------------------------------------------
+%%  Display-name map: avoids raw underscore escaping in tables
+%% ------------------------------------------------------------
+[- set metric_labels = {
+    "global_chi2_per_bin":   "Global $\\chi^2$/bin",
+    "blinded_chi2_per_bin":  "Blinded $\\chi^2$/bin",
+    "global_chi2_pred_var":  "Global $\\chi^2$ pred.\ var"
+} -]
+
+%% ============================================================
+%%  Row 1 — Signal template | Observed | GP Mean Prediction
+%% ============================================================
+\begin{tabularx}{\textwidth}{@{\hspace{2pt}} L @{\hspace{4pt}} L @{\hspace{4pt}} L @{\hspace{2pt}}}
+  \includegraphics[width=\linewidth]{[[ signal_path ]]}  &
+  \includegraphics[width=\linewidth]{[[ observed_path ]]} &
+  \includegraphics[width=\linewidth]{[[ gpr_path ]]}     \\
+  \centering\scriptsize Signal Template &
+  \centering\scriptsize Observed        &
+  \centering\scriptsize GP Mean Prediction \\
 \end{tabularx}
 
-\vspace{0.25em}
+\smallskip\noindent\textcolor{gray!60}{\rule{\textwidth}{0.3pt}}\smallskip
 
-\begin{tabularx}{\textwidth}{@{}L L L@{}}
-\includegraphics[width=\linewidth]{ [[ pulls_2d_path ]]} &
-\includegraphics[width=\linewidth]{ [[ ppc_map_path ]]} &
-\includegraphics[width=\linewidth]{ [[ ppc_blinded_path ]]} \\
+%% ============================================================
+%%  Row 2 — Pull Map | PPC Predictive Mean | Pred. Variance
+%% ============================================================
+\begin{tabularx}{\textwidth}{@{\hspace{2pt}} L @{\hspace{4pt}} L @{\hspace{4pt}} L @{\hspace{2pt}}}
+  \includegraphics[width=\linewidth]{[[ pulls_2d_path ]]} &
+  \includegraphics[width=\linewidth]{[[ ppc_map_path ]]}  &
+  \includegraphics[width=\linewidth]{[[ predvar_path ]]}  \\
+  \centering\scriptsize Pull Map &
+  \centering\scriptsize PPC Predictive Mean &
+  \centering\scriptsize Predictive Variance \\
 \end{tabularx}
 
-\vspace{0.25em}
+\smallskip\noindent\textcolor{gray!60}{\rule{\textwidth}{0.3pt}}\smallskip
 
-\begin{tabularx}{\textwidth}{@{}L L L@{}}
-\begin{minipage}[t]{\linewidth}
-\small
-\textbf{Key metrics}\par
-\vspace{0.2em}
-\begin{tabular}{@{}l r@{}}
-\toprule
-Metric & Value \\
-\midrule
-[- for key in ["global_chi2_per_bin", "blinded_chi2_per_bin", "global_chi2_pred_var"] -]
-[- if metrics.get(key) is not none -]
-[- set key_safe_2d = key | replace("_", "\\_") -]
-[- set key_value_2d = "%.4g"|format(metrics.get(key)) -]
-[[ key_safe_2d ]] & [[ key_value_2d ]] \\
-[- endif -]
-[- endfor -]
-\bottomrule
-\end{tabular}
-\end{minipage}
-&
-\begin{minipage}[t]{\linewidth}
-\small
-\textbf{PPC (chi2)}\par
-\vspace{0.2em}
-\begin{tabular}{@{}l r@{}}
-\toprule
-Region & p-value \\
-\midrule
-[- set chi2_2d = ppc.get("test_stats", {}).get("chi2", {}) -]
-[- for region in ["blinded", "unblinded"] -]
-[- if chi2_2d.get(region) is not none -]
-[- set pvalue_2d = "%.3f"|format(chi2_2d.get(region, {}).get("pvalue", 0.0)) -]
-[[ region ]] & [[ pvalue_2d ]] \\
-[- endif -]
-[- endfor -]
-\bottomrule
-\end{tabular}
-\end{minipage}
-&
-\includegraphics[width=\linewidth]{ [[ ppc_unblinded_path ]] } \\
+%% ============================================================
+%%  Row 3 — PPC plots (paired) + summary tables
+%%
+%%  Layout:  [blinded PPC | unblinded PPC | metrics + PPC table]
+%%  Ensuring top-alignment for all three columns so they share
+%%  the same vertical space and captions follow immediately.
+%% ============================================================
+\begin{tabularx}{\textwidth}{@{\hspace{2pt}} L @{\hspace{4pt}} L @{\hspace{4pt}} L @{\hspace{2pt}}}
+
+  %% -- Blinded PPC histogram ----------------------------------
+  \begin{minipage}[t]{\linewidth}\vspace{0pt}\includegraphics[width=\linewidth]{[[ ppc_blinded_path ]]}\end{minipage} &
+
+  %% -- Unblinded PPC histogram --------------------------------
+  \begin{minipage}[t]{\linewidth}\vspace{0pt}\includegraphics[width=\linewidth]{[[ ppc_unblinded_path ]]}\end{minipage} &
+
+  %% -- Summary tables (stacked vertically) -------------------
+  \begin{minipage}[t]{\linewidth}\vspace{0pt}
+    \small\textbf{Key metrics}\par
+    \vspace{0.3em}
+    \begin{tabular}{@{} l r @{}}
+      \toprule
+      Metric & Value \\
+      \midrule
+      [- for key in ["global_chi2_per_bin", "blinded_chi2_per_bin", "global_chi2_pred_var"] -]
+      [- if metrics.get(key) is not none -]
+      [[ metric_labels[key] ]] & [[ "%.4g" | format(metrics[key]) ]] \\
+      [- endif -]
+      [- endfor -]
+      \bottomrule
+    \end{tabular}
+
+    \vspace{0.8em}
+
+    % ---- PPC (chi2) table -----------------------------------
+    \small\textbf{PPC ($\chi^2$)}\par
+    \vspace{0.3em}
+    [- set chi2_2d = ppc.get("test_stats", {}).get("chi2", {}) -]
+    \begin{tabular}{@{} l r @{}}
+      \toprule
+      Region & $p$-value \\
+      \midrule
+      [- for region in ["blinded", "unblinded"] -]
+      [- if chi2_2d.get(region) is not none -]
+      [- set pval = chi2_2d[region].get("pvalue", 0.0) -]
+      \textit{[[ region ]]} & [[ "%.3f" | format(pval) ]] \\
+      [- endif -]
+      [- endfor -]
+      \bottomrule
+    \end{tabular}
+  \end{minipage} \\
+  \centering\scriptsize Blinded PPC ($\chi^2$) &
+  \centering\scriptsize Unblinded PPC ($\chi^2$) &
+  \\
+\end{tabularx}
+
+\smallskip\noindent\textcolor{gray!60}{\rule{\textwidth}{0.3pt}}\smallskip
+
+%% ============================================================
+%%  Row 4 — Covariance (center) | Relative Uncertainty | Total Pulls
+%% ============================================================
+\begin{tabularx}{\textwidth}{@{\hspace{2pt}} L @{\hspace{4pt}} L @{\hspace{4pt}} L @{\hspace{2pt}}}
+  \includegraphics[width=\linewidth]{[[ covar_center_path ]]} &
+  \includegraphics[width=\linewidth]{[[ rel_unc_path ]]}      &
+  \includegraphics[width=\linewidth]{[[ total_pulls_path ]]}  \\
+  \centering\scriptsize Covariance (center) &
+  \centering\scriptsize Relative Uncertainty &
+  \centering\scriptsize Total Pulls \\
 \end{tabularx}

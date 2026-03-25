@@ -63,7 +63,7 @@ class OptimizationConfig:
     mode: InferenceMode = InferenceMode.OPTIMIZATION
     lr: float = 0.1
     num_iters: int = 200
-    optimizer: OptimizerType = OptimizerType.ADAMW
+    optimizer: OptimizerType = OptimizerType.ADAM
     objective: ObjectiveType = ObjectiveType.MLL
     mcmc: MCMCConfig = attrs.Factory(MCMCConfig)
     two_stage: TwoStageConfig = attrs.Factory(TwoStageConfig)
@@ -80,7 +80,7 @@ def _buildOptimizer(config: OptimizationConfig) -> optax.GradientTransformation:
         OptimizerType.ADAM: optax.adam,
         OptimizerType.ADAMW: optax.adamw,
         OptimizerType.SGD: optax.sgd,
-    }[config.optimizer](learning_rate=config.lr, weight_decay=config.weight_decay)
+    }[config.optimizer](learning_rate=config.lr)  # , weight_decay=config.weight_decay)
 
     if config.lr_schedule_gamma is not None:
         step = config.lr_schedule_step or config.num_iters

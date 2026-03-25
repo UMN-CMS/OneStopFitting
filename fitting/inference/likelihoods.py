@@ -40,6 +40,7 @@ class LikelihoodConfig(ABC):
             return param_type(value, prior=prior_config.buildPrior())
         return value
 
+
 @attrs.define
 class UniformGaussianNoiseConfig(LikelihoodConfig):
     """Homoscedastic Gaussian likelihood with a single learned scalar variance."""
@@ -66,6 +67,7 @@ class FixedGaussianNoiseConfig(LikelihoodConfig):
         from flax import nnx
 
         obs_var = kwargs["obs_variance"]
+        # obs_var = jnp.clip(obs_var, a_min=jnp.max(obs_var) / 10)
         obs_var = jnp.clip(obs_var, a_min=jnp.min(obs_var[obs_var > 0]))
         variances = jnp.atleast_1d(obs_var).reshape(-1)
         likelihood = gpl.Gaussian(
