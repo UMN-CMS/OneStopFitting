@@ -111,6 +111,7 @@ def trainModel(state: AnalysisState, rng_key: jax.Array) -> AnalysisState:
     state = preprocess(state, min_counts=state.config.min_counts)
     transform = computeNormalization(state.train_data, config=state.config.transform)
     norm_train = transform.applyToBinnedData(state.train_data)
+
     state = attrs.evolve(state, transform=transform)
     mean_cfg = state.config.model.mean_function
     pre_fit_mean = None
@@ -137,6 +138,7 @@ def trainModel(state: AnalysisState, rng_key: jax.Array) -> AnalysisState:
         rngs=nnx.Rngs(build_key),
         mean_function=pre_fit_mean,
         domain_mask=state.domain_mask,
+        signal_data=transform.applyToBinnedData(state.signal) if state.signal is not None else None,
     )
 
     logger.info(f"  Training on {dataset.n} data points")

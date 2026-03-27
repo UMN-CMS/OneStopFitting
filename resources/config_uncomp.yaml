@@ -4,6 +4,11 @@ window_spread: 1.75
 optimization:
   num_iters: 250
   lr: 0.01
+  objective: mll
+  optimizer: adam
+  map_prior_strength: 1.0
+  use_map_priors: true
+
 
 domain_window:
   _type: AndWindow
@@ -17,9 +22,26 @@ domain_window:
       upper: 0.8
       
 model: 
+  #_type: SparseGPConfig
   _type: ExactGPConfig
   kernel: 
     _type: NNKernelConfig
+    # base_kernel_config:
+    #   _type: RBFConfig
+    #   variance_prior:
+    #     _type: LogNormalPriorConfig
+    #     loc: 0.5
+    #     scale: 0.5
+
+    # weight_prior:
+    #   _type: NormalPriorConfig
+    #   loc: 0.0
+    #   scale: 1.0
+    # bias_prior:
+    #   _type: NormalPriorConfig
+    #   loc: 0.0
+    #   scale: 1.0
+      
   mean_function: 
     _type: ZeroMeanConfig
     

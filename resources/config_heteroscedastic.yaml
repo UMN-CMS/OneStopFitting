@@ -1,0 +1,30 @@
+injection_rate: 0.0
+min_counts: 1.0
+window_spread: 1.25
+optimization:
+  num_iters: 150
+  lr: 0.01
+  mode: optimization
+
+domain_window:
+  _type: AndWindow
+  windows:
+    - _type: CutWindow
+      axis: 0
+      lower: 700
+    - _type: CutWindow
+      axis: 1
+      lower: 0.1
+      upper: 0.8
+
+model: 
+  _type: ExactGPConfig
+  kernel: 
+    _type: Matern32Config
+    ard: true
+  
+  likelihood:
+    _type: HeteroscedasticGaussianConfig
+  
+  mean_function:
+    _type: ZeroMeanConfig

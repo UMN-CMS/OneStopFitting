@@ -8,6 +8,6 @@ optimization:
 model: 
   _type: ExactGPConfig
   kernel: 
-    _type: RBFConfig
+    _type: NNKernelConfig
     
     

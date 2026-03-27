@@ -14,6 +14,8 @@ from .core.data import AnalysisState
 from .core.serialization import save
 from .core.transforms import (
     StandardizationConfig,
+    SqrtStandardizationConfig,
+    SqrtConfig,
     TransformConfig,
 )
 from .data.windowing import Window

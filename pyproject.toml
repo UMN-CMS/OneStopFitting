@@ -11,6 +11,7 @@ dependencies = [
  "gpjax>=0.13.6",
  "hist>=2.10.1",
  "jax>=0.9.1",
+ "jinja2>=3.1.6",
  "lz4>=4.4.5",
  "matplotlib>=3.10.8",
  "mplhep>=1.1.2",
