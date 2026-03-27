@@ -95,8 +95,10 @@ def save(state: AnalysisState, path: Path) -> None:
 
     # Save summary as JSON
     summary = {
+        "config": converter.unstructure(state.config),
         "metadata": converter.unstructure(state.metadata),
     }
+
     if state.diagnostic_metrics is not None:
         summary["metrics"] = converter.unstructure(state.diagnostic_metrics)
 
