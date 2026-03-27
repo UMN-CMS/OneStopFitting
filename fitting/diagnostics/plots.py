@@ -97,6 +97,8 @@ def makeDiagnosticPlots(
             signal_template=signal_template,
             prior_mean=prior_mean,
             pred_cov=pred_cov,
+            kernel=kernel,
+            transform=transform,
         )
     else:
         raise NotImplementedError(

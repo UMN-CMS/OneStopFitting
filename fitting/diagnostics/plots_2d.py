@@ -21,6 +21,8 @@ def makeDiagnosticPlots2D(
     signal_template: BinnedData | None = None,
     prior_mean: jnp.ndarray | None = None,
     pred_cov: jnp.ndarray | None = None,
+    kernel: Any | None = None,
+    transform: Any | None = None,
 ) -> dict[str, tuple]:
     ret = {}
     edges = test_data.edges
@@ -172,6 +174,39 @@ def makeDiagnosticPlots2D(
             X[abs_idx, 0], X[abs_idx, 1], color="red", marker="x", s=100, label="Center"
         )
         ret["covariance_at_blind_center"] = (fig, ax)
+
+        # --- Kernel at blinding center ---
+        if kernel is not None:
+            # We use the same center point logic as the covariance plot
+            x_norm = test_data.X
+            if transform is not None:
+                x_norm = transform.applyX(test_data.X)
+
+            center_pt = x_norm[abs_idx : abs_idx + 1]
+            try:
+                # Most GPJax kernels support cross_covariance
+                kernel_values = np.asarray(kernel.cross_covariance(center_pt, x_norm)).ravel()
+
+                fig, ax = plt.subplots(layout="tight")
+                plotRaw(ax, edges, X, kernel_values)
+                ax.set_title("Prior Kernel at Blinding Center")
+                if test_data.axis_names and len(test_data.axis_names) >= 2:
+                    ax.set_xlabel(test_data.axis_names[0])
+                    ax.set_ylabel(test_data.axis_names[1])
+                plotBlinding2D(ax, edges, X, blind_mask)
+                # Mark the center point
+                ax.scatter(
+                    X[abs_idx, 0],
+                    X[abs_idx, 1],
+                    color="red",
+                    marker="x",
+                    s=100,
+                    label="Center",
+                )
+                ret["kernel_at_blind_center"] = (fig, ax)
+            except Exception:
+                # Silent failure for diagnostic plots if kernel doesn't support cross_covariance
+                pass
 
     # --- Pull histograms ---
     bins = np.linspace(-5.0, 5.0, 21)
