@@ -9,8 +9,12 @@ import jax
 import jax.numpy as jnp
 import jax.scipy.stats
 from flax import nnx
+from typing import Any
 
 from ..data.loading import FileLoader, extractHistogram, histToBinnedData
+from ..data.windowing import fitGaussianWindow
+
+from .priors import PriorConfig
 
 logger = logging.getLogger(__name__)
 
@@ -625,3 +629,109 @@ class QCDMCMeanConfig(MeanFunctionConfig):
             learn_tilt=self.learn_tilt,
             ndim=ndim,
         )
+
+
+class InterpolatedSignalMeanFunction(gpjax.mean_functions.AbstractMeanFunction):
+    _signal_x: jnp.ndarray = nnx.data()
+    _signal_y: jnp.ndarray = nnx.data()
+
+    def __init__(self, signal_x: jnp.ndarray, signal_y: jnp.ndarray, prior: Any = None):
+        super().__init__()
+        self._signal_x = jax.lax.stop_gradient(signal_x)
+        self._signal_y = jax.lax.stop_gradient(signal_y)
+        self.amplitude = gpjax.parameters.Real(jnp.array(1.0), prior=prior)
+
+    def interpolateSignal(self, x: jnp.ndarray) -> jnp.ndarray:
+        diffs = x[:, None, :] - self._signal_x[None, :, :]
+        dists = jnp.sum(diffs**2, axis=-1)
+        nearest = jnp.argmin(dists, axis=-1)
+        return self._signal_y[nearest]
+
+    def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
+        signal_shape = self.interpolateSignal(x)
+        return (self.amplitude.value * signal_shape).reshape(-1, 1)
+
+
+class GaussianFitSignalMeanFunction(gpjax.mean_functions.AbstractMeanFunction):
+    _shape_amplitude: jnp.ndarray = nnx.data()
+    _center: jnp.ndarray = nnx.data()
+    _sigma: jnp.ndarray = nnx.data()
+    _theta: float = nnx.data()
+    _normalization_scale: jnp.ndarray = nnx.data()
+
+    def __init__(
+        self,
+        shape_amplitude: jnp.ndarray,
+        center: jnp.ndarray,
+        sigma: jnp.ndarray,
+        theta: float,
+        normalization_scale: jnp.ndarray,
+        prior: Any = None,
+    ):
+        super().__init__()
+        self._shape_amplitude = jax.lax.stop_gradient(shape_amplitude)
+        self._center = jax.lax.stop_gradient(center)
+        self._sigma = jax.lax.stop_gradient(sigma)
+        self._theta = jax.lax.stop_gradient(theta)
+        self._normalization_scale = jax.lax.stop_gradient(normalization_scale)
+        self.amplitude = gpjax.parameters.Real(jnp.array(1.0), prior=prior)
+
+    def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
+        x_norm = x / self._normalization_scale
+        ndim = x_norm.shape[-1] if x_norm.ndim > 1 else 1
+
+        if ndim == 1:
+            g = self._shape_amplitude * jnp.exp(-(((x_norm - self._center) / self._sigma) ** 2))
+            if g.ndim == 2 and g.shape[-1] == 1:
+                g = g.squeeze(-1)
+        else:
+            x_, y_ = x_norm[..., 0], x_norm[..., 1]
+            xo, yo = self._center[0], self._center[1]
+            sx, sy = self._sigma[0], self._sigma[1]
+            theta = self._theta
+
+            a = jnp.cos(theta) ** 2 / (2 * sx**2) + jnp.sin(theta) ** 2 / (2 * sy**2)
+            b = -jnp.sin(2 * theta) / (4 * sx**2) + jnp.sin(2 * theta) / (4 * sy**2)
+            c = jnp.sin(theta) ** 2 / (2 * sx**2) + jnp.cos(theta) ** 2 / (2 * sy**2)
+            g = self._shape_amplitude * jnp.exp(
+                -(a * (x_ - xo) ** 2 + 2 * b * (x_ - xo) * (y_ - yo) + c * (y_ - yo) ** 2)
+            )
+
+        return (self.amplitude.value * g).reshape(-1, 1)
+
+
+@attrs.define
+class SignalTemplateMeanConfig(MeanFunctionConfig):
+    use_gaussian_fit: bool = False
+    amplitude_prior: PriorConfig | None = None
+
+    def buildMeanFunction(
+        self, ndim: int, kernel: gpjax.kernels.AbstractKernel, **kwargs
+    ) -> gpjax.mean_functions.AbstractMeanFunction:
+        signal_data = kwargs.get("signal_data")
+        if signal_data is None:
+            raise ValueError("SignalTemplateMeanConfig requires 'signal_data' provided in kwargs from the pipeline")
+
+        # Apply domain mask if provided
+        domain_mask = kwargs.get("domain_mask", None)
+        if domain_mask is not None:
+            masked_data = signal_data.masked(domain_mask)
+        else:
+            masked_data = signal_data
+
+        prior_dist = self.amplitude_prior.buildPrior() if self.amplitude_prior is not None else None
+
+        if self.use_gaussian_fit:
+            window = fitGaussianWindow(masked_data)
+            return GaussianFitSignalMeanFunction(
+                shape_amplitude=window.amplitude,
+                center=window.center,
+                sigma=window.sigma,
+                theta=window.theta or 0.0,
+                normalization_scale=window.normalization_scale,
+                prior=prior_dist,
+            )
+        else:
+            return InterpolatedSignalMeanFunction(
+                signal_x=masked_data.X, signal_y=masked_data.Y, prior=prior_dist
+            )

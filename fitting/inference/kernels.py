@@ -62,7 +62,13 @@ class KernelConfig(ABC):
     ) -> Any:
         """Wrap a parameter value with a prior if present."""
         if prior_config is not None:
-            return param_type(value, prior=prior_config.buildPrior())
+            prior = prior_config.buildPrior()
+            val_array = jnp.array(value)
+            if val_array.ndim > 0 and val_array.size > 1:
+                if prior.batch_shape == () and prior.event_shape == ():
+                    prior = prior.expand(val_array.shape).to_event(val_array.ndim)
+
+            return param_type(value, prior=prior)
         return value
 
 
@@ -274,14 +280,37 @@ class Network(nnx.Module):
         output_dim: int,
         shape: list[int],
         activation_name: str = "silu",
+        weight_prior: PriorConfig | None = None,
+        bias_prior: PriorConfig | None = None,
     ) -> None:
+        def wrap_layer(layer: nnx.Linear):
+            if weight_prior:
+                prior = weight_prior.buildPrior()
+                val = layer.kernel.value
+                if val.ndim > 0 and val.size > 1:
+                    if prior.batch_shape == () and prior.event_shape == ():
+                        prior = prior.expand(val.shape).to_event(val.ndim)
+                layer.kernel = gpp.Real(val, prior=prior)
+
+            if bias_prior:
+                prior = bias_prior.buildPrior()
+                val = layer.bias.value
+                if val.ndim > 0 and val.size > 1:
+                    if prior.batch_shape == () and prior.event_shape == ():
+                        prior = prior.expand(val.shape).to_event(val.ndim)
+                layer.bias = gpp.Real(val, prior=prior)
+
         self.in_layer = nnx.Linear(input_dim, shape[0], rngs=rngs)
+        wrap_layer(self.in_layer)
+
         self.layers = nnx.List(
             [
                 nnx.Linear(shape[i], shape[i + 1], rngs=rngs)
                 for i in range(len(shape) - 1)
             ]
         )
+        for layer in self.layers:
+            wrap_layer(layer)
 
         self.out_layer = nnx.Linear(
             shape[-1],
@@ -290,6 +319,8 @@ class Network(nnx.Module):
             kernel_init=nnx.initializers.zeros,
             bias_init=nnx.initializers.zeros,
         )
+        wrap_layer(self.out_layer)
+
         self.activation_name = activation_name
         self.rngs = rngs
 
@@ -329,6 +360,8 @@ class NNKernelConfig(KernelConfig):
     output_dim: int = 2
     hidden_shapes: list[int] = attrs.Factory(lambda: [20, 20])
     activation: str = "silu"
+    weight_prior: PriorConfig | None = None
+    bias_prior: PriorConfig | None = None
 
     def buildKernel(
         self, ndim: int, rngs: nnx.Rngs | None = None, **kwargs
@@ -342,6 +375,8 @@ class NNKernelConfig(KernelConfig):
             output_dim=self.output_dim,
             shape=self.hidden_shapes,
             activation_name=self.activation,
+            weight_prior=self.weight_prior,
+            bias_prior=self.bias_prior,
         )
         return DeepKernelFunction(
             base_kernel=base_kernel,

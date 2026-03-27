@@ -67,12 +67,15 @@ class OptimizationConfig:
     objective: ObjectiveType = ObjectiveType.MLL
     mcmc: MCMCConfig = attrs.Factory(MCMCConfig)
     two_stage: TwoStageConfig = attrs.Factory(TwoStageConfig)
-    use_map_priors: bool = False
+    use_map_priors: bool = True
+    map_prior_strength: float = 1.0
     log_interval: int = 50
     weight_decay: float = 1e-4
 
     lr_schedule_gamma: float | None = None
     lr_schedule_step: int | None = None
+    # l2_regularization_strength: float = 0.0
+    # use_l2_regularization: bool = False
 
 
 def _buildOptimizer(config: OptimizationConfig) -> optax.GradientTransformation:
@@ -189,6 +192,10 @@ def runMLE(
         f"lr={config.lr}, optimizer={config.optimizer.value}, "
         f"objective={config.objective.value}, use_priors={use_priors}"
     )
+    # if config.use_l2_regularization and config.l2_regularization_strength > 0:
+    #     logger.info(
+    #         f"L2 regularization enabled with strength={config.l2_regularization_strength}"
+    #     )
 
     if use_priors:
         log_prior_fn = _build_log_prior_fn(posterior)
@@ -197,13 +204,14 @@ def runMLE(
             nlml = -jnp.sum(base_objective(model, data))
 
             log_prior = log_prior_fn(model)
-            jax.debug.print("Log prior: {}", log_prior)
-            return nlml - log_prior
+            # jax.debug.print("Log prior: {}", config.map_prior_strength * log_prior)
+            return nlml - config.map_prior_strength * log_prior
 
     else:
 
         def objective(p, d):
-            return -jnp.sum(base_objective(p, d))
+            base_loss = -jnp.sum(base_objective(p, d))
+            return base_loss
 
     trainable = (gpjax.parameters.Parameter, nnx.Param)
 
@@ -344,6 +352,9 @@ def runTwoStageFit(
     parameter_filter = (gpjax.parameters.Parameter, nnx.Param)
     for path, node in nnx.graph.iter_graph(mean_fn):
         if isinstance(node, parameter_filter):
+            if path and path[-1] == "amplitude":
+                # Do not freeze amplitude so it is fit simultaneously with the background
+                continue
             original_mean_params[path] = node
             setAtPath(mean_fn, path, nnx.Variable(node.value))
 
@@ -437,6 +448,9 @@ def runHomoscedasticTwoStageFit(
     original_mean_params = {}
     for path, node in nnx.graph.iter_graph(learned_mean):
         if isinstance(node, parameter_filter):
+            if path and path[-1] == "amplitude":
+                # Do not freeze amplitude
+                continue
             original_mean_params[path] = node
             setAtPath(learned_mean, path, nnx.Variable(node.value))
 
