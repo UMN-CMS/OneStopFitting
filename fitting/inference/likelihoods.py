@@ -58,17 +58,30 @@ class UniformGaussianNoiseConfig(LikelihoodConfig):
 class FixedGaussianNoiseConfig(LikelihoodConfig):
     """Gaussian likelihood with fixed per-bin variance."""
 
+    variance_floor_quantile: float = 0.5
+
     def buildLikelihood(self, **kwargs) -> gpl.AbstractLikelihood:
         if "obs_variance" not in kwargs or kwargs["obs_variance"] is None:
             raise ValueError(
                 "FixedGaussianNoiseConfig requires an 'obs_variance' array."
             )
+        import logging
         import jax.numpy as jnp
         from flax import nnx
 
+        logger = logging.getLogger(__name__)
+
         obs_var = kwargs["obs_variance"]
-        # obs_var = jnp.clip(obs_var, a_min=jnp.max(obs_var) / 10)
-        obs_var = jnp.clip(obs_var, a_min=jnp.min(obs_var[obs_var > 0]))
+        positive_vars = obs_var[obs_var > 0]
+        floor = jnp.percentile(positive_vars, self.variance_floor_quantile * 100)
+        n_clipped = int(jnp.sum(obs_var < floor))
+        logger.info(
+            f"Variance floor: {float(floor):.6f} "
+            f"(quantile={self.variance_floor_quantile}), "
+            f"clipping {n_clipped}/{len(obs_var.ravel())} bins"
+        )
+
+        obs_var = jnp.clip(obs_var, a_min=floor)
         variances = jnp.atleast_1d(obs_var).reshape(-1)
         likelihood = gpl.Gaussian(
             num_datapoints=kwargs["num_datapoints"],
