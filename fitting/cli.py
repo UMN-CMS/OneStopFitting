@@ -266,7 +266,6 @@ def smooth(state: Path, output: Path, seed: int, num_samples: int) -> None:
             "item": hists[0] if num_samples == 1 else hists,
             "metadata": analysis_state.background_metadata,
         }
-        print(to_save)
         pickle.dump(to_save, f)
 
     logger.info(f"Smoothed background saved to {output}")
