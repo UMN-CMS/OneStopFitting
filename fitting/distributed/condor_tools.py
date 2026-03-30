@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 
 from .file_tools import tarDirectory, tarFiles
+from ..utils import getSignal, getCategory
 from attrs import define
 from jinja2 import Environment
 import fitting
@@ -147,18 +148,6 @@ def compressNeededFiles(
 
     logger.info(f"Needed files: {transfer_input_files}")
     return transfer_input_files
-
-
-def getSignal(path):
-    match = re.search(r"signal_.+_(31\d)_(\d+)_(\d+)", str(path))
-    return [match.group(1), int(match.group(2)), int(match.group(3))]
-
-
-def getCategory(mstop, mchi):
-    if mchi / mstop > 0.7:
-        return "comp"
-    else:
-        return "uncomp"
 
 
 def getJobs(

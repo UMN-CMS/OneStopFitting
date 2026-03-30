@@ -1,5 +1,6 @@
 import itertools as it
 from collections.abc import Mapping, Iterator, MutableMapping, Generator
+import re
 from collections import OrderedDict
 from attrs import asdict
 import string
@@ -79,3 +80,17 @@ def evolveCombos(obj, **kwargs):
             yield updated
         else:
             yield type(obj)(updated)
+
+
+def getSignal(path):
+    match = re.search(r"signal_.+_(31\d)_(\d+)_(\d+)", str(path))
+    return [match.group(1), int(match.group(2)), int(match.group(3))]
+
+
+def getCategory(mstop, mchi):
+    if mstop < (0.6 * mchi + 150):
+        return "uncomp"
+    if mstop < (0.75 * mchi + 150):
+        return "comp"
+    else:
+        return "verycomp"
