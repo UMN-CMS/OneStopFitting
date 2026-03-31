@@ -153,6 +153,24 @@ class StandardizationConfig(TransformConfig):
 
 
 @attrs.define
+class NormalizeAxes(TransformConfig):
+    def buildTransform(self, data: BinnedData) -> DataTransformation:
+        X = data.X
+        x_min = jnp.min(X, axis=0)
+        x_max = jnp.max(X, axis=0)
+        x_range = x_max - x_min
+
+        transform_x = AffineTransform(
+            loc=-x_min / x_range,
+            scale=1.0 / x_range,
+        )
+
+        transform_y = ComposeTransform([AffineTransform(loc=0.0, scale=1.0)])
+
+        return DataTransformation(transform_x=transform_x, transform_y=transform_y)
+
+
+@attrs.define
 class SqrtStandardizationConfig(TransformConfig):
     def buildTransform(self, data: BinnedData) -> DataTransformation:
         X, Y = data.X, data.Y

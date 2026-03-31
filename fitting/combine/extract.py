@@ -4,7 +4,6 @@ import logging
 import re
 from pathlib import Path
 from typing import Callable
-
 import uproot
 
 logger = logging.getLogger(__name__)
@@ -37,6 +36,14 @@ def extractSignificance(tree: uproot.TTree) -> dict:
 
     if len(limit_vals) > 0:
         return {"significance": float(limit_vals[0])}
+    return {}
+
+
+def extractGOFToys(tree: uproot.TTree) -> dict:
+    limit_vals = tree["limit"].array()
+
+    if len(limit_vals):
+        return {"gof_test_statistic_toys": [float(val) for val in limit_vals]}
     return {}
 
 
@@ -79,6 +86,7 @@ def extractMultiDimFit(tree: uproot.TTree) -> dict:
 EXTRACTORS: list[tuple[re.Pattern, Callable[[uproot.TTree], dict]]] = [
     (re.compile(r"\.AsymptoticLimits\."), extractLimits),
     (re.compile(r"\.Significance\."), extractSignificance),
+    (re.compile(r"toys.*\.GoodnessOfFit\."), extractGOFToys),
     (re.compile(r"\.GoodnessOfFit\."), extractGof),
     (re.compile(r"\.FitDiagnostics\."), extractFitDiagnostics),
     (re.compile(r"\.MultiDimFit\."), extractMultiDimFit),
@@ -104,7 +112,9 @@ def extractCombineResults(combine_dir: Path) -> dict:
             logger.debug(f"No extractor found for {file_name}, skipping.")
             continue
 
-        logger.info(f"Extracting results from {file_name}")
+        logger.info(
+            f"Extracting results from {file_name} using {matched_extractor.__name__}"
+        )
         try:
             with uproot.open(root_file) as f:
                 if "limit;1" not in f:

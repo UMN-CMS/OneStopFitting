@@ -67,7 +67,7 @@ class OptimizationConfig:
     objective: ObjectiveType = ObjectiveType.MLL
     mcmc: MCMCConfig = attrs.Factory(MCMCConfig)
     two_stage: TwoStageConfig = attrs.Factory(TwoStageConfig)
-    use_map_priors: bool = True
+    use_map_priors: bool = False
     map_prior_strength: float = 1.0
     log_interval: int = 50
     weight_decay: float = 1e-4
@@ -204,7 +204,7 @@ def runMLE(
             nlml = -jnp.sum(base_objective(model, data))
 
             log_prior = log_prior_fn(model)
-            # jax.debug.print("Log prior: {}", config.map_prior_strength * log_prior)
+            jax.debug.print("Log prior: {}", config.map_prior_strength * log_prior)
             return nlml - config.map_prior_strength * log_prior
 
     else:

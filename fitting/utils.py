@@ -88,9 +88,9 @@ def getSignal(path):
 
 
 def getCategory(mstop, mchi):
-    if mstop < (0.6 * mchi + 150):
+    if mchi < (0.6 * mstop + 150):
         return "uncomp"
-    if mstop < (0.75 * mchi + 150):
+    if mchi < (0.75 * mstop + 150):
         return "comp"
     else:
         return "verycomp"

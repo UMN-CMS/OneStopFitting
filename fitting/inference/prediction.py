@@ -9,6 +9,7 @@ from numpyro.infer import Predictive
 
 from ..core.data import BinnedData
 from ..core.transforms import DataTransformation
+from gpjax.variational_families import VariationalGaussian
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +19,10 @@ def computePrediction(
     dataset_train: Any,
     test_X: jnp.ndarray,
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
-    latent_dist = posterior.predict(test_X, train_data=dataset_train)
+    if isinstance(posterior, VariationalGaussian):
+        latent_dist = posterior(test_X)
+    else:
+        latent_dist = posterior.predict(test_X, train_data=dataset_train)
     mean = latent_dist.mean.ravel()
     cov = latent_dist.covariance()
     return mean, cov
@@ -122,6 +126,8 @@ def getPriorMeanInRealSpace(
     samples: dict[str, jnp.ndarray] | None = None,
     rng_key: jax.Array | None = None,
 ) -> jnp.ndarray:
+    if isinstance(posterior, VariationalGaussian):
+        posterior = posterior.posterior
     norm_test_X = transform.applyX(test_data.X)
     mean_fn = posterior.prior.mean_function
 

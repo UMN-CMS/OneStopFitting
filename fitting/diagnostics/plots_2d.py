@@ -3,6 +3,7 @@ from __future__ import annotations
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
+import matplotlib.colors as colors
 
 import itertools as it
 from ..core.data import BinnedData
@@ -74,6 +75,16 @@ def makeDiagnosticPlots2D(
         ax.set_ylabel(test_data.axis_names[1])
     plotBlinding2D(ax, edges, X, blind_mask)
     ret["observed_outputs"] = (fig, ax)
+
+    fig, ax = plt.subplots(layout="tight")
+    log_norm = colors.LogNorm(vmin=obs_Y.min(), vmax=obs_Y.max())
+    plotRaw(ax, edges, X, obs_Y, norm=log_norm)
+    ax.set_title("Observed (log)")
+    if test_data.axis_names and len(test_data.axis_names) >= 2:
+        ax.set_xlabel(test_data.axis_names[0])
+        ax.set_ylabel(test_data.axis_names[1])
+    plotBlinding2D(ax, edges, X, blind_mask)
+    ret["observed_outputs_log"] = (fig, ax)
 
     # --- Signal (if provided) ---
     if signal_data is not None:
@@ -185,7 +196,9 @@ def makeDiagnosticPlots2D(
             center_pt = x_norm[abs_idx : abs_idx + 1]
             try:
                 # Most GPJax kernels support cross_covariance
-                kernel_values = np.asarray(kernel.cross_covariance(center_pt, x_norm)).ravel()
+                kernel_values = np.asarray(
+                    kernel.cross_covariance(center_pt, x_norm)
+                ).ravel()
 
                 fig, ax = plt.subplots(layout="tight")
                 plotRaw(ax, edges, X, kernel_values)
@@ -238,6 +251,7 @@ def makePosteriorPredictivePlots2D(
     ppc_results: dict[str, Any],
     test_data: BinnedData,
     blind_mask: jnp.ndarray | None = None,
+    prefix: str = "ppc",
 ) -> dict[str, tuple]:
     ret = {}
     edges = test_data.edges
@@ -253,7 +267,7 @@ def makePosteriorPredictivePlots2D(
         ax.set_xlabel(test_data.axis_names[0])
         ax.set_ylabel(test_data.axis_names[1])
     plotBlinding2D(ax, edges, X, blind_mask)
-    ret["ppc_mean_map"] = (fig, ax)
+    ret["{prefix}_mean_map"] = (fig, ax)
 
     fig, ax = plt.subplots(layout="tight")
     plotRaw(ax, edges, X, np.asarray(summary["std"]))
@@ -262,7 +276,7 @@ def makePosteriorPredictivePlots2D(
         ax.set_xlabel(test_data.axis_names[0])
         ax.set_ylabel(test_data.axis_names[1])
     plotBlinding2D(ax, edges, X, blind_mask)
-    ret["ppc_std_map"] = (fig, ax)
+    ret["{prefix}_std_map"] = (fig, ax)
 
     test_stats = ppc_results["test_stats"]
     for stat_name, regions in test_stats.items():
@@ -279,7 +293,7 @@ def makePosteriorPredictivePlots2D(
                 xlabel=f"Test Statistic: {stat_name} ({region_name})",
                 pvalue=pvalue,
             )
-            ret[f"ppc_dist_{stat_name}_{region_name}"] = (fig, ax)
+            ret[f"{prefix}_dist_{stat_name}_{region_name}"] = (fig, ax)
 
     return ret
 

@@ -291,6 +291,13 @@ def smooth(state: Path, output: Path, seed: int, num_samples: int) -> None:
     help="Output directory where plots will be written.",
 )
 @click.option(
+    "-n",
+    "--name-format",
+    type=str,
+    default="{metric_name}.{ext}",
+    help="Format for output filenames.",
+)
+@click.option(
     "-f",
     "--formats",
     multiple=True,
@@ -320,6 +327,7 @@ def aggregatePlot(
     metric_dotpath: str,
     output: Path,
     formats: tuple[str, ...],
+    name_format: str,
     title: str | None,
     cmap: str,
     cmin: float | None,
@@ -350,6 +358,7 @@ def aggregatePlot(
         cmax=cmax,
         smooth_sigma=smooth_sigma,
         smooth_truncate=smooth_truncate,
+        name_format=name_format,
     )
     savePlots(plots, output, formats=formats)
     logger.info(f"Aggregate plot saved to {output}")
@@ -367,6 +376,7 @@ def aggregatePlot(
     help="Background pattern (e.g. '**/bkg_{year}.pklz4')",
 )
 @click.option("--years", multiple=True, required=True, help="Years to process")
+@click.option("--pipelines", multiple=True, required=True, help="Pipelines to process")
 @click.option(
     "--config-pattern",
     "-c",
@@ -397,6 +407,7 @@ def makecondor(
     signal: str,
     background: str,
     years: tuple[str, ...],
+    pipelines: tuple[str, ...],
     config_pattern: str | None,
     output: Path,
     subdir_format: str,
@@ -410,6 +421,7 @@ def makecondor(
         signal_pattern=signal,
         background_pattern=background,
         years=list(years),
+        pipelines=list(pipelines),
         config_pattern=config_pattern,
         output_dir=output,
         subdir_format=subdir_format,
@@ -431,6 +443,7 @@ def makecondor(
     help="Background pattern (e.g. '**/bkg_{year}.pklz4')",
 )
 @click.option("--years", multiple=True, required=True, help="Years to process")
+@click.option("--pipelines", multiple=True, required=True, help="Pipelines to process")
 @click.option(
     "--config-base",
     "-c",
@@ -483,6 +496,7 @@ def makebatch(
     signal: str,
     background: str,
     years: tuple[str, ...],
+    pipelines: tuple[str, ...],
     config_base: Path | None,
     output: Path,
     subdir_format: str,
@@ -500,6 +514,7 @@ def makebatch(
         signal_pattern=signal,
         background_pattern=background,
         years=list(years),
+        pipelines=list(pipelines),
         config_base=config_base,
         output_dir=output,
         subdir_format=subdir_format,
@@ -684,6 +699,46 @@ def harvest(summaries: tuple[Path, ...]) -> None:
 
     logger.info(
         f"Harvest complete. Updated {success_count}/{len(summaries)} summary files."
+    )
+
+
+@main.command("post-harvest")
+@click.argument(
+    "summaries",
+    nargs=-1,
+    type=click.Path(exists=True, path_type=Path),
+)
+def postHarvest(summaries: tuple[Path, ...]) -> None:
+    from .combine.post_harvest import postHarvest
+    import json
+
+    if not summaries:
+        logger.warning("No summary files provided to harvest.")
+        return
+
+    success_count = 0
+    for summary_path in summaries:
+        summary_path = Path(summary_path)
+        if not summary_path.exists():
+            raise FileNotFoundError(f"Summary file not found: {summary_path}")
+
+        plot_dir = summary_path.parent / "diagnostics" / "post_combine"
+
+        with open(summary_path, "r") as f:
+            data = json.load(f)
+
+        new_data, plots = postHarvest(data)
+        data["combine"] = new_data
+
+        savePlots(plots, plot_dir)
+
+        with open(summary_path, "w") as f:
+            json.dump(data, f, indent=2)
+
+        success_count += 1
+
+    logger.info(
+        f"Post Harvest complete. Updated {success_count}/{len(summaries)} summary files."
     )
 
 

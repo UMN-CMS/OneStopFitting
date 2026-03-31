@@ -681,7 +681,9 @@ class GaussianFitSignalMeanFunction(gpjax.mean_functions.AbstractMeanFunction):
         ndim = x_norm.shape[-1] if x_norm.ndim > 1 else 1
 
         if ndim == 1:
-            g = self._shape_amplitude * jnp.exp(-(((x_norm - self._center) / self._sigma) ** 2))
+            g = self._shape_amplitude * jnp.exp(
+                -(((x_norm - self._center) / self._sigma) ** 2)
+            )
             if g.ndim == 2 and g.shape[-1] == 1:
                 g = g.squeeze(-1)
         else:
@@ -694,7 +696,11 @@ class GaussianFitSignalMeanFunction(gpjax.mean_functions.AbstractMeanFunction):
             b = -jnp.sin(2 * theta) / (4 * sx**2) + jnp.sin(2 * theta) / (4 * sy**2)
             c = jnp.sin(theta) ** 2 / (2 * sx**2) + jnp.cos(theta) ** 2 / (2 * sy**2)
             g = self._shape_amplitude * jnp.exp(
-                -(a * (x_ - xo) ** 2 + 2 * b * (x_ - xo) * (y_ - yo) + c * (y_ - yo) ** 2)
+                -(
+                    a * (x_ - xo) ** 2
+                    + 2 * b * (x_ - xo) * (y_ - yo)
+                    + c * (y_ - yo) ** 2
+                )
             )
 
         return (self.amplitude.value * g).reshape(-1, 1)
@@ -710,7 +716,9 @@ class SignalTemplateMeanConfig(MeanFunctionConfig):
     ) -> gpjax.mean_functions.AbstractMeanFunction:
         signal_data = kwargs.get("signal_data")
         if signal_data is None:
-            raise ValueError("SignalTemplateMeanConfig requires 'signal_data' provided in kwargs from the pipeline")
+            raise ValueError(
+                "SignalTemplateMeanConfig requires 'signal_data' provided in kwargs from the pipeline"
+            )
 
         # Apply domain mask if provided
         domain_mask = kwargs.get("domain_mask", None)
@@ -719,7 +727,11 @@ class SignalTemplateMeanConfig(MeanFunctionConfig):
         else:
             masked_data = signal_data
 
-        prior_dist = self.amplitude_prior.buildPrior() if self.amplitude_prior is not None else None
+        prior_dist = (
+            self.amplitude_prior.buildPrior()
+            if self.amplitude_prior is not None
+            else None
+        )
 
         if self.use_gaussian_fit:
             window = fitGaussianWindow(masked_data)
@@ -735,3 +747,91 @@ class SignalTemplateMeanConfig(MeanFunctionConfig):
             return InterpolatedSignalMeanFunction(
                 signal_x=masked_data.X, signal_y=masked_data.Y, prior=prior_dist
             )
+
+
+class MultiFidelityMeanFunction(gpjax.mean_functions.AbstractMeanFunction):
+    """Autoregressive multi-fidelity mean: m(x) = ρ · μ_MC(x) [+ tilt].
+
+    Wraps a frozen low-fidelity (MC) GP posterior. The posterior mean
+    is computed with stop_gradient so the MC GP parameters are not
+    updated when fitting the high-fidelity (data) GP.
+
+    Args:
+        mc_posterior: Frozen GP posterior fit to QCD MC data.
+        mc_dataset: Training dataset used for the MC posterior.
+        learn_scale: Whether ρ is a trainable parameter.
+        learn_tilt: Whether to add a learnable linear tilt correction.
+        ndim: Input dimensionality.
+    """
+
+    _mc_dataset: gpjax.Dataset = nnx.data()
+
+    def __init__(
+        self,
+        mc_posterior,
+        mc_dataset: gpjax.Dataset,
+        learn_scale: bool = True,
+        learn_tilt: bool = True,
+        ndim: int = 2,
+    ):
+        super().__init__()
+        self._mc_posterior = mc_posterior
+        self._mc_dataset = mc_dataset
+
+        if learn_scale:
+            self.log_rho = gpjax.parameters.Real(jnp.array(0.0))
+        else:
+            self.log_rho = None
+
+        if learn_tilt:
+            self.tilt = gpjax.parameters.Real(jnp.zeros(ndim))
+        else:
+            self.tilt = None
+
+    def _computeMcMean(self, x: jnp.ndarray) -> jnp.ndarray:
+        """Compute the frozen MC posterior mean at x."""
+        latent = self._mc_posterior.predict(x, train_data=self._mc_dataset)
+        return jax.lax.stop_gradient(latent.mean).ravel()
+
+    def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
+        mc_mean = self._computeMcMean(x)
+
+        if self.log_rho is not None:
+            rho = jnp.exp(self.log_rho.value)
+        else:
+            rho = 1.0
+
+        result = rho * mc_mean
+
+        if self.tilt is not None:
+            tilt_correction = jnp.exp(x @ self.tilt.value)
+            result = result * tilt_correction
+
+        return result.reshape(-1, 1)
+
+
+@attrs.define
+class MultiFidelityMeanConfig(MeanFunctionConfig):
+    learn_scale: bool = True
+    learn_tilt: bool = False
+
+    def needsPreFit(self) -> bool:
+        return False
+
+    def buildMeanFunction(
+        self, ndim: int, kernel: gpjax.kernels.AbstractKernel, **kwargs
+    ) -> gpjax.mean_functions.AbstractMeanFunction:
+        mc_posterior = kwargs.get("mc_posterior")
+        mc_dataset = kwargs.get("mc_dataset")
+        if mc_posterior is None or mc_dataset is None:
+            raise ValueError(
+                "MultiFidelityMeanConfig requires 'mc_posterior' and "
+                "'mc_dataset' provided via kwargs from MultiFidelityGPConfig."
+            )
+        return MultiFidelityMeanFunction(
+            mc_posterior=mc_posterior,
+            mc_dataset=mc_dataset,
+            learn_scale=self.learn_scale,
+            learn_tilt=self.learn_tilt,
+            ndim=ndim,
+        )

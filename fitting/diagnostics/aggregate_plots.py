@@ -9,8 +9,14 @@ from typing import Any, Iterable, Iterator
 
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.colors import ListedColormap, BoundaryNorm
 
 logger = logging.getLogger(__name__)
+
+PVALUE_BOUNDARIES = [0, 0.05, 0.16, 0.84, 0.95, 1]
+PVALUE_COLORS = ["red", "yellow", "green", "yellow", "red"]
+PVALUE_CMAP = ListedColormap(PVALUE_COLORS)
+PVALUE_NORM = BoundaryNorm(PVALUE_BOUNDARIES, PVALUE_CMAP.N)
 
 
 def iterSummaryFiles(inputs: Iterable[str | Path]) -> Iterator[Path]:
@@ -123,6 +129,7 @@ def makeAggregateMassPlanePlot(
     cmax: float | None = None,
     smooth_sigma: float | None = None,
     smooth_truncate: float = 4.0,
+    name_format: str = "aggregate_{metric}",
 ) -> dict[str, tuple]:
     if not points:
         raise ValueError("No points to plot.")
@@ -139,20 +146,38 @@ def makeAggregateMassPlanePlot(
     has_full_grid = (len(points) == grid_n) and (len(uniq_pairs) == len(points))
 
     fig, ax = plt.subplots(layout="tight")
+
+    # Use p-value bands if requested or if metric is a p-value and cmap is default
+    actual_norm = None
+    if "pvalue" in metric_name.lower() and cmap == "viridis":
+        cmap = PVALUE_CMAP
+        actual_norm = PVALUE_NORM
+        if cmin is None:
+            cmin = 0.0
+        if cmax is None:
+            cmax = 1.0
+
     vmin = cmin if cmin is not None else None
     vmax = cmax if cmax is not None else None
 
     if (smooth_sigma is None) and (not has_full_grid):
+        plot_kwargs: dict[str, Any] = {
+            "cmap": cmap,
+            "norm": actual_norm,
+        }
+        if actual_norm is None:
+            plot_kwargs["vmin"] = vmin
+            plot_kwargs["vmax"] = vmax
+
         sc = ax.scatter(
             xs,
             ys,
             c=vs,
-            cmap=cmap,
-            vmin=vmin,
-            vmax=vmax,
             marker="s",
-            s=70,
+            s=150,
             linewidths=0.0,
+            edgecolors="black",
+            **plot_kwargs,
         )
         cb = fig.colorbar(sc, ax=ax)
         cb.set_label(metric_name)
@@ -183,14 +208,20 @@ def makeAggregateMassPlanePlot(
             with np.errstate(invalid="ignore", divide="ignore"):
                 grid = np.where(weights_s > 0, values_s / weights_s, np.nan)
 
+        plot_kwargs: dict[str, Any] = {
+            "cmap": cmap,
+            "norm": actual_norm,
+            "shading": "auto",
+        }
+        if actual_norm is None:
+            plot_kwargs["vmin"] = vmin
+            plot_kwargs["vmax"] = vmax
+
         mesh = ax.pcolormesh(
             x_edges,
             y_edges,
             grid,
-            shading="auto",
-            cmap=cmap,
-            vmin=vmin,
-            vmax=vmax,
+            **plot_kwargs,
         )
         cb = fig.colorbar(mesh, ax=ax)
         cb.set_label(metric_name)
@@ -202,4 +233,6 @@ def makeAggregateMassPlanePlot(
     safe = "".join(
         ch if ch.isalnum() or ch in ("-", "_") else "_" for ch in metric_name
     )
-    return {f"aggregate_{safe}": (fig, ax)}
+
+    n = name_format.format(metric=safe)
+    return {n: (fig, ax)}

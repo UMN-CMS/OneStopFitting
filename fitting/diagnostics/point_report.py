@@ -191,6 +191,7 @@ def buildPdfFromLatex(
         str(tex_path),
     ]
 
+    logger.info(f"Building PDF from LaTeX: {output_pdf}")
     try:
         for _ in range(2):
             proc = subprocess.run(
@@ -260,10 +261,16 @@ def generatePointReports(
         if output_pdf.suffix.lower() != ".pdf":
             output_pdf = output_pdf / "point_reports.pdf"
 
-        points = [
-            gatherPointContext(point_dir=point_dir, image_format=config.image_format)
-            for point_dir in point_dirs
-        ]
+        points = []
+        for point_dir in point_dirs:
+            try:
+                points.append(
+                    gatherPointContext(
+                        point_dir=point_dir, image_format=config.image_format
+                    )
+                )
+            except Exception as e:
+                logger.error(f"Failed to gather context for point {point_dir}: {e}")
         latex_source = renderLatex(
             template_dir=template_dir,
             template_name="points_report.tex.j2",

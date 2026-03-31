@@ -15,6 +15,7 @@ def makePosteriorPredictivePlots1D(
     ppc_results: dict[str, Any],
     test_data: BinnedData,
     blind_mask: jnp.ndarray | None = None,
+    prefix: str = "ppc",
 ) -> dict[str, tuple]:
     ret = {}
 
@@ -44,7 +45,7 @@ def makePosteriorPredictivePlots1D(
         ax.set_xlabel(test_data.axis_names[0])
     ax.set_ylabel("Counts")
     ax.legend()
-    ret["ppc_percentile_bands"] = (fig, ax)
+    ret["{prefix}_percentile_bands"] = (fig, ax)
 
     test_stats = ppc_results["test_stats"]
     for stat_name, regions in test_stats.items():
@@ -61,7 +62,7 @@ def makePosteriorPredictivePlots1D(
                 pvalue=pvalue,
             )
 
-            ret[f"ppc_dist_{stat_name}_{region_name}"] = (fig, ax)
+            ret[f"{prefix}_dist_{stat_name}_{region_name}"] = (fig, ax)
 
     return ret
 

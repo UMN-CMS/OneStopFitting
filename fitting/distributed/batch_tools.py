@@ -29,6 +29,7 @@ def generateBatchSubmit(
     signal_pattern: str,
     background_pattern: str,
     years: list[str],
+    pipelines: list[str],
     config_base: Path | None,
     output_dir: Path,
     subdir_format: str,
@@ -72,6 +73,7 @@ def generateBatchSubmit(
             signal_pattern=signal_pattern,
             background_pattern=background_pattern,
             years=years,
+            pipelines=pipelines,
             config_pattern=str(config_base) if config_base else None,
             output_dir=output_dir,
             subdir_format=subdir_format,
@@ -93,6 +95,7 @@ def generateBatchSubmit(
         signal_pattern=signal_pattern,
         background_pattern=background_pattern,
         years=years,
+        pipelines=pipelines,
         output_dir=str(output_dir / subdir_format),
         config_pattern=str(config_base),
     )

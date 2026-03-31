@@ -16,6 +16,7 @@ from .core.transforms import (
     StandardizationConfig,
     SqrtStandardizationConfig,
     SqrtConfig,
+    NormalizeAxes,
     TransformConfig,
 )
 from .data.windowing import Window
@@ -49,7 +50,6 @@ class CombineConfig:
 class PipelineConfig:
     background_path: Path
     signal_path: Path | None = None
-    signal_selection: str | None = None
     injection_rate: float = 0.0
     rebin: int = 1
     min_counts: float = 0.0

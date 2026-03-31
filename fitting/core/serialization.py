@@ -99,6 +99,9 @@ def save(state: AnalysisState, path: Path) -> None:
         "metadata": converter.unstructure(state.metadata),
     }
 
+    if state.blind_mask is not None:
+        summary["blind_mask_size"] = int(state.blind_mask.sum())
+
     if state.diagnostic_metrics is not None:
         summary["metrics"] = converter.unstructure(state.diagnostic_metrics)
 

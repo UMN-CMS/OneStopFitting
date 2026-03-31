@@ -90,6 +90,7 @@ def plotPPD(
     quantile_lines=DEFAULT_QUANTILE_LINES,
     quantile_areas=DEFAULT_QUANTILE_AREAS,
     pvalue: float | None = None,
+    dist_title: str = "Posterior Predictive Distribution",
 ):
     import scipy.stats as stats
 
@@ -102,7 +103,7 @@ def plotPPD(
 
     xs = np.linspace(dist.min(), dist.max(), 200)
 
-    ax.plot(xs, density(xs), linewidth=3, label="Posterior Predictive Distribution")
+    ax.plot(xs, density(xs), linewidth=3, label=dist_title)
 
     for color, quantile in quantile_lines:
         q = np.quantile(dist, quantile)

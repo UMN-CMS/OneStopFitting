@@ -1,17 +1,18 @@
 injection_rate: 0.0
-min_counts: 1.0
-window_spread: 1.75
+min_counts: -1
+window_spread: 0
 optimization:
   num_iters: 250
   lr: 0.01
-  objective: mll
-
+  use_map_priors: False
+  map_prior_strength: 0
+      
 model: 
   _type: ExactGPConfig
   kernel: 
     _type: NNKernelConfig
   likelihood:
     _type: FixedGaussianNoiseConfig
-    variance_floor_quantile: 0.01
-    # _type: PoissonConfig
-
+    variance_floor_quantile: 0.5
+    
+    

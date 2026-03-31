@@ -10,6 +10,7 @@ from ..core.data import AnalysisState, BinnedData
 from ..diagnostics.plot_utils import savePlots
 from ..diagnostics.plots import makeDiagnosticPlots, makePosteriorPredictivePlots
 from ..inference.prediction import getPriorMeanInRealSpace
+from gpjax.variational_families import VariationalGaussian
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +52,11 @@ def generatePlots(state: AnalysisState, rng_key: jax.Array) -> None:
     )
 
     pred_var = jnp.diag(state.pred_cov)
+
+    posterior = state.training_result.posterior
+    if isinstance(posterior, VariationalGaussian):
+        posterior = posterior.posterior
+
     plots = makeDiagnosticPlots(
         pred_mean=state.pred_mean,
         pred_var=pred_var,
@@ -60,7 +66,7 @@ def generatePlots(state: AnalysisState, rng_key: jax.Array) -> None:
         signal_data=signal_plot_data,
         signal_template=signal_template,
         prior_mean=prior_mean,
-        kernel=state.training_result.posterior.prior.kernel,
+        kernel=posterior.prior.kernel,
         transform=state.transform,
         pred_cov=state.pred_cov,
     )

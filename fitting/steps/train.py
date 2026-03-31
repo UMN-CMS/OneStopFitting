@@ -138,7 +138,10 @@ def trainModel(state: AnalysisState, rng_key: jax.Array) -> AnalysisState:
         rngs=nnx.Rngs(build_key),
         mean_function=pre_fit_mean,
         domain_mask=state.domain_mask,
-        signal_data=transform.applyToBinnedData(state.signal) if state.signal is not None else None,
+        signal_data=transform.applyToBinnedData(state.signal)
+        if state.signal is not None
+        else None,
+        transform=transform,
     )
 
     logger.info(f"  Training on {dataset.n} data points")
