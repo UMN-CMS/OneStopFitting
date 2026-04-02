@@ -40,13 +40,14 @@ def generateBatchSubmit(
     rebin: list[int] | None,
     min_counts: list[float] | None,
     window_spread: list[float] | None,
+    num_toys: int | None,
 ) -> None:
     from .condor_tools import (
         getJobs,
         compressNeededFiles,
         makeRunFitScript,
         makeSubmitScript,
-        COMBINE_SHORT_COMMANDS,
+        getCombineCommand,
     )
 
     container = (
@@ -80,6 +81,7 @@ def generateBatchSubmit(
             venv_path=venv_path,
             container=container,
             combine_cmds=combine_cmds,
+            num_toys=num_toys,
         )
         return
 
@@ -91,14 +93,25 @@ def generateBatchSubmit(
     )
     output_dir.mkdir(parents=True, exist_ok=True)
     (output_dir / "logs").mkdir(parents=True, exist_ok=True)
-    base_jobs = getJobs(
-        signal_pattern=signal_pattern,
-        background_pattern=background_pattern,
-        years=years,
-        pipelines=pipelines,
-        output_dir=str(output_dir / subdir_format),
-        config_pattern=str(config_base),
-    )
+
+    if num_toys is None:
+        toys = [0]
+    else:
+        toys = range(num_toys)
+    base_jobs = []
+    for t in toys:
+        base_jobs.extend(
+            getJobs(
+                signal_pattern=signal_pattern,
+                background_pattern=background_pattern,
+                years=years,
+                pipelines=pipelines,
+                output_dir=str(output_dir / subdir_format),
+                config_pattern=str(config_base),
+                toy_index=t,
+            )
+        )
+
     if not base_jobs:
         logger.error("No base jobs found from signal/background patterns!")
         return
@@ -150,10 +163,7 @@ def generateBatchSubmit(
     expanded_cmds = []
     if combine_cmds:
         for cmd in combine_cmds:
-            if cmd in COMBINE_SHORT_COMMANDS:
-                expanded_cmds.append(COMBINE_SHORT_COMMANDS[cmd])
-            else:
-                expanded_cmds.append(cmd)
+            expanded_cmds.append(getCombineCommand(cmd))
 
     run_fit_script = makeRunFitScript(
         venv_activate_path=str(venv_activate_path),

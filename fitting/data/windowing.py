@@ -132,11 +132,6 @@ class EllipseWindow(Window):
         return jnp.sum(rel, axis=-1) <= 1.0
 
 
-# ---------------------------------------------------------------------------
-# Window fitting
-# ---------------------------------------------------------------------------
-
-
 def _numpyGaussian1D(X, amplitude, xo, sigma_x):
     return amplitude * np.exp(-(((X - xo) / sigma_x) ** 2))
 

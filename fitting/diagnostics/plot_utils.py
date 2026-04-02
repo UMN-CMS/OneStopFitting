@@ -132,6 +132,107 @@ def plotPPD(
         pass
 
 
+def plotFitDiagnostic(
+    data: BinnedData,
+    prefit_b: BinnedData,
+    b_background: BinnedData | None,
+    s_background: BinnedData | None,
+    title: str = "",
+    xlabel: str = "Bin Index",
+    log: bool = True,
+):
+    gs_kw = dict(height_ratios=[2, 1, 1])
+    fig, (ax, rax, pax) = plt.subplots(
+        figsize=(12, 16), nrows=3, sharex=True, gridspec_kw=gs_kw, layout="tight"
+    )
+
+    plotBinnedData(
+        ax,
+        data,
+        label="Data",
+        color="black",
+        histtype="errorbar",
+        marker="o",
+        markersize=3,
+    )
+
+    plotBinnedData(
+        ax,
+        prefit_b,
+        label="Prefit Background",
+        histtype="step",
+        linestyle="-",
+        color="blue",
+    )
+
+    if b_background is not None:
+        plotBinnedData(
+            ax,
+            b_background,
+            label="Background / B Only Fit",
+            histtype="step",
+            linestyle="-",
+            linewidth=2,
+            color="green",
+        )
+
+    if s_background is not None:
+        plotBinnedData(
+            ax,
+            s_background,
+            label="Background / SB Fit",
+            histtype="step",
+            linestyle="-",
+            linewidth=2,
+            color="red",
+        )
+
+    ax.set_ylabel("Events")
+    if log:
+        ax.set_yscale("log")
+
+    # CMS Label
+    mplhep.cms.label(ax=ax, label="Preliminary", data=True)
+    ax.legend()
+
+    def add(num, den, color):
+        ratio = num.Y / den.Y
+        ratio_err = np.sqrt(num.V) / den.Y
+        centers = num.X.ravel()
+        pulls = (num.Y - den.Y) / np.sqrt(num.V)
+        pulls = np.where(np.isfinite(pulls), pulls, 0)
+
+        rax.errorbar(
+            centers, ratio, yerr=ratio_err, fmt="ko", markersize=3, color=color
+        )
+
+        pax.bar(
+            centers,
+            pulls,
+            width=np.diff(num.edges[0]),
+            align="center",
+            color=color,
+            alpha=0.8,
+        )
+
+    add(data, prefit_b, "blue")
+    add(data, b_background, "green")
+    add(data, s_background, "red")
+
+    rax.axhline(1, color="black", linestyle="--", alpha=0.5)
+    rax.set_ylabel("Data / Bkg.")
+    rax.set_ylim(0.5, 1.5)
+    pax.axhline(0, color="black", linestyle="-", alpha=0.5)
+    pax.set_ylabel(r"$\frac{Data - Bkg.}{\sigma_{Data}}$")
+    pax.set_ylim(-3, 3)
+    pax.set_xlabel(xlabel)
+
+    ax.set_xticklabels([])
+    rax.set_xticklabels([])
+
+    return fig, ax
+
+
 def plotBlinding2D(ax, edges, X, blind_mask, color="magenta", linewidth=2):
     mask = np.asarray(blind_mask)
     np_edges = tuple(np.asarray(e) for e in edges)

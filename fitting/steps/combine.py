@@ -13,7 +13,7 @@ from ..combine.histograms import exportCombineData, normalizeVarName
 from ..combine.datacard import Process, Channel, Systematic, DataCard
 from ..data.loading import variationNames
 from ..diagnostics.combine import plotCombineInputs, verifyEigenvariations
-from ..distributed.condor_tools import COMBINE_SHORT_COMMANDS
+from ..distributed.condor_tools import getCombineCommand
 
 logger = logging.getLogger(__name__)
 
@@ -111,12 +111,7 @@ def prepareCombine(state: AnalysisState, rng_key: jax.Array) -> None:
         # Expand short command names
         expanded_cmds = []
         for cmd in state.config.combine.combine_commands:
-            if cmd in COMBINE_SHORT_COMMANDS:
-                expanded_cmds.append(COMBINE_SHORT_COMMANDS[cmd])
-                logger.info(f"Expanded '{cmd}' to full command")
-            else:
-                expanded_cmds.append(cmd)
-                logger.info(f"Using custom command: {cmd}")
+            expanded_cmds.append(getCombineCommand(cmd))
 
         # Generate bash script using jinja template
         script_path = combine_dir / "run_combine_commands.sh"

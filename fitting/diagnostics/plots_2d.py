@@ -77,7 +77,7 @@ def makeDiagnosticPlots2D(
     ret["observed_outputs"] = (fig, ax)
 
     fig, ax = plt.subplots(layout="tight")
-    log_norm = colors.LogNorm(vmin=obs_Y.min(), vmax=obs_Y.max())
+    log_norm = colors.LogNorm(vmin=max(1e-1, obs_Y.min()), vmax=obs_Y.max())
     plotRaw(ax, edges, X, obs_Y, norm=log_norm)
     ax.set_title("Observed (log)")
     if test_data.axis_names and len(test_data.axis_names) >= 2:
@@ -267,7 +267,7 @@ def makePosteriorPredictivePlots2D(
         ax.set_xlabel(test_data.axis_names[0])
         ax.set_ylabel(test_data.axis_names[1])
     plotBlinding2D(ax, edges, X, blind_mask)
-    ret["{prefix}_mean_map"] = (fig, ax)
+    ret[f"{prefix}_mean_map"] = (fig, ax)
 
     fig, ax = plt.subplots(layout="tight")
     plotRaw(ax, edges, X, np.asarray(summary["std"]))
@@ -276,13 +276,12 @@ def makePosteriorPredictivePlots2D(
         ax.set_xlabel(test_data.axis_names[0])
         ax.set_ylabel(test_data.axis_names[1])
     plotBlinding2D(ax, edges, X, blind_mask)
-    ret["{prefix}_std_map"] = (fig, ax)
+    ret[f"{prefix}_std_map"] = (fig, ax)
 
     test_stats = ppc_results["test_stats"]
     for stat_name, regions in test_stats.items():
         for region_name, summary_stats in regions.items():
             obs_val = float(summary_stats["obs"])
-            rep_vals = reps[stat_name][region_name]
             pvalue = float(summary_stats["pvalue"])
 
             fig, ax = plt.subplots(layout="tight")

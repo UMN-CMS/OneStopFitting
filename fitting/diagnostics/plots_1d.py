@@ -51,7 +51,6 @@ def makePosteriorPredictivePlots1D(
     for stat_name, regions in test_stats.items():
         for region_name, summary_stats in regions.items():
             obs_val = float(summary_stats["obs"])
-            rep_vals = reps
             pvalue = float(summary_stats["pvalue"])
             fig, ax = plt.subplots(layout="tight")
             plotPPD(

@@ -25,14 +25,8 @@ from jax import random
 import jax.numpy as jnp
 
 from ..core.data import BinnedData
-from ..core.transforms import DataTransformation
 
 logger = logging.getLogger(__name__)
-
-
-# ---------------------------------------------------------------------------
-# Built-in test statistics
-# ---------------------------------------------------------------------------
 
 
 def chi2TestStatistic(
@@ -75,13 +69,7 @@ def maxDeviationTestStatistic(
     )
 
 
-# Type alias for test statistic functions
 TestStatisticFn = Callable[[jnp.ndarray, jnp.ndarray, jnp.ndarray], float]
-
-
-# ---------------------------------------------------------------------------
-# Core posterior predictive functions
-# ---------------------------------------------------------------------------
 
 
 def generateReplicatedData(
@@ -162,22 +150,17 @@ def posteriorPredictiveCheck(
     if rng_key is None:
         rng_key = random.key(0)
 
-    # 1. Sample f* from real-space MVN
     rng_key, sample_key, rep_key = random.split(rng_key, 3)
 
-    # Add small jitter to diagonal for numerical stability of Cholesky
     jitter = 1e-6 * jnp.eye(pred_cov.shape[0])
     samples = jax.random.multivariate_normal(
         sample_key, mean=pred_mean, cov=pred_cov + jitter, shape=(num_samples,)
     )
-    pred_variance = jnp.diag(pred_cov)
 
-    # 2. Generate replicated data
     replicated = generateReplicatedData(
         samples, test_data.V, rep_key, likelihood=likelihood
     )
 
-    # 4. Compute test statistics
     obs_Y = test_data.Y
     obs_V = test_data.V
 
@@ -238,14 +221,6 @@ def posteriorPredictiveCheck(
 
     # 5. Summary statistics
     summary = {
-        "mean": jnp.mean(samples, axis=0),
-        "std": jnp.std(samples, axis=0),
-        "q05": jnp.percentile(samples, 5, axis=0),
-        "q95": jnp.percentile(samples, 95, axis=0),
-        "median": jnp.median(samples, axis=0),
-    }
-
-    summary_short = {
         "mean": jnp.mean(samples, axis=0),
         "std": jnp.std(samples, axis=0),
         "q05": jnp.percentile(samples, 5, axis=0),

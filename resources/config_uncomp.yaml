@@ -2,9 +2,10 @@ injection_rate: 0.0
 min_counts: 1.0
 window_spread: 1.75
 optimization:
+  # mode: homoscedastic_two_stage
+  mode: optimization
   num_iters: 250
   lr: 0.01
-  objective: mll
 
 model: 
   _type: ExactGPConfig
@@ -13,5 +14,8 @@ model:
   likelihood:
     _type: FixedGaussianNoiseConfig
     variance_floor_quantile: 0.01
-    # _type: PoissonConfig
+  mean_function:
+    _type: ConstantMeanConfig
+  # mean_function:
+  #   _type: DoubleSidedCrystalBallMeanConfig
 

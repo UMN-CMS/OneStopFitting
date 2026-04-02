@@ -64,7 +64,7 @@ class ExactGPConfig(GPModelConfig):
     ) -> tuple[Any, Any, Any]:
         kernel = self.kernel.buildKernel(ndim, rngs=rngs, **kwargs)
         if mean_function is not None:
-            mean_fn = mean_function
+            mean_fn = mean_function.buildMeanFunction(ndim, kernel, **kwargs)
         else:
             mean_fn = self.mean_function.buildMeanFunction(ndim, kernel, **kwargs)
 
@@ -101,7 +101,7 @@ class SparseGPConfig(GPModelConfig):
     ) -> tuple[Any, Any, Any]:
         kernel = self.kernel.buildKernel(ndim, rngs=rngs, **kwargs)
         if mean_function is not None:
-            mean_fn = mean_function
+            mean_fn = mean_function.buildMeanFunction(ndim, kernel, **kwargs)
         else:
             mean_fn = self.mean_function.buildMeanFunction(ndim, kernel, **kwargs)
         likelihood_kwargs = {"num_datapoints": dataset.n}
@@ -143,7 +143,7 @@ class VariationalGPConfig(GPModelConfig):
     ) -> tuple[Any, Any, Any]:
         kernel = self.kernel.buildKernel(ndim, rngs=rngs, **kwargs)
         if mean_function is not None:
-            mean_fn = mean_function
+            mean_fn = mean_function.buildMeanFunction(ndim, kernel, **kwargs)
         else:
             mean_fn = self.mean_function.buildMeanFunction(ndim, kernel, **kwargs)
         likelihood_kwargs = {"num_datapoints": dataset.n}
@@ -251,11 +251,19 @@ class QCDPriorGPConfig:
 
 @attrs.define
 class MultiFidelityGPConfig(GPModelConfig):
-    """Multi-fidelity GP: autoregressive model combining QCD MC and data.
-        f_data(x) = ρ · f_MC(x) + δ(x)
+    """Multi-fidelity GP: linear autoregressive model combining QCD MC and data, see https://arxiv.org/abs/2006.16728.
+    Model is fit in a recursive fashion.
+    Note requires  D_{n-1} is a superset of D_n
+
+        f_data(x) = rho * f_MC(x) + delta(x)
+
     Stage 1: Fit a GP to QCD MC data (low-fidelity).
     Stage 2: Fit a GP to observed data using the frozen MC GP posterior
              as the mean function (high-fidelity).
+
+
+    TODO:
+    Also implement linear model coregionalization approach and non-linear autoregression.
     """
 
     mc_path: str = attrs.Factory(lambda: "")
@@ -400,7 +408,7 @@ class MultiFidelityGPConfig(GPModelConfig):
         mc_dataset: gpjax.Dataset,
         mc_norm_V: jnp.ndarray | None,
         ndim: int,
-        rngs: nnx.Rngs | None,
+        rngs: nnx.Rngs ,
     ) -> Any:
         mc_stage_kernel = self.mc_kernel.buildKernel(ndim, rngs=rngs)
 

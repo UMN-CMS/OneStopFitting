@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import logging
 from pathlib import Path
 from rich import print
@@ -98,7 +99,7 @@ def main(verbose: bool) -> None:
 @click.option(
     "--mode",
     type=click.Choice(InferenceMode, case_sensitive=False),
-    default=InferenceMode.OPTIMIZATION,
+    default=None,
     help="Inference mode.",
 )
 @click.option(
@@ -133,7 +134,13 @@ def main(verbose: bool) -> None:
     "--combine-command",
     "combine_commands",
     multiple=True,
-    default=["limits", "fit", "multidimfit", "significance", "gof-saturated"],
+    default=[
+        "limits",
+        "fit-diagnostics",
+        "multidimfit",
+        "significance",
+        "gof-saturated",
+    ],
     help="Combine commands to run (e.g., 'fit', 'limits', 'significance', or full custom commands).",
 )
 @click.option(
@@ -235,15 +242,24 @@ def run(
     help="Path to saved AnalysisState.",
 )
 @click.option(
-    "--output",
+    "--output-dir",
     "-o",
     type=click.Path(path_type=Path),
     required=True,
-    help="Output path for the smoothed histogram (compressed pickle).",
+    help="Output directory for the smoothed histogram (compressed pickle).",
+)
+@click.option(
+    "--name",
+    "-n",
+    type=str,
+    required=True,
+    help="Name of the smoothed histogram. Will be appended with toy index.",
 )
 @click.option("--seed", type=int, default=42, help="RNG seed.")
 @click.option("--num-samples", type=int, default=1, help="Number of samples to draw.")
-def smooth(state: Path, output: Path, seed: int, num_samples: int) -> None:
+def smooth(
+    state: Path, output_dir: Path, name: str, seed: int, num_samples: int
+) -> None:
 
     jax.config.update("jax_enable_x64", True)
     rng_key = jax.random.key(seed)
@@ -256,19 +272,23 @@ def smooth(state: Path, output: Path, seed: int, num_samples: int) -> None:
         analysis_state, rng_key, num_samples=num_samples
     )
 
-    plot_dir = output.parent / "smoothing_diagnostics"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    plot_dir = output_dir / "smoothing_diagnostics"
     savePlots(plots, plot_dir)
     logger.info(f"Smoothing diagnostic plots saved to {plot_dir}")
 
-    output.parent.mkdir(parents=True, exist_ok=True)
-    with lz4.frame.open(output, "wb") as f:
-        to_save = {
-            "item": hists[0] if num_samples == 1 else hists,
-            "metadata": analysis_state.background_metadata,
-        }
-        pickle.dump(to_save, f)
+    for idx, hist in enumerate(hists):
+        o = output_dir / f"{name}_{idx}.pklz4"
+        metadata = copy.deepcopy(analysis_state.background_metadata)
+        metadata["toy_index"] = idx
+        with lz4.frame.open(o, "wb") as f:
+            to_save = {
+                "item": hist,
+                "metadata": metadata,
+            }
+            pickle.dump(to_save, f)
 
-    logger.info(f"Smoothed background saved to {output}")
+    logger.info(f"Smoothed background saved to {output_dir}")
 
 
 @main.command(name="aggregate-plot")
@@ -301,7 +321,7 @@ def smooth(state: Path, output: Path, seed: int, num_samples: int) -> None:
     "-f",
     "--formats",
     multiple=True,
-    default=("pdf",),
+    default=("png",),
     show_default=True,
     help="Image formats to write (repeatable), e.g. --formats png --formats pdf.",
 )
@@ -397,6 +417,7 @@ def aggregatePlot(
 )
 @click.option("--venv", type=str, help="Path to virtual environment to pack")
 @click.option("--container", type=str, help="Container image to use")
+@click.option("--num-toys", type=int, default=None, help="Number of toys to run over")
 @click.option(
     "--combine-cmd",
     "combine_cmds",
@@ -413,6 +434,7 @@ def makecondor(
     subdir_format: str,
     venv: str | None,
     container: str | None,
+    num_toys: int | None,
     combine_cmds: tuple[str, ...],
 ) -> None:
     """Generate HTCondor submit files for distributed processing."""
@@ -428,6 +450,7 @@ def makecondor(
         venv_path=venv,
         container=container,
         combine_cmds=list(combine_cmds),
+        num_toys=num_toys,
     )
 
 
@@ -487,6 +510,7 @@ def makecondor(
     type=str,
     help="Comma-separated min counts values (e.g., '1.0,5.0')",
 )
+@click.option("--num-toys", type=int, default=None, help="Number of toys to run over")
 @click.option(
     "--window-spread",
     type=str,
@@ -506,6 +530,7 @@ def makebatch(
     rates: str | None,
     rebin: str | None,
     min_counts: str | None,
+    num_toys: int | None,
     window_spread: str | None,
 ) -> None:
     """Generate HTCondor submit files for a batch of jobs with parameter sweeps."""
@@ -525,6 +550,7 @@ def makebatch(
         rebin=parse_csv_int(rebin) if rebin else None,
         min_counts=parse_csv_float(min_counts) if min_counts else None,
         window_spread=parse_csv_float(window_spread) if window_spread else None,
+        num_toys=num_toys,
     )
 
 
@@ -576,7 +602,7 @@ def parse_csv_int(s: str) -> list[int]:
 )
 @click.option(
     "--image-format",
-    default="pdf",
+    default="png",
     show_default=True,
     help="Image format for plots (png, pdf, etc.)",
 )
@@ -661,13 +687,9 @@ def resolveOutput(
     type=click.Path(exists=True, path_type=Path),
 )
 def harvest(summaries: tuple[Path, ...]) -> None:
-    """Harvest Combine ROOT results into summary.json(s).
-
-    Accepts multiple summary.json paths, typically via shell globbing
-    e.g., `python -m fitting harvest results/**/summary.json`
-    """
     from .combine.extract import extractCombineResults
     import json
+    from .diagnostics.plot_utils import savePlots
 
     if not summaries:
         logger.warning("No summary files provided to harvest.")
@@ -676,12 +698,14 @@ def harvest(summaries: tuple[Path, ...]) -> None:
     success_count = 0
     for summary_path in summaries:
         combine_dir = summary_path.parent / "combine"
+        plot_dir = summary_path.parent / "diagnostics" / "post_combine"
+        plot_dir.mkdir(parents=True, exist_ok=True)
 
         if not combine_dir.exists():
             logger.debug(f"No combine directory found at {combine_dir}")
             continue
 
-        extracted = extractCombineResults(combine_dir)
+        extracted, plots = extractCombineResults(combine_dir)
         if not extracted:
             logger.debug(f"No Combine results extracted for {summary_path}.")
             continue
@@ -691,54 +715,17 @@ def harvest(summaries: tuple[Path, ...]) -> None:
 
         summary_data["combine"] = extracted
 
+        savePlots(plots, plot_dir)
         with open(summary_path, "w") as f:
             json.dump(summary_data, f, indent=2)
 
-        logger.info(f"Updated {summary_path} with {list(extracted.keys())}")
+        logger.info(
+            f"Updated {summary_path} with {list(extracted.keys())} and generated plots."
+        )
         success_count += 1
 
     logger.info(
         f"Harvest complete. Updated {success_count}/{len(summaries)} summary files."
-    )
-
-
-@main.command("post-harvest")
-@click.argument(
-    "summaries",
-    nargs=-1,
-    type=click.Path(exists=True, path_type=Path),
-)
-def postHarvest(summaries: tuple[Path, ...]) -> None:
-    from .combine.post_harvest import postHarvest
-    import json
-
-    if not summaries:
-        logger.warning("No summary files provided to harvest.")
-        return
-
-    success_count = 0
-    for summary_path in summaries:
-        summary_path = Path(summary_path)
-        if not summary_path.exists():
-            raise FileNotFoundError(f"Summary file not found: {summary_path}")
-
-        plot_dir = summary_path.parent / "diagnostics" / "post_combine"
-
-        with open(summary_path, "r") as f:
-            data = json.load(f)
-
-        new_data, plots = postHarvest(data)
-        data["combine"] = new_data
-
-        savePlots(plots, plot_dir)
-
-        with open(summary_path, "w") as f:
-            json.dump(data, f, indent=2)
-
-        success_count += 1
-
-    logger.info(
-        f"Post Harvest complete. Updated {success_count}/{len(summaries)} summary files."
     )
 
 

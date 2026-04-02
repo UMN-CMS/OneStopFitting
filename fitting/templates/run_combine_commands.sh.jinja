@@ -3,6 +3,7 @@
 set -e 
 
 echo "=== Running Combine Commands ==="
+cd "$(dirname "$0")"
 echo "Working directory: $(pwd)"
 
 function run_combine {
@@ -10,12 +11,18 @@ function run_combine {
     echo "--------------------------------------------------"
     echo "Running: $cmd"
     echo "--------------------------------------------------"
-    cd "$(dirname "$0")"
     apptainer exec -B /cvmfs {{ container }} \
         /bin/bash -c "source /cvmfs/cms.cern.ch/cmsset_default.sh && cd /home/cmsusr/CMSSW_14_1_0_pre4 && cmsenv && cd - && $cmd"
     echo "Completed: $cmd"
     echo ""
 }
+
+echo "Converting datacard to workspace"
+run_combine "text2workspace.py datacard.txt -m 125"
+
+{% if num_prebuilt_toys %}
+run_combine "combine -M GenerateOnly --saveToys -n prebuilt_toys -t {{ num_prebuilt_toys }}"
+{% endif %}
 
 {% for i, cmd in enumerate(commands, 1) %}
 echo "Command {{ i }}/{{ commands|length }}"

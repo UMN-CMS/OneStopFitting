@@ -36,7 +36,10 @@ def generateSmoothedBackground(
     )
 
     counts_samples = drawPoissonSamples(
-        mean=pred_mean, cov=pred_cov, rng_key=sample_key, num_samples=num_samples
+        mean=pred_mean,
+        cov=None,  # pred_cov,
+        rng_key=sample_key,
+        num_samples=num_samples,
     )
     if len(state.test_data.edges) == 2:
         axis_x = hist.axis.Variable(

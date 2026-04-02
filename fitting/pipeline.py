@@ -41,7 +41,13 @@ class CombineConfig:
     """Configuration for combine command execution."""
 
     combine_commands: list[str] = attrs.Factory(
-        lambda: ["limits", "fit", "multidimfit", "significance", "gof-saturated"]
+        lambda: [
+            "limits",
+            "fit-diagnostics",
+            "multidimfit",
+            "significance",
+            "gof-saturated",
+        ]
     )
     combine_container: str = "/cvmfs/unpacked.cern.ch/gitlab-registry.cern.ch/cms-analysis/general/combine-container:latest"
 
