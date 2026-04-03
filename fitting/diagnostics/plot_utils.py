@@ -9,6 +9,19 @@ from uhi.numpy_plottable import NumPyPlottableHistogram
 
 from ..core.data import BinnedData
 
+CMS_COLORS = [
+    "#3f90da",
+    "#ffa90e",
+    "#bd1f01",
+    "#94a4a2",
+    "#832db6",
+    "#a96b59",
+    "#e76300",
+    "#b9ac70",
+    "#717581",
+    "#92dadd",
+]
+
 
 def addAxesToHist(ax, size=0.1, pad=0.1, position="bottom", extend=False):
     new_ax = mplhep.append_axes(ax, size, pad, position, extend)
@@ -137,14 +150,25 @@ def plotFitDiagnostic(
     prefit_b: BinnedData,
     b_background: BinnedData | None,
     s_background: BinnedData | None,
+    s_signal: BinnedData | None = None,
+    signal_rate: float | None = None,
     title: str = "",
+    show_signal=True,
     xlabel: str = "Bin Index",
     log: bool = True,
 ):
-    gs_kw = dict(height_ratios=[2, 1, 1])
-    fig, (ax, rax, pax) = plt.subplots(
-        figsize=(12, 16), nrows=3, sharex=True, gridspec_kw=gs_kw, layout="tight"
+    gs_kw = dict(height_ratios=[3, 1, 1,1])
+    fig, (ax, rax, pax,sbax) = plt.subplots(
+        figsize=(12, 16), nrows=4, sharex=True, gridspec_kw=gs_kw, layout="tight"
     )
+
+    color_data = "black"
+    color_prefit_b = CMS_COLORS[0]
+    color_b_background = CMS_COLORS[1]
+    color_b_sb = CMS_COLORS[2]
+    color_s_sb = CMS_COLORS[3]
+    color_sb_sb = CMS_COLORS[4]
+
 
     plotBinnedData(
         ax,
@@ -162,7 +186,7 @@ def plotFitDiagnostic(
         label="Prefit Background",
         histtype="step",
         linestyle="-",
-        color="blue",
+        color=color_prefit_b,
     )
 
     if b_background is not None:
@@ -173,7 +197,7 @@ def plotFitDiagnostic(
             histtype="step",
             linestyle="-",
             linewidth=2,
-            color="green",
+            color=color_b_background,
         )
 
     if s_background is not None:
@@ -184,7 +208,33 @@ def plotFitDiagnostic(
             histtype="step",
             linestyle="-",
             linewidth=2,
-            color="red",
+            color=color_b_sb,
+        )
+
+    if s_signal is not None and show_signal:
+        s_label = (
+            "Signal / SB Fit " + f"(r={signal_rate:0.2f})"
+            if signal_rate is not None
+            else ""
+        )
+        plotBinnedData(
+            ax,
+            s_signal,
+            histtype="step",
+            label=s_label,
+            linestyle="-",
+            linewidth=2,
+            color=color_s_sb,
+        )
+    if s_background is not None and s_signal is not None:
+        plotBinnedData(
+            ax,
+            s_background + s_signal,
+            label="S+B / SB Fit",
+            histtype="step",
+            linestyle="-",
+            linewidth=2,
+            color=color_sb_sb,
         )
 
     ax.set_ylabel("Events")
@@ -193,7 +243,8 @@ def plotFitDiagnostic(
 
     # CMS Label
     mplhep.cms.label(ax=ax, label="Preliminary", data=True)
-    ax.legend()
+    ax.legend(ncols=2, loc="upper right")
+    mplhep.utils.yscale_legend(ax)
 
     def add(num, den, color):
         ratio = num.Y / den.Y
@@ -215,20 +266,51 @@ def plotFitDiagnostic(
             alpha=0.8,
         )
 
-    add(data, prefit_b, "blue")
-    add(data, b_background, "green")
-    add(data, s_background, "red")
+
+    def addPre(num, den, color):
+        ratio = num.Y / den.Y
+        centers = num.X.ravel()
+        # pulls = (num.Y - den.Y) / np.sqrt(num.V)
+        # pulls = np.where(np.isfinite(pulls), pulls, 0)
+
+
+        sbax.errorbar(
+            centers, ratio, fmt="ko", markersize=3, color=color
+        )
+
+        # sbax.bar(
+        #     centers,
+        #     pulls,
+        #     width=np.diff(num.edges[0]),
+        #     align="center",
+        #     color=color,
+        #     alpha=0.8,
+        # )
+
+    add(data, prefit_b, color_prefit_b)
+    add(data, b_background, color_b_background)
+    add(data, s_background, color_b_sb)
+    addPre(prefit_b, s_background, color_b_sb)
+    addPre(prefit_b, s_signal+s_background, color_sb_sb)
 
     rax.axhline(1, color="black", linestyle="--", alpha=0.5)
-    rax.set_ylabel("Data / Bkg.")
+    rax.set_ylabel(r"$\frac{Data}{Bkg.}$")
     rax.set_ylim(0.5, 1.5)
+    
     pax.axhline(0, color="black", linestyle="-", alpha=0.5)
     pax.set_ylabel(r"$\frac{Data - Bkg.}{\sigma_{Data}}$")
     pax.set_ylim(-3, 3)
-    pax.set_xlabel(xlabel)
+
+    sbax.axhline(1, color="black", linestyle="--", alpha=0.5)
+    sbax.set_ylabel(r"$\frac{Bkg.}{Prefit}$")
+    sbax.set_ylim(0.8, 1.2)
+
+
+    sbax.set_xlabel(xlabel)
 
     ax.set_xticklabels([])
     rax.set_xticklabels([])
+    sbax.set_xticklabels([])
 
     return fig, ax
 

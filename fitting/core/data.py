@@ -80,6 +80,20 @@ class BinnedData:
         """Convert back to a UHI-compatible plottable histogram."""
         return _pointsToPlottable(self.X, self.Y, self.edges, self.V)
 
+    def __add__(self, other):
+        edges_ok = len(self.edges) == len(other.edges) and all(
+            jnp.allclose(self.edges[i], other.edges[i]) for i in range(len(self.edges))
+        )
+        if not edges_ok:
+            raise ValueError("Mismatched edges")
+        return BinnedData(
+            X=self.X,
+            Y=self.Y + other.Y,
+            V=self.V + other.V,
+            edges=self.edges,
+            axis_names=self.axis_names,
+        )
+
 
 def _pointsToPlottable(
     X: jnp.ndarray,

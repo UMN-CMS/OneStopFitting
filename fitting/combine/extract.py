@@ -97,21 +97,32 @@ def extractFitDiagnostics(root_file: uproot.ReadOnlyDirectory) -> tuple[dict, di
             ft_short = fit_type.split("_", 1)[1]
             hists[fit_type] = {}
             for c in cat:
-                hists[ft_short, c] = rootToBinnedData(
-                    root_file[fit_type][channel][c]
-                )
+                hists[ft_short, c] = rootToBinnedData(root_file[fit_type][channel][c])
 
         data_hist = hists["prefit", "data"]
         prefit_background = hists["prefit", "total_background"]
         b_background = hists["fit_b", "total_background"]
         s_background = hists["fit_s", "total_background"]
-
+        s_signal = hists["fit_s", "total_signal"]
 
         fig, ax = plotFitDiagnostic(
             data=data_hist,
             prefit_b=prefit_background,
             b_background=b_background,
             s_background=s_background,
+            s_signal=s_signal,
+            signal_rate=ret["tree_fit_sb"]["r"],
+            title=f"{t} / {channel}",
+        )
+        plots[f"fit_diagnostic_{channel}_show_signal"] = (fig, ax)
+        fig, ax = plotFitDiagnostic(
+            data=data_hist,
+            prefit_b=prefit_background,
+            b_background=b_background,
+            s_background=s_background,
+            s_signal=s_signal,
+            signal_rate=ret["tree_fit_sb"]["r"],
+            show_signal=False,
             title=f"{t} / {channel}",
         )
         plots[f"fit_diagnostic_{channel}"] = (fig, ax)
