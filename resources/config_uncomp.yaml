@@ -1,9 +1,9 @@
 injection_rate: 0.0
-min_counts: 1.0
+min_counts: 0.0
 window_spread: 1.75
 optimization:
-  # mode: homoscedastic_two_stage
   mode: optimization
+  objective: mll
   num_iters: 250
   lr: 0.01
 
@@ -11,11 +11,9 @@ model:
   _type: ExactGPConfig
   kernel: 
     _type: NNKernelConfig
+    hidden_shapes: [20,20]
   likelihood:
     _type: FixedGaussianNoiseConfig
     variance_floor_quantile: 0.01
   mean_function:
     _type: ConstantMeanConfig
-  # mean_function:
-  #   _type: DoubleSidedCrystalBallMeanConfig
-

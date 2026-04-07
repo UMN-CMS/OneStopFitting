@@ -111,10 +111,6 @@ def computeScaledEigenvectors(
     scales = jnp.sqrt(jnp.maximum(eigenvalues, 0.0))
     scaled_vecs = eigenvectors * scales[None, :]
 
-    logger.info(
-        f"Eigendecomposition: kept {n_kept} of {cov.shape[0]} "
-        f"variations (threshold={threshold_fraction})"
-    )
 
     return eigenvalues, scaled_vecs
 

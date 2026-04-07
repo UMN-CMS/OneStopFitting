@@ -183,3 +183,5 @@ class AnalysisState:
         replace_floats = {k: floatToStr(v) for k, v in dictToDot(self.metadata)}
 
         return Path(dotFormat(self.config.output_dir_format, **replace_floats))
+
+                

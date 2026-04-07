@@ -16,6 +16,7 @@ USEFUL_PARAMETER_NAMES = {
     "alpha",
     "shift",
     "constant",
+    "rho",
     "obs_stddev",
     "obs_variance",
 }
@@ -29,7 +30,13 @@ def logParameters(model: nnx.Module, header: str = "Parameters"):
     found = False
     for path, node in nnx.graph.iter_graph(model):
         if isinstance(node, parameter_filter):
-            if any(p in USEFUL_PARAMETER_NAMES for p in path):
+            if any(
+                any(
+                    x in p if isinstance(p, str) else False
+                    for x in USEFUL_PARAMETER_NAMES
+                )
+                for p in path
+            ):
                 if "network" in path:
                     continue
 
@@ -80,3 +87,7 @@ def logKernelParameters(posterior: Any):
 
 def logLikelihoodParameters(likelihood: Any):
     logParameters(likelihood, "Likelihood Parameters")
+
+
+def meanParameters(mean: Any):
+    logParameters(mean, "Mean Parameters")

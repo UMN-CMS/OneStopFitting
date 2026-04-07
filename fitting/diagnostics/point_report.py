@@ -9,13 +9,14 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
+import attrs
 
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
 logger = logging.getLogger(__name__)
 
 
-@dataclass(frozen=True)
+@attrs.define(frozen=True)
 class PointReportConfig:
     latex_engine: str = "pdflatex"
     keep_build: bool = False
@@ -131,6 +132,23 @@ def gatherPointContext(*, point_dir: Path, image_format: str) -> dict[str, Any]:
         _requireFile(img_path)
         image_paths[role] = str(img_path)
 
+    post_combine_dir = diagnostics_dir / "post_combine"
+    if post_combine_dir.exists() and post_combine_dir.is_dir():
+        for f in post_combine_dir.glob("*"):
+            if f.suffix[1:] in ["png", "pdf", image_format]:
+                image_paths[f.stem] = str(f.resolve())
+                
+        combine_keys = [k for k in image_paths.keys() if k.startswith("fit_diagnostic_")]
+        show_sig_keys = [k for k in combine_keys if "show_signal" in k]
+        no_sig_keys = [k for k in combine_keys if "show_signal" not in k]
+        
+        if no_sig_keys:
+            image_paths["combine_fit_diagnostic"] = image_paths[no_sig_keys[0]]
+        if show_sig_keys:
+            image_paths["combine_fit_diagnostic_show_signal"] = image_paths[show_sig_keys[0]]
+        if "gof_test" in image_paths:
+            image_paths["combine_gof_test"] = image_paths["gof_test"]
+
     return {
         "point_dir": str(point_dir.relative_to(Path.cwd())),
         "ndim": ndim,
@@ -138,6 +156,7 @@ def gatherPointContext(*, point_dir: Path, image_format: str) -> dict[str, Any]:
         "metrics": summary.get("metrics", {}),
         "training": summary.get("training", {}),
         "ppc": summary.get("ppc", {}),
+        "combine": summary.get("combine", {}),
         "image_paths": image_paths,
         "image_format": image_format,
     }

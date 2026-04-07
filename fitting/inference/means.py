@@ -608,6 +608,9 @@ class QCDMCMeanConfig(MeanFunctionConfig):
         if not self.mc_path:
             raise ValueError("QCDMCMeanConfig requires a valid mc_path")
 
+        domain_mask = kwargs.get("domain_mask", None)
+        transform = kwargs.get("transform", None)
+
         loader = FileLoader.forPath(self.mc_path)
         raw_data = loader.load(self.mc_path)
         histogram = extractHistogram(raw_data)
@@ -779,9 +782,9 @@ class MultiFidelityMeanFunction(gpjax.mean_functions.AbstractMeanFunction):
         self._mc_dataset = mc_dataset
 
         if learn_scale:
-            self.log_rho = gpjax.parameters.Real(jnp.array(0.0))
+            self.rho = gpjax.parameters.PositiveReal(jnp.array(0.1))
         else:
-            self.log_rho = None
+            self.rho = None
 
         if learn_tilt:
             self.tilt = gpjax.parameters.Real(jnp.zeros(ndim))
@@ -796,8 +799,8 @@ class MultiFidelityMeanFunction(gpjax.mean_functions.AbstractMeanFunction):
     def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
         mc_mean = self._computeMcMean(x)
 
-        if self.log_rho is not None:
-            rho = jnp.exp(self.log_rho.value)
+        if self.rho is not None:
+            rho = self.rho[...]
         else:
             rho = 1.0
 

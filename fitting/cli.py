@@ -32,7 +32,7 @@ from .pipeline import (
     runPipeline,
     PipelineStep,
 )
-from .steps.generators import generateSmoothedBackground
+from .steps.generators import generateSmoothedBackground, generateAsimovSmoothed
 from .inference.optimization import (
     OptimizationConfig,
     InferenceMode,
@@ -233,6 +233,27 @@ def run(
     runPipeline(pipeline_config, start_from=start_from_step, single_step=step)
 
 
+@main.command("print-params")
+@click.argument("input", type=str)
+def printParams(input):
+    from .diagnostics.parameters import (
+        logKernelParameters,
+        logLikelihoodParameters,
+        meanParameters,
+    )
+    from .core.serialization import load
+
+    data = load(input)
+    if data.training_result is None:
+        raise RuntimeError(
+            f"Can only print parameters on a state that has been trained"
+        )
+
+    posterior = data.training_result.posterior
+    logKernelParameters(posterior)
+    meanParameters(posterior)
+
+
 @main.command()
 @click.option(
     "--state",
@@ -256,9 +277,15 @@ def run(
     help="Name of the smoothed histogram. Will be appended with toy index.",
 )
 @click.option("--seed", type=int, default=42, help="RNG seed.")
+@click.option("--include-smooth", default=True, is_flag=True)
 @click.option("--num-samples", type=int, default=1, help="Number of samples to draw.")
 def smooth(
-    state: Path, output_dir: Path, name: str, seed: int, num_samples: int
+    state: Path,
+    output_dir: Path,
+    name: str,
+    seed: int,
+    include_smooth: bool,
+    num_samples: int,
 ) -> None:
 
     jax.config.update("jax_enable_x64", True)
@@ -284,6 +311,20 @@ def smooth(
         with lz4.frame.open(o, "wb") as f:
             to_save = {
                 "item": hist,
+                "metadata": metadata,
+            }
+            pickle.dump(to_save, f)
+
+    if include_smooth:
+        pure_plot_dir = output_dir / "pure_smooth_diagnostics"
+        pure_plot_dir.mkdir(exist_ok=True, parents=True)
+        h, plots = generateAsimovSmoothed(analysis_state, rng_key)
+        savePlots(plots, pure_plot_dir)
+        o = output_dir / f"pure_smoothed.pklz4"
+        metadata = copy.deepcopy(analysis_state.background_metadata)
+        with lz4.frame.open(o, "wb") as f:
+            to_save = {
+                "item": h,
                 "metadata": metadata,
             }
             pickle.dump(to_save, f)

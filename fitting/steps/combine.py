@@ -29,7 +29,11 @@ def prepareCombine(state: AnalysisState, rng_key: jax.Array) -> None:
 
     logger.info(f"Preparing Combine inputs in {out_dir}")
 
-    n_eigen = exportCombineData(state=state, output_path=shapes_path)
+    n_eigen = exportCombineData(
+        state=state,
+        output_path=shapes_path,
+        eigenvar_threshold=state.config.combine.eigenvar_threshold,
+    )
 
     channels = []
 

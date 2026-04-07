@@ -359,7 +359,7 @@ class NNKernelConfig(KernelConfig):
     base_kernel_config: KernelConfig = attrs.Factory(RBFConfig)
     input_dim: int = 2
     output_dim: int = 2
-    hidden_shapes: list[int] = attrs.Factory(lambda: [20, 20])
+    hidden_shapes: list[int] = attrs.Factory(lambda: [20,20])
     activation: str = "silu"
     weight_prior: PriorConfig | None = None
     bias_prior: PriorConfig | None = None
@@ -501,14 +501,14 @@ class MultiFidelityResidualKernel(gpk.AbstractKernel):
         mc_L: jnp.ndarray,
         mc_dataset: gpjax.Dataset,
         residual_kernel: gpk.AbstractKernel,
-        log_rho: gpp.Real | None = None,
+        rho: gpp.PositiveReal | None = None,
     ):
         super().__init__()
         self.mc_kernel = mc_kernel
         self._mc_L = mc_L
         self._mc_dataset = mc_dataset
         self.residual_kernel = residual_kernel
-        self.log_rho = log_rho
+        self.rho = rho
 
     def _computeMcCovariance(self, x: jax.Array, y: jax.Array) -> jax.Array:
         """Compute frozen MC posterior covariance between x and y."""
@@ -527,8 +527,8 @@ class MultiFidelityResidualKernel(gpk.AbstractKernel):
 
     def __call__(self, x, y):
         residual_val = self.residual_kernel(x, y)
-        if self.log_rho is not None:
-            rho = jnp.exp(self.log_rho.value)
+        if self.rho is not None:
+            rho = self.rho[...]
             # Point-wise MC variance
             x_r = x.reshape(1, -1)
             y_r = y.reshape(1, -1)
@@ -538,8 +538,8 @@ class MultiFidelityResidualKernel(gpk.AbstractKernel):
 
     def cross_covariance(self, x: jax.Array, y: jax.Array) -> jax.Array:
         residual_cov = self.residual_kernel.cross_covariance(x, y)
-        if self.log_rho is not None:
-            rho = jnp.exp(self.log_rho.value)
+        if self.rho is not None:
+            rho = jnp.exp(self.rho.value)
             mc_cov = self._computeMcCovariance(x, y)
             return rho**2 * mc_cov + residual_cov
         return residual_cov
@@ -559,7 +559,7 @@ class MultiFidelityResidualKernelConfig(KernelConfig):
             mc_kernel = kwargs.get("mc_kernel")
             mc_L = kwargs.get("mc_L")
             mc_dataset = kwargs.get("mc_dataset")
-            log_rho = kwargs.get("log_rho")
+            rho = kwargs.get("rho")
             if mc_kernel is None or mc_L is None or mc_dataset is None:
                 raise ValueError(
                     "MultiFidelityResidualKernelConfig with "
@@ -571,7 +571,7 @@ class MultiFidelityResidualKernelConfig(KernelConfig):
                 mc_L=mc_L,
                 mc_dataset=mc_dataset,
                 residual_kernel=residual,
-                log_rho=log_rho,
+                rho=rho,
             )
 
         return residual

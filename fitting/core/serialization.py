@@ -10,7 +10,9 @@ import lz4.frame
 import cattrs
 import jax.numpy as jnp
 import numpy as np
+import cattrs
 from cattrs.strategies import configure_tagged_union, include_subclasses
+from cattrs.gen import make_dict_unstructure_fn, override
 from numpyro.distributions.transforms import AffineTransform
 
 from .data import AnalysisState
@@ -77,23 +79,7 @@ def registerHierarchy(base_cls: type) -> None:
     include_subclasses(base_cls, converter, union_strategy=_tagged_union)
 
 
-def save(state: AnalysisState, path: Path) -> None:
-    """Save an AnalysisState to a compressed pickle file.
-
-    Args:
-        path: Output directory path. Will be created if it doesn't exist.
-    """
-    out_dir = Path(path)
-    out_dir.mkdir(parents=True, exist_ok=True)
-
-    # Save the full state as compressed pickle
-    pkl_path = out_dir / "state.pklz4"
-    with lz4.frame.open(pkl_path, "wb") as f:
-        pickle.dump(state, f)
-
-    logger.info(f"Saved analysis state to {pkl_path}")
-
-    # Save summary as JSON
+def getSummary(state: AnalysisState):
     summary = {
         "config": converter.unstructure(state.config),
         "metadata": converter.unstructure(state.metadata),
@@ -117,8 +103,50 @@ def save(state: AnalysisState, path: Path) -> None:
         summary["ppc"] = {
             "test_stats": converter.unstructure(state.ppc_results["test_stats"]),
         }
+    return summary
+
+
+def limitedSummary(state: AnalysisState):
+
+    converter = cattrs.Converter()
+    hook = make_dict_unstructure_fn(
+        type(state.config), 
+        converter, 
+        _cattrs_omit_if_default=True
+    )
+    converter.register_unstructure_hook(type(state.config), hook)
+
+    summary = {
+        "config": converter.unstructure(state.config),
+        "metadata": converter.unstructure(state.metadata).get("other_data"),
+    }
+
+    if state.blind_mask is not None:
+        summary["blind_mask_size"] = int(state.blind_mask.sum())
+
+    return summary
+
+
+def save(state: AnalysisState, path: Path) -> None:
+    """Save an AnalysisState to a compressed pickle file.
+
+    Args:
+        path: Output directory path. Will be created if it doesn't exist.
+    """
+    out_dir = Path(path)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    # Save the full state as compressed pickle
+    pkl_path = out_dir / "state.pklz4"
+    with lz4.frame.open(pkl_path, "wb") as f:
+        pickle.dump(state, f)
+
+    logger.info(f"Saved analysis state to {pkl_path}")
 
     json_path = out_dir / "summary.json"
+
+    summary = getSummary(state)
+
     with open(json_path, "w") as f:
         json.dump(summary, f, indent=2)
 

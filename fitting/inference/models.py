@@ -272,7 +272,7 @@ class MultiFidelityGPConfig(GPModelConfig):
     mc_num_iters: int = 150
     mc_lr: float = 0.01
 
-    residual_kernel: KernelConfig = attrs.Factory(lambda: Matern32Config(ard=True))
+    residual_kernel: KernelConfig = attrs.Factory(lambda: NNKernelConfig())
 
     learn_rho: bool = True
     learn_tilt: bool = False
@@ -317,12 +317,12 @@ class MultiFidelityGPConfig(GPModelConfig):
             ndim=ndim,
         )
 
-        if self.rho_prior is not None and mf_mean.log_rho is not None:
-            mf_mean.log_rho = gpp.Real(
-                jnp.array(0.0), prior=self.rho_prior.buildPrior()
+        if self.rho_prior is not None and mf_mean.rho is not None:
+            mf_mean.rho = gpp.PositiveReal(
+                jnp.array(0.1), prior=self.rho_prior.buildPrior()
             )
         kernel_kwargs = dict(**kwargs)
-        if self.propagate_mc_variance and mf_mean.log_rho is not None:
+        if self.propagate_mc_variance and mf_mean.rho is not None:
             x_mc = mc_dataset.X
             k_mc = frozen_mc_posterior.prior.kernel
             Kxx = k_mc.gram(x_mc).to_dense()
@@ -334,7 +334,7 @@ class MultiFidelityGPConfig(GPModelConfig):
             kernel_kwargs["mc_kernel"] = k_mc
             kernel_kwargs["mc_L"] = mc_L
             kernel_kwargs["mc_dataset"] = mc_dataset
-            kernel_kwargs["log_rho"] = mf_mean.log_rho
+            kernel_kwargs["rho"] = mf_mean.rho
 
         residual_config = MultiFidelityResidualKernelConfig(
             residual_kernel=self.residual_kernel,

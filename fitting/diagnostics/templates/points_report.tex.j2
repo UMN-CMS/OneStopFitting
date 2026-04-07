@@ -18,7 +18,7 @@
 \begin{document}
 
 [- for p in points -]
-[- with metadata=p["metadata"], metrics=p["metrics"], ppc=p["ppc"], image_paths=p["image_paths"], ndim=p["ndim"], point_dir=p["point_dir"] -]
+[- with metadata=p["metadata"], metrics=p["metrics"], ppc=p["ppc"], combine=p["combine"], image_paths=p["image_paths"], ndim=p["ndim"], point_dir=p["point_dir"] -]
 [- include "_header.tex.j2" -]
 
 \vspace{0.8em}
@@ -27,6 +27,10 @@
 [- include "_1d_layout.tex.j2" -]
 [- else -]
 [- include "_2d_layout.tex.j2" -]
+[- endif -]
+
+[- if combine is defined and combine -]
+[- include "_combine_layout.tex.j2" -]
 [- endif -]
 
 [- if not loop.last -]

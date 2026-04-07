@@ -26,7 +26,7 @@ class CondorPackage:
 
 
 COMBINE_SHORT_COMMANDS = {
-    "fit-diagnostics": "combine -M FitDiagnostics -d datacard.root  --name fit_diagnostics --saveShapes --saveNormalizations",
+    "fit-diagnostics": "combine -M FitDiagnostics -d datacard.root --saveShapes --saveNormalizations",
     "multidimfit": "combine -M MultiDimFit -d datacard.root",
     "limits": "combine -M AsymptoticLimits -d datacard.root",
     "significance": "combine -M Significance -d datacard.root",

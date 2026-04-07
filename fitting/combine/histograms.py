@@ -18,7 +18,6 @@ def exportHistograms(
     test_data: BinnedData,
     output_path: Path,
     process_name: str = "background",
-    n_eigenvariations: int | None = None,
 ) -> None:
     from ..inference.prediction import computeScaledEigenvectors
     import uproot
@@ -40,8 +39,6 @@ def exportHistograms(
 
     eigenvalues, scaled_vecs = computeScaledEigenvectors(pred_cov)
     n_vars = scaled_vecs.shape[1]
-    if n_eigenvariations is not None:
-        n_vars = min(n_vars, n_eigenvariations)
 
     for i in range(n_vars):
         variation = np.asarray(scaled_vecs[:, i])
@@ -110,7 +107,8 @@ def exportCombineData(
     state: AnalysisState,
     output_path: Path,
     use_window_mask: bool = True,
-) -> None:
+    eigenvar_threshold=0.01,
+) -> int:
     import uproot
     from .eigenvariations import computeEigenvariations
     from ..data.loading import hasVariationAxis, variationNames, histToBinnedData
@@ -140,7 +138,9 @@ def exportCombineData(
     histograms = {}
 
     histograms["background"] = (np.asarray(pred_mean_masked), linear_edges)
-    variations = computeEigenvariations(pred_mean_masked, pred_cov_masked)
+    variations = computeEigenvariations(
+        pred_mean_masked, pred_cov_masked, threshold_fraction=eigenvar_threshold
+    )
 
     for var in variations:
         idx = var["index"]

@@ -5,12 +5,14 @@ import logging
 import jax
 import jax.numpy as jnp
 from jax import random
+import json
 
 from ..core.data import AnalysisState, BinnedData
 from ..diagnostics.plot_utils import savePlots
 from ..diagnostics.plots import makeDiagnosticPlots, makePosteriorPredictivePlots
 from ..inference.prediction import getPriorMeanInRealSpace
 from gpjax.variational_families import VariationalGaussian
+from ..core.serialization import getSummary, limitedSummary
 
 logger = logging.getLogger(__name__)
 
@@ -81,4 +83,6 @@ def generatePlots(state: AnalysisState, rng_key: jax.Array) -> None:
 
     plot_dir = state.getRealOutPath() / "diagnostics"
     savePlots(plots, plot_dir, formats=state.config.image_formats)
+    with open(plot_dir / "ALL.json", "w") as f:
+        json.dump(limitedSummary(state), f)
     logger.info(f"Pipeline complete. Plots saved to {plot_dir}")
