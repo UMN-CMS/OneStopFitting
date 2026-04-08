@@ -32,7 +32,7 @@ Alternatively, you can utilize the provided `setup.sh` to initialize the contain
 The primary entry point is `python -m fitting`. The toolkit provides robust subcommands for managing the full lifecycle of background estimation.
 
 ### 1. `run`
-Executes the fitting pipeline. Matches background (and optionally signal) distributions to a Gaussian Process model and runs localized statistical evaluation.
+Executes the fitting pipeline. 
 
 **Key Arguments:**
 - `--config`, `-c`: Path to the YAML configuration file determining the model geometry and pipeline parameters.
@@ -51,7 +51,7 @@ python -m fitting run \
 ```
 
 ### 2. `smooth`
-Generates toy sampled smoothed backgrounds by drawing parameters from an established optimal fit posterior.
+Generates sampled smoothed backgrounds by drawing poisson toys from a smooth latent distribution
 
 **Key Arguments:**
 - `--state`, `-s`: The loaded `state.pklz4` resolving from a successful pipeline `run`.
@@ -69,7 +69,7 @@ python -m fitting smooth \
 ```
 
 ### 3. `aggregate-plot`
-Harvests metrics stored across multiple `summary.json` outcomes and reconstructs them into 2D mass-plane plots. Crucial for assessing localized fit quality over large scans.
+Harvests metrics stored across multiple `summary.json` outcomes and reconstructs them into 2D mass-plane plots. 
 
 **Key Arguments:**
 - `--metric`, `-m`: Target dot-path referring into the `summary.json` (e.g., `metrics.blinded_chi2_per_bin`).
@@ -89,7 +89,7 @@ python -m fitting aggregate-plot \
 ```
 
 ### 4. `report`
-Automates LaTeX-based compilations of individual datapoints containing diagnostic imagery, Combine calculations, and data overlays into formatted PDF review cards.
+Generate single file pdf reports for a given set of summary jsons.
 
 **Key Arguments:**
 - `--input`, `-i`: Directory paths or Glob strings searching for `summary.json`. Can be declared repeatedly.
@@ -106,7 +106,9 @@ python -m fitting report \
 ```
 
 ### 5. `makecondor` and `makebatch`
-Translates search queries spanning multiple datasets into dedicated submission trees targeted towards distributed HTCondor infrastructure (`makecondor`) or automated batch parameter sweeps (`makebatch`).
+
+`makecondor` and `makebatch` are used to generate submission files for running the fitting pipeline on a cluster.
+
 
 **Key Arguments (`makecondor`):**
 - `--signal`: Glob pattern resolving varied signal templates (`**/signal_{year}_*.pklz4`).
@@ -145,7 +147,7 @@ python -m fitting makebatch \
 ```
 
 ### 6. `harvest`
-Independent extraction method bypassing traditional serialization loops inside the `run` pipeline to manually extract CMS Combine calculation results sequentially into `summary.json` structures.
+Extracts the results of the CMS Combine statistical evaluation from the `combine` directory and saves them to a `summary.json` file, and possibly image files.
 
 **Key Arguments:**
 - `<summaries>`: Standard positional paths resolving raw `summary.json` locations where respective parallel `/combine` directories simultaneously overlap.
@@ -160,18 +162,18 @@ OneStopFitting provides a flexible framework for modeling complex backgrounds in
 
 ### 1. GP Models (`fitting.inference.models`)
 - **`ExactGPConfig`**: Standard full-batch Gaussian Process fit. Ideal for lower dimensions and data spaces computationally acceptable for Cholesky decompositions.
-- **`SparseGPConfig`**: Employs collapsed variational inducing points suitable for highly dense regions or massive parameter constraints.
-- **`VariationalGPConfig`**: Uncollapsed variational formulation utilizing custom sparse grid evaluations natively in JAX.
+- **`SparseGPConfig`**: Employs collapsed variational inducing points suitable for large datasets.
+- **`VariationalGPConfig`**: GPR regression using stochasic variational inference.
 - **`MultiFidelityGPConfig`**: A two-stage autoregressive framework. Primarily fits against a low-fidelity representation (e.g., QCD Monte Carlo) and refines a correlated high-fidelity surrogate over the observed data. 
-- **`QCDPriorGPConfig`**: Wraps the background fit into a completely data-driven Bayesian workflow utilizing extracted hyperpriors from MC runs.
+- **`QCDPriorGPConfig`**: Bayesian workflow utilizing extracted hyperpriors from MC runs.
 
 ### 2. Available Kernels (`fitting.inference.kernels`)
-The software integrates the complete taxonomy of stationary and non-stationary kernels available in GPJax, while adding specialized physics extensions.
+The software integrates a large number of stationary and non-stationary kernels available in GPJax, while adding specialized physics extensions.
 - **Standard**: `RBF`, `Matern12` / `Matern32` / `Matern52`, `RationalQuadratic`, `Polynomial`, `Periodic`, `Linear`, `White`.
 - **Composites**: `SumKernelConfig`, `ProductKernelConfig`, `ScaledKernelConfig`.
-- **Neural Network Kernel (`NNKernelConfig` / `DeepKernelFunction`)**: Maps initial coordinates through a customizable Multi-Layer Perceptron (defined using `activation` and `hidden_shapes`) before applying a base kernel (like RBF). Allows dynamic spatial warping for non-stationary localized mass distortions.
-- **`MCEnsembleKernel`**: Generates a custom empirical covariance matrix directly from multiple systematic MC variations (Scale, PDF, Parton Shower variations).
-- **`MultiFidelityResidualKernel`**: Evaluates the underlying discrepancy difference bridging the exact data and theoretical QCD MC predictions.
+- **Neural Network Kernel (`NNKernelConfig` / `DeepKernelFunction`)**: Apply a dense NN before applying a base kernel (like RBF). Allows dynamic spatial warping for non-stationary localized mass distortions.
+- **`MCEnsembleKernel`**: Generates a custom empirical covariance matrix directly from multiple systematic MC variations.
+- **`MultiFidelityResidualKernel`**: Represents the underlying discrepancy between the data and QCD MC predictions.
 
 ### 3. Mean Functions (`fitting.inference.means`)
 Fitting accurately in multi-dimensional space requires defining rigid geometric priors.
@@ -180,11 +182,11 @@ Fitting accurately in multi-dimensional space requires defining rigid geometric 
 - **Bump Geometries**: Supports complex geometric perturbations such as `DoubleSidedCrystalBallMeanConfig`, `GaussianBumpMeanConfig`, `AsymmetricGaussianBumpMeanConfig`, `StudentTBumpMeanConfig`, `SkewedGaussianMeanConfig`, and `AsymmetricLaplaceMeanConfig`. Includes `MixtureOfGaussiansMeanConfig` for resonance structures.
 - **Physics Extractions**: 
   - `QCDMCMeanConfig`: Dynamically constructs the mean field using nearest-neighbor interpolations over a valid QCD MC space paired with trainable linear tilt adjustments.
-  - `SignalTemplateMeanConfig`: Directly incorporates a user-provided signal injection geometry mapping either via straightforward interpolation or robust automated Gaussian envelope fitting (`use_gaussian_fit`).
-- **Lookups**: `LookupTableMeanConfig` and `InterpolatedMeanConfig`.
+  - `SignalTemplateMeanConfig`: Directly incorporates a user-provided signal injection geometry.
+- **Lookups**: `LookupTableMeanConfig` and `InterpolatedMeanConfig` for manual mean specification.
 
 ### 4. Inference and Optimization (`fitting.inference.optimization`)
 Inference modes are configurable directly via the CLI (`--mode`) and optimizations via `OptimizationConfig`.
-- **Optimization Mode (`OPTIMIZATION`)**: Resolves Maximum Likelihood Estimation (MLE) or MAP estimates using `Optax` based minimizers (Adam, AdamW, SGD). Supports custom learning rate schedulers. Objective evaluations resolve standard Marginal Log-Likelihood (`MLL`), `LOOCV`, `ELBO`, or `COLLAPSED_ELBO` architectures.
+- **Optimization Mode (`OPTIMIZATION`)**: Resolves Maximum Likelihood Estimation (MLE) (standard) or MAP estimates using `Optax` based minimizers (Adam, AdamW, SGD). Objective evaluations resolve standard Marginal Log-Likelihood (`MLL`), `LOOCV`, `ELBO`, or `COLLAPSED_ELBO` architectures.
 - **Two-Stage Fits (`TWO_STAGE` / `HOMOSCEDASTIC_TWO_STAGE`)**: Iterative procedure prioritizing convergence robustness. Freezes the kernel bounds to forcefully optimize macro-shape geometries (mean functions) via early-stage large learning rates, before resolving minor spatial residuals independently.
-- **Markov Chain Monte Carlo (`SAMPLING`)**: When precise posterior distributions, or the likelihood is non-Gaussian. Uses `NumPyro` backends.
+- **Markov Chain Monte Carlo (`SAMPLING`)**: Fully bayesian inference using `NumPyro` backends.
