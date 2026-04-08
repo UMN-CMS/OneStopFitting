@@ -1,0 +1,72 @@
+\clearpage
+\begin{tabularx}{\textwidth}{@{}X r@{}}
+{\Large \textbf{Combine Diagnostics}} & \\
+\end{tabularx}
+\vspace{0.6em}
+
+[- set limits = combine.get("limits", {}) -]
+\begin{tabularx}{\textwidth}{@{\hspace{2pt}} L @{\hspace{4pt}} L @{\hspace{2pt}}}
+  %% summary table
+  \begin{minipage}[t]{\linewidth}
+    \small\textbf{Limits}\par
+    \vspace{0.3em}
+    \begin{tabular}{@{} l r @{}}
+      \toprule
+      Metric & Value \\
+      \midrule
+      Observed & [[ "%.4g" | format(limits.get("observed", 0)) ]] \\
+      Expected & [[ "%.4g" | format(limits.get("expected", 0)) ]] \\
+      $-1\sigma$ & [[ "%.4g" | format(limits.get("expected_minus_1sigma", 0)) ]] \\
+      $+1\sigma$ & [[ "%.4g" | format(limits.get("expected_plus_1sigma", 0)) ]] \\
+      $-2\sigma$ & [[ "%.4g" | format(limits.get("expected_minus_2sigma", 0)) ]] \\
+      $+2\sigma$ & [[ "%.4g" | format(limits.get("expected_plus_2sigma", 0)) ]] \\
+      \bottomrule
+    \end{tabular}
+  \end{minipage} &
+  
+  \begin{minipage}[t]{\linewidth}
+    \small\textbf{Goodness of Fit \& Significance}\par
+    \vspace{0.3em}
+    \begin{tabular}{@{} l r @{}}
+      \toprule
+      Metric & Value \\
+      \midrule
+      GOF $p$-value & [[ "%.4g" | format(combine.get("gof_p_value", 0)) ]] \\
+      GOF Test Stat & [[ "%.4g" | format(combine.get("gof_test_statistic", 0)) ]] \\
+      Significance & [[ "%.4g" | format(combine.get("significance", 0)) ]] \\
+      \bottomrule
+    \end{tabular}
+  \end{minipage} \\
+\end{tabularx}
+
+\vspace{1em}
+
+\begin{tabularx}{\textwidth}{@{\hspace{2pt}} L @{\hspace{4pt}} L @{\hspace{4pt}} L @{\hspace{2pt}}}
+  [- if image_paths.get("combine_fit_diagnostic") -]
+  \begin{minipage}[t]{\linewidth}\vspace{0pt}
+  \includegraphics[width=\linewidth]{[[ image_paths["combine_fit_diagnostic"] ]]}
+  \end{minipage}
+  [- else -]
+  \centering No Fit Diagnostic
+  [- endif -]
+  &
+  [- if image_paths.get("combine_fit_diagnostic_show_signal") -]
+  \begin{minipage}[t]{\linewidth}\vspace{0pt}
+  \includegraphics[width=\linewidth]{[[ image_paths["combine_fit_diagnostic_show_signal"] ]]}
+  \end{minipage}
+  [- else -]
+  \centering No Fit Diagnostic (Signal)
+  [- endif -]
+  &
+  [- if image_paths.get("combine_gof_test") -]
+  \begin{minipage}[t]{\linewidth}\vspace{0pt}
+  \includegraphics[width=\linewidth]{[[ image_paths["combine_gof_test"] ]]}
+  \end{minipage}
+  [- else -]
+  \centering No GOF Plot
+  [- endif -]
+  \\
+  \centering\scriptsize Fit Diagnostic (No Signal) &
+  \centering\scriptsize Fit Diagnostic (Show Signal) &
+  \centering\scriptsize Goodness of Fit Toys \\
+\end{tabularx}
