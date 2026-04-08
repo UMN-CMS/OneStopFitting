@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import logging
 from pathlib import Path
 
@@ -8,7 +9,7 @@ import mplhep
 import numpy as np
 import jax.numpy as jnp
 from ..core.data import AnalysisState
-from .plot_utils import savePlots
+from .plot_utils import savePlots, plotRaw
 from ..inference.prediction import computeScaledEigenvectors
 import jax
 
@@ -16,10 +17,8 @@ logger = logging.getLogger(__name__)
 
 
 def plotCombineInputs(
-    state: AnalysisState, output_dir: Path, use_window_mask: bool = True
-):
-    output_dir = Path(output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
+    state: AnalysisState, use_window_mask: bool = True
+) -> dict[str, tuple]:
 
     if use_window_mask:
         blind_mask = state.blind_mask
@@ -50,19 +49,15 @@ def plotCombineInputs(
     ax.legend()
 
     plots = {"combine_inputs_1d": (fig, ax)}
-    savePlots(plots, output_dir)
-    logger.info(f"Saved Combine input plots to {output_dir}")
+    return plots
 
 
 def verifyEigenvariations(
     state: AnalysisState,
-    output_dir: Path,
     n_samples: int = 1000,
     use_window_mask: bool = True,
-):
+) -> dict[str, tuple]:
     """Verify that eigenvariations faithfully emulate the true MVN."""
-    output_dir = Path(output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
 
     if use_window_mask:
         blind_mask = state.blind_mask
@@ -121,12 +116,39 @@ def verifyEigenvariations(
 
     plots["variance_comparison_sampled"] = (fig2, ax2)
 
-    savePlots(plots, output_dir)
-
     frob_norm_diff = np.linalg.norm(diff)
     frob_norm_true = np.linalg.norm(pred_cov)
     rel_error = frob_norm_diff / frob_norm_true
 
     logger.info(f"Verified eigenvariations: Relative Frobenius Error = {rel_error:.4g}")
     logger.info(f"Number of eigenvariations kept: {scaled_vecs.shape[1]}")
-    logger.info(f"Saved Combine diagnostic plots to {output_dir}")
+
+    return plots
+
+
+def visualizeEigenvariations(
+    state: AnalysisState,
+    use_window_mask: bool = True,
+) -> dict[str, tuple]:
+    """Verify that eigenvariations faithfully emulate the true MVN."""
+
+    if use_window_mask:
+        blind_mask = state.blind_mask
+    else:
+        blind_mask = np.ones_like(state.test_data.Y, dtype=bool)
+
+    pred_cov = state.pred_cov[blind_mask, :][:, blind_mask]
+
+    eigenvalues, scaled_vecs = computeScaledEigenvectors(
+        pred_cov, threshold_fraction=state.config.combine.eigenvar_threshold
+    )
+
+    base = state.test_data
+    plots = {}
+    for i in range(scaled_vecs.shape[1]):
+        ev = scaled_vecs[:,i]
+        fig, ax = plt.subplots()
+        plotRaw(ax, base.edges, base.X[blind_mask], ev)
+        plots[f"eigenvar_{i}"] = (fig, ax)
+
+    return plots

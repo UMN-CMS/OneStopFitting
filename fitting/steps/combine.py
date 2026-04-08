@@ -11,8 +11,13 @@ from jinja2 import Environment, FileSystemLoader
 from ..core.data import AnalysisState
 from ..combine.histograms import exportCombineData, normalizeVarName
 from ..combine.datacard import Process, Channel, Systematic, DataCard
+from ..diagnostics.plot_utils import savePlots
 from ..data.loading import variationNames
-from ..diagnostics.combine import plotCombineInputs, verifyEigenvariations
+from ..diagnostics.combine import (
+    plotCombineInputs,
+    verifyEigenvariations,
+    visualizeEigenvariations,
+)
 from ..distributed.condor_tools import getCombineCommand
 
 logger = logging.getLogger(__name__)
@@ -102,8 +107,13 @@ def prepareCombine(state: AnalysisState, rng_key: jax.Array) -> None:
 
     # Combine Diagnostics
     diag_dir = state.getRealOutPath() / "diagnostics" / "combine"
-    plotCombineInputs(state, diag_dir)
-    verifyEigenvariations(state, diag_dir)
+    plots = {}
+
+    diag_dir.mkdir(parents=True, exist_ok=True)
+    plots.update(plotCombineInputs(state))
+    plots.update(verifyEigenvariations(state))
+    plots.update(visualizeEigenvariations(state))
+    savePlots(plots,diag_dir)
 
     logger.info(f"Combine preparation complete. Datacard: {datacard_path}")
 

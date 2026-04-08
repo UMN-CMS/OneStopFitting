@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 import itertools as it
 import matplotlib.pyplot as plt
+import logging
 import mplhep
 import numpy as np
 from uhi.numpy_plottable import NumPyPlottableHistogram
@@ -22,6 +23,8 @@ CMS_COLORS = [
     "#92dadd",
 ]
 
+
+logger = logging.getLogger(__name__)
 
 def addAxesToHist(ax, size=0.1, pad=0.1, position="bottom", extend=False):
     new_ax = mplhep.append_axes(ax, size, pad, position, extend)
@@ -85,6 +88,7 @@ def savePlots(plots: dict[str, tuple], save_dir, formats=("pdf",)):
             out = (save_dir / name).with_suffix(ext)
             fig.savefig(out, bbox_inches="tight")
         plt.close(fig)
+    logger.info(f"Saved {len(plots)} to directory {save_dir}")
 
 
 DEFAULT_QUANTILE_LINES = (("black", 0.5),)
