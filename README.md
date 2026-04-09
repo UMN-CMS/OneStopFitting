@@ -1,6 +1,7 @@
 # OneStopFitting: Gaussian Process Background Estimation
 
-OneStopFitting is a comprehensive framework for Gaussian Process (GP) background estimation and smoothing, tailored for High Energy Physics (HEP) applications. The framework is designed to process multi-dimensional background and signal histograms, utilize Multi-Fidelity Gaussian Processes to robustly capture underlying distributions, and interface with statistical evaluation tools like CMS Combine.
+OneStopFitting is a comprehensive framework for Gaussian Process (GP) background estimation and smoothing, tailored for High Energy Physics (HEP) applications.
+The framework is designed to process one and two dimensional histograms, to generate background estimates, including uncertainties, that may be used for downstream analysis in Combine.
 
 ## Project Structure
 
@@ -29,7 +30,7 @@ Alternatively, you can utilize the provided `setup.sh` to initialize the contain
 
 ## Command Line Interface (`fitting.cli`)
 
-The primary entry point is `python -m fitting`. The toolkit provides robust subcommands for managing the full lifecycle of background estimation.
+The primary entry point is `python -m fitting`. The toolkit provides robust subcommands for managing the steps of background estimation.
 
 ### 1. `run`
 Executes the fitting pipeline. 
@@ -51,6 +52,7 @@ python -m fitting run \
 ```
 
 ### 2. `smooth`
+
 Generates sampled smoothed backgrounds by drawing poisson toys from a smooth latent distribution
 
 **Key Arguments:**
@@ -89,6 +91,7 @@ python -m fitting aggregate-plot \
 ```
 
 ### 4. `report`
+
 Generate single file pdf reports for a given set of summary jsons.
 
 **Key Arguments:**
@@ -186,7 +189,6 @@ Fitting accurately in multi-dimensional space requires defining rigid geometric 
 - **Lookups**: `LookupTableMeanConfig` and `InterpolatedMeanConfig` for manual mean specification.
 
 ### 4. Inference and Optimization (`fitting.inference.optimization`)
-Inference modes are configurable directly via the CLI (`--mode`) and optimizations via `OptimizationConfig`.
 - **Optimization Mode (`OPTIMIZATION`)**: Resolves Maximum Likelihood Estimation (MLE) (standard) or MAP estimates using `Optax` based minimizers (Adam, AdamW, SGD). Objective evaluations resolve standard Marginal Log-Likelihood (`MLL`), `LOOCV`, `ELBO`, or `COLLAPSED_ELBO` architectures.
 - **Two-Stage Fits (`TWO_STAGE` / `HOMOSCEDASTIC_TWO_STAGE`)**: Iterative procedure prioritizing convergence robustness. Freezes the kernel bounds to forcefully optimize macro-shape geometries (mean functions) via early-stage large learning rates, before resolving minor spatial residuals independently.
 - **Markov Chain Monte Carlo (`SAMPLING`)**: Fully bayesian inference using `NumPyro` backends.
