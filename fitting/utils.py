@@ -43,6 +43,7 @@ def merge(destination: MutableMapping, source: Mapping) -> Mapping:
     return destination
 
 
+
 def dotToNested(dot_dict: Mapping) -> Mapping:
     nested = {}
     for key, value in dot_dict.items():
@@ -86,6 +87,12 @@ def getSignal(path):
     match = re.search(r"signal_.+_(31\d)_(\d+)_(\d+)", str(path))
     return [match.group(1), int(match.group(2)), int(match.group(3))]
 
+
+def getRecoCategory(name):
+    found = next((x for x in ["uncomp", "verycomp", "comp"] if x in name), None)
+    if not found:
+        raise RuntimeError("Could not determine reco category.")
+    return found
 
 def getCategory(mstop, mchi):
     if mchi < (0.6 * mstop + 150):

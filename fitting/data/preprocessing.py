@@ -79,7 +79,7 @@ def preprocess(
             edges=state.background.edges,
         )
     else:
-        logger.info("Background only fit, not signal injection")
+        logger.info("Background only fit, no signal injection")
 
     # Apply domain mask
     domain_data, domain_mask = applyDomainMask(

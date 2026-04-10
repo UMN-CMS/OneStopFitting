@@ -42,8 +42,8 @@ def iterSummaryFiles(inputs: Iterable[str | Path]) -> Iterator[Path]:
                         seen.add(resolved)
                         yield resolved
             else:
-                if path.name != "summary.json":
-                    continue
+                # if path.name != "summary.json":
+                #     continue
                 resolved = path.resolve()
                 if resolved not in seen:
                     seen.add(resolved)
@@ -74,7 +74,8 @@ class AggregatePoint:
     mstop: float
     mchi: float
     value: float
-    source: Path
+    source: Path | None = None
+    groups: dict | None = None
 
 
 def collectPoints(
@@ -84,7 +85,7 @@ def collectPoints(
     group_by: list[str] | None = None,
     stop_dotpath: str = "metadata.other_data.stop_mass",
     chi_dotpath: str = "metadata.other_data.chargino_mass",
-) -> list[AggregatePoint]:
+) -> dict[tuple[tuple[str, Any], ...], list[AggregatePoint]]:
     points = defaultdict(list)
     for path in summary_files:
         try:
@@ -101,9 +102,11 @@ def collectPoints(
         except Exception as e:
             logger.warning(f"Skipping {path}: {e}")
         points[key].append(
-            AggregatePoint(mstop=mstop, mchi=mchi, value=value, source=path)
+            AggregatePoint(
+                mstop=mstop, mchi=mchi, value=value, source=path, groups=dict(key)
+            )
         )
-    return points
+    return dict(points)
 
 
 def _edgesFromCenters(centers: np.ndarray) -> np.ndarray:

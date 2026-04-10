@@ -113,8 +113,6 @@ fi
 echo "Starting harvest"
 run_fit "python3 -m fitting harvest $ACTUAL_OUTPUT/summary.json"
 
-echo "Starting post-harvest"
-run_fit "python3 -m fitting post-harvest $ACTUAL_OUTPUT/summary.json"
 """
 
 SUBMIT_TEMPLATE = """
@@ -124,7 +122,7 @@ universe = vanilla
 output = {{ output_dir }}/logs/$(cluster)_$(process).out
 error = {{ output_dir }}/logs/$(cluster)_$(process).err
 log = {{ output_dir }}/logs/$(cluster)_$(process).log
-request_memory = 4GB
+#request_memory = 4GB
 request_cpus = 1
 transfer_input_files = {{ transfer_input_files | join(', ') }}, $(signal), $(background)
 transfer_output_files = {{ output_dir }}

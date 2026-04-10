@@ -355,7 +355,7 @@ def smooth(
     "-n",
     "--name-format",
     type=str,
-    default="{metric_name}.{ext}",
+    default="{metric_name}.png",
     help="Format for output filenames.",
 )
 @click.option(
@@ -388,6 +388,19 @@ def smooth(
     show_default=True,
     help="Gaussian filter truncate (in sigmas).",
 )
+@click.option("--save-data", default=False, is_flag=True)
+@click.option(
+    "--stop-dotpath",
+    type=str,
+    default="metadata.other_data.stop_mass",
+    show_default=True,
+)
+@click.option(
+    "--chi-dotpath",
+    type=str,
+    default="metadata.other_data.chargino_mass",
+    show_default=True,
+)
 def aggregatePlot(
     inputs: tuple[str, ...],
     metric_dotpath: str,
@@ -401,22 +414,42 @@ def aggregatePlot(
     cmax: float | None,
     smooth_sigma: float | None,
     smooth_truncate: float,
+    save_data: bool,
+    stop_dotpath: str,
+    chi_dotpath: str,
 ) -> None:
     """Create an aggregate 2D mass-plane plot from many summary.json files."""
     from .diagnostics.plot_utils import savePlots
+    import json
+    import cattrs
 
     summary_files = list(iterSummaryFiles(inputs))
     if not summary_files:
-        raise click.UsageError("No summary.json files found for given --input(s).")
+        raise click.UsageError("No summary.json files found for given input(s).")
 
     points = collectPoints(
-        summary_files, metric_dotpath=metric_dotpath, group_by=group_by
+        summary_files,
+        metric_dotpath=metric_dotpath,
+        group_by=group_by,
+        stop_dotpath=stop_dotpath,
+        chi_dotpath=chi_dotpath,
     )
+
+    all_points = [x for y in points.values() for x in y]
+    logger.info(f"Gathered {len(all_points)} points into {len(points)} groups")
     if not points:
         raise click.ClickException(
             f"Found {len(summary_files)} summary.json files, but none contained "
             f"'{metric_dotpath}' plus required mass metadata."
         )
+    output = Path(output)
+    output.mkdir(exist_ok=True, parents=True)
+
+    if save_data:
+        p = output / "data.json"
+        logger.info(f"Saving data to {p}")
+        with open(p, "w") as f:
+            json.dump(cattrs.unstructure(all_points), f)
     plots = {}
     for k, p in points.items():
         plots.update(
@@ -780,6 +813,76 @@ def harvest(summaries: tuple[Path, ...]) -> None:
     logger.info(
         f"Harvest complete. Updated {success_count}/{len(summaries)} summary files."
     )
+
+
+@main.command("window-fit")
+@click.argument("input", nargs=-1)
+@click.option("--spread", type=float)
+@click.option("--rebin", default=1, type=int)
+@click.option("-o", "--output-format", type=str)
+def windowFit(input: tuple[str, ...], spread: float, rebin: int, output_format: str):
+    from .data.windowing import fitGaussianWindow
+    from .utils import getRecoCategory
+    from .data.loading import (
+        FileLoader,
+        extractHistogram,
+        extractMetadata,
+        histToBinnedData,
+    )
+    import matplotlib.pyplot as plt
+    from .diagnostics.plot_utils import plotBinnedData, plotRaw, plotPPD, plotBlinding2D
+    from .utils import dictToDot, dotFormat
+    import numpy as np
+    import json
+    import mplhep
+    from rich.progress import track
+
+    mplhep.style.use("CMS")
+    failures = 0
+
+    logger.info(
+        f"Producing windows for {len(input)} signals using window spread {spread:0.2f}"
+    )
+    for signal_path in track(input, total=len(input)):
+        sig_loader = FileLoader.forPath(signal_path)
+        sig_raw = sig_loader.load(signal_path)
+        sig_hist_full = extractHistogram(sig_raw)
+        signal = histToBinnedData(sig_hist_full, rebin=rebin, variation="central")
+        sig_metadata = extractMetadata(sig_raw)
+        reco_cat = getRecoCategory(sig_metadata["name"])
+
+        try:
+            window = fitGaussianWindow(signal, spread=spread)
+        except RuntimeError as e:
+            logger.warning(f"Failed to fit {sig_metadata['dataset_name']}")
+            failures += 1
+            continue
+        blind_mask = window(signal.X)
+
+        fig, ax = plt.subplots(layout="tight")
+        plotBinnedData(ax, signal)
+        ax.set_title("Injected Signal")
+        if signal.axis_names and len(signal.axis_names) >= 2:
+            ax.set_xlabel(signal.axis_names[0])
+            ax.set_ylabel(signal.axis_names[1])
+        plotBlinding2D(ax, signal.edges, signal.X, blind_mask)
+        blind_mask_size = int(np.count_nonzero(blind_mask))
+        all_data = {
+            "reco_category": reco_cat,
+            "window_spread": spread,
+            "blind_mask_size": blind_mask_size,
+            **sig_metadata,
+        }
+
+        output_path = Path(dotFormat(output_format, **dict(dictToDot(all_data))))
+        image_out = output_path.with_suffix(".png")
+        json_out = output_path.with_suffix(".json")
+        output_path.parent.mkdir(exist_ok=True, parents=True)
+        fig.savefig(image_out)
+        plt.close(fig)
+        with open(json_out, "w") as f:
+            json.dump(all_data, f)
+    logger.info(f"Ran for {len(input)} signals with {failures} failures")
 
 
 if __name__ == "__main__":

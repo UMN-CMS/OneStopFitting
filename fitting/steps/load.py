@@ -4,6 +4,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from ..core.data import AnalysisState
+from ..utils import getSignal, getCategory, getRecoCategory
 from ..data.loading import (
     FileLoader,
     extractHistogram,
@@ -51,8 +52,14 @@ def loadData(config: PipelineConfig) -> AnalysisState:
         signal_hist = sig_hist_full  # keep all variations for downstream
 
         # Merge signal metadata (overrides background metadata on conflict)
+
         sig_metadata = extractMetadata(sig_raw)
-        combined_metadata = {**combined_metadata, **sig_metadata}
+        reco_category = getRecoCategory(sig_metadata["name"])
+        combined_metadata = {
+            **combined_metadata,
+            **sig_metadata,
+            "reco_category": reco_category,
+        }
 
     return AnalysisState(
         config=config,
