@@ -62,7 +62,7 @@ class ExactGPConfig(GPModelConfig):
         mean_function: MeanFunctionConfig | None = None,
         **kwargs,
     ) -> tuple[Any, Any, Any]:
-        kernel = self.kernel.buildKernel(ndim, rngs=rngs, **kwargs)
+        kernel = self.kernel.buildKernel(ndim, rngs=rngs, dataset=dataset, **kwargs)
         if mean_function is not None:
             mean_fn = mean_function.buildMeanFunction(ndim, kernel, **kwargs)
         else:

@@ -359,7 +359,7 @@ class NNKernelConfig(KernelConfig):
     base_kernel_config: KernelConfig = attrs.Factory(RBFConfig)
     input_dim: int = 2
     output_dim: int = 2
-    hidden_shapes: list[int] = attrs.Factory(lambda: [20,20])
+    hidden_shapes: list[int] = attrs.Factory(lambda: [20, 20])
     activation: str = "silu"
     weight_prior: PriorConfig | None = None
     bias_prior: PriorConfig | None = None
@@ -575,3 +575,57 @@ class MultiFidelityResidualKernelConfig(KernelConfig):
             )
 
         return residual
+
+
+class HeteroscedasticWhiteKernel(AbstractKernel):
+    _ref_X: jnp.ndarray = nnx.data()
+    _ref_var: jnp.ndarray = nnx.data()
+    offset: gpp.Real | None = None
+    scale: gpp.Real | None = None
+    compute_engine: AbstractKernelComputation = attrs.field(
+        factory=DenseKernelComputation
+    )
+
+    def __init__(
+        self,
+        ref_X: jnp.ndarray,
+        ref_var: jnp.ndarray,
+        scale_prior=None,
+        offset_prior=None,
+    ):
+        self._ref_X = jax.lax.stop_gradient(ref_X)
+        self._ref_var = jax.lax.stop_gradient(ref_var)
+        self.scale = self._param("scale", 1.0, self.scale_prior)
+        self.offset = self._param("scale", 1e-6, self.offset_prior)
+
+
+    def __call__(self, x, y):
+        dist = jnp.sum((x - y) ** 2)
+        is_same = dist < 1e-10
+
+        diffs = jnp.sum((self._ref_X - x[None, :]) ** 2, axis=-1)
+        idx = jnp.argmin(diffs)
+        var_x = self._ref_var[idx]
+
+        noise = self.scale[...] * var_x + self.offset[...]
+        return jnp.where(is_same, noise, 0.0)
+
+
+@attrs.define
+class HeteroscedasticWhiteConfig(KernelConfig):
+    scale_prior: PriorConfig | None = None
+    offset_prior: PriorConfig | None = None
+
+    def buildKernel(
+        self, ndim: int, rngs: nnx.Rngs | None = None, **kwargs
+    ) -> AbstractKernel:
+        dataset = kwargs.get("dataset")
+        if not dataset:
+            raise RuntimeError(f"Heteroscedastic config must be provided the dataset")
+        base = HeteroscedasticWhiteKernel(
+            dataset.X,
+            dataset.y,
+            scale_prior=self.scale_prior,
+            offset_prior=self.offset_prior,
+        )
+        return base
