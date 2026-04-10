@@ -4,7 +4,7 @@
 DATASET=${1:-qcd_inclusive_2018}
 OUTPUT_BASE=${2:-"smoothed/{era.name}/{pipeline}/{dataset_name}"}
 YEARS=${3:-"2018"}  # Comma-separated or space-separated years
-PYTHON=".nocontainer_venv/bin/python"
+PYTHON=".venv/bin/python"
 
 # Signal versions and categories
 VERSIONS=("Signal313" "Signal312")
@@ -55,7 +55,7 @@ for YEAR in "${YEAR_ARRAY[@]}"; do
                 --state "$OUT_PATH" \
                 --name "$CATEGORY" \
                 --output-dir "$SMOOTHED_OUTPUT" \
-                --num-samples 10
+                --num-samples 50
 
             echo "Completed: $CATEGORY for $YEAR/$VERSION"
             echo "----------------------------------------"

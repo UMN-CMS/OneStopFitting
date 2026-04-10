@@ -55,6 +55,7 @@ def generateAsimovSmoothed(
     h = hist.Hist(*axes, storage=hist.storage.Weight())
     shape = tuple(len(edges) - 1 for edges in state.test_data.edges)
     counts_grid = pred_mean.reshape(shape)
+    counts_grid = np.round(counts_grid)
     h.view().value = counts_grid
     h.view().variance = counts_grid
     b_data = histToBinnedData(h, rebin=1, variation=None)
