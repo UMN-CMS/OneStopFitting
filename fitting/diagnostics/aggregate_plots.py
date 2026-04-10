@@ -4,6 +4,8 @@ import glob
 import json
 import logging
 from pathlib import Path
+from fitting.utils import dictToDot, dotFormat
+from collections import defaultdict
 import attrs
 from typing import Any, Iterable, Iterator
 
@@ -20,13 +22,6 @@ PVALUE_NORM = BoundaryNorm(PVALUE_BOUNDARIES, PVALUE_CMAP.N)
 
 
 def iterSummaryFiles(inputs: Iterable[str | Path]) -> Iterator[Path]:
-    """Yield `summary.json` paths under given inputs.
-
-    Inputs may be:
-    - A directory (searched recursively for summary.json)
-    - A file path to summary.json
-    - A glob pattern (e.g. '**/summary.json')
-    """
     seen: set[Path] = set()
     for inp in inputs:
         inp_str = str(inp)
@@ -86,21 +81,28 @@ def collectPoints(
     summary_files: Iterable[Path],
     *,
     metric_dotpath: str,
+    group_by: list[str] | None = None,
     stop_dotpath: str = "metadata.other_data.stop_mass",
     chi_dotpath: str = "metadata.other_data.chargino_mass",
 ) -> list[AggregatePoint]:
-    points: list[AggregatePoint] = []
+    points = defaultdict(list)
     for path in summary_files:
         try:
             summary = readSummary(path)
+            dotted = dict(dictToDot(summary))
+            if group_by:
+                key = tuple((x, dotted[x]) for x in group_by)
+            else:
+                key = tuple()
             mstop = float(getByDotpath(summary, stop_dotpath))
             mchi = float(getByDotpath(summary, chi_dotpath))
             value_raw = getByDotpath(summary, metric_dotpath)
             value = float(value_raw)
         except Exception as e:
             logger.warning(f"Skipping {path}: {e}")
-            continue
-        points.append(AggregatePoint(mstop=mstop, mchi=mchi, value=value, source=path))
+        points[key].append(
+            AggregatePoint(mstop=mstop, mchi=mchi, value=value, source=path)
+        )
     return points
 
 
@@ -129,11 +131,13 @@ def makeAggregateMassPlanePlot(
     cmax: float | None = None,
     smooth_sigma: float | None = None,
     smooth_truncate: float = 4.0,
+    params: dict[str, Any] | None = None,
     name_format: str = "aggregate_{metric}",
 ) -> dict[str, tuple]:
     if not points:
         raise ValueError("No points to plot.")
 
+    params = params or {}
     xs = np.array([p.mstop for p in points], dtype=float)
     ys = np.array([p.mchi for p in points], dtype=float)
     vs = np.array([p.value for p in points], dtype=float)
@@ -234,5 +238,6 @@ def makeAggregateMassPlanePlot(
         ch if ch.isalnum() or ch in ("-", "_") else "_" for ch in metric_name
     )
 
-    n = name_format.format(metric=safe)
+    n = dotFormat(name_format, metric_name=safe, **params)
+    n = n.replace(".", "p")
     return {n: (fig, ax)}

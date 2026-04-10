@@ -366,6 +366,11 @@ def smooth(
     show_default=True,
     help="Image formats to write (repeatable), e.g. --formats png --formats pdf.",
 )
+@click.option(
+    "-g",
+    "--group-by",
+    multiple=True,
+)
 @click.option("--title", type=str, default=None, help="Plot title override.")
 @click.option("--cmap", type=str, default="viridis", show_default=True)
 @click.option("--cmin", type=float, default=None, help="Color scale min.")
@@ -389,6 +394,7 @@ def aggregatePlot(
     output: Path,
     formats: tuple[str, ...],
     name_format: str,
+    group_by: tuple[str, ...],
     title: str | None,
     cmap: str,
     cmin: float | None,
@@ -403,24 +409,30 @@ def aggregatePlot(
     if not summary_files:
         raise click.UsageError("No summary.json files found for given --input(s).")
 
-    points = collectPoints(summary_files, metric_dotpath=metric_dotpath)
+    points = collectPoints(
+        summary_files, metric_dotpath=metric_dotpath, group_by=group_by
+    )
     if not points:
         raise click.ClickException(
             f"Found {len(summary_files)} summary.json files, but none contained "
             f"'{metric_dotpath}' plus required mass metadata."
         )
-
-    plots = makeAggregateMassPlanePlot(
-        points,
-        metric_name=metric_dotpath,
-        title=title,
-        cmap=cmap,
-        cmin=cmin,
-        cmax=cmax,
-        smooth_sigma=smooth_sigma,
-        smooth_truncate=smooth_truncate,
-        name_format=name_format,
-    )
+    plots = {}
+    for k, p in points.items():
+        plots.update(
+            makeAggregateMassPlanePlot(
+                p,
+                metric_name=metric_dotpath,
+                title=title,
+                cmap=cmap,
+                cmin=cmin,
+                cmax=cmax,
+                smooth_sigma=smooth_sigma,
+                smooth_truncate=smooth_truncate,
+                name_format=name_format,
+                params=dict(k),
+            )
+        )
     savePlots(plots, output, formats=formats)
     logger.info(f"Aggregate plot saved to {output}")
 
