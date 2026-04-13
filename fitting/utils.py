@@ -43,7 +43,6 @@ def merge(destination: MutableMapping, source: Mapping) -> Mapping:
     return destination
 
 
-
 def dotToNested(dot_dict: Mapping) -> Mapping:
     nested = {}
     for key, value in dot_dict.items():
@@ -94,10 +93,20 @@ def getRecoCategory(name):
         raise RuntimeError("Could not determine reco category.")
     return found
 
+
+# def getCategory(mstop, mchi):
+#     if mchi < (0.6 * mstop + 150):
+#         return "uncomp"
+#     if mchi < (0.75 * mstop + 150):
+#         return "comp"
+#     else:
+#         return "verycomp"
+
+
 def getCategory(mstop, mchi):
-    if mchi < (0.6 * mstop + 150):
+    if mchi < (0.75 * mstop):
         return "uncomp"
-    if mchi < (0.75 * mstop + 150):
+    if mchi < (0.95 * mstop):
         return "comp"
     else:
         return "verycomp"
