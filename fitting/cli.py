@@ -470,6 +470,129 @@ def aggregatePlot(
     logger.info(f"Aggregate plot saved to {output}")
 
 
+@main.command("toy-analyze")
+@click.option(
+    "-i",
+    "--inputs",
+    "inputs",
+    multiple=True,
+    required=True,
+    help="Directory, summary.json path, or glob pattern.",
+)
+@click.option(
+    "-o",
+    "--output",
+    type=click.Path(path_type=Path),
+    required=True,
+    help="Output directory for analysis results.",
+)
+@click.option(
+    "-m",
+    "--metric",
+    "metric_dotpath",
+    required=True,
+    help="Dot-path to metric to analyze (e.g., 'metrics.blinded_chi2_per_bin').",
+)
+@click.option(
+    "-g",
+    "--group-by",
+    multiple=True,
+    default=["metadata.dataset_name"],
+    help="Dot-paths to group by (hierarchical, in order).",
+)
+@click.option(
+    "-n",
+    "--name-format",
+    type=str,
+    default="{plot_type}_{metric_short}",
+    help="Format for output filenames using dotFormat syntax. "
+    "Available: {plot_type}, {metric_name}, {metric_short}, and all group variables.",
+)
+@click.option(
+    "--plot-types",
+    multiple=True,
+    default=["box", "violin", "histogram"],
+    help="Types of plots to generate: box, violin, histogram, scatter.",
+)
+@click.option(
+    "--formats",
+    multiple=True,
+    default=["png"],
+    help="Output image formats (e.g., png, pdf).",
+)
+@click.option(
+    "--save-data",
+    is_flag=True,
+    help="Save grouped data and statistics as JSON.",
+)
+@click.option(
+    "--correlation",
+    is_flag=True,
+    help="Generate scatter plots to check for trends across toy index.",
+)
+def toyAnalyze(
+    inputs: tuple[str, ...],
+    output: Path,
+    metric_dotpath: str,
+    group_by: tuple[str, ...],
+    name_format: str,
+    plot_types: tuple[str, ...],
+    formats: tuple[str, ...],
+    save_data: bool,
+    correlation: bool,
+) -> None:
+    """Analyze toy-to-toy variation in a single metric."""
+    from .diagnostics.toy_analysis import (
+        collectToyData,
+        computeStatistics,
+        makeToyVariationPlots,
+        saveData,
+    )
+
+    summary_files = list(iterSummaryFiles(inputs))
+    if not summary_files:
+        raise click.UsageError("No summary.json files found.")
+
+    logger.info(f"Found {len(summary_files)} summary files")
+
+    grouped_data = collectToyData(
+        summary_files,
+        group_by=list(group_by),
+        metric_dotpath=metric_dotpath,
+    )
+
+    if not grouped_data:
+        raise click.ClickException(
+            f"No valid data found for metric '{metric_dotpath}' with grouping {group_by}"
+        )
+
+    logger.info(f"Grouped data into {len(grouped_data)} groups")
+
+    output_dir = Path(output)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    metric_short = metric_dotpath.replace(".", "_")
+    all_plot_types = list(plot_types)
+    if correlation:
+        all_plot_types.append("scatter")
+
+    num_plots = makeToyVariationPlots(
+        grouped_data,
+        metric_dotpath=metric_dotpath,
+        metric_short=metric_short,
+        plot_types=all_plot_types,
+        output_dir=output_dir,
+        formats=list(formats),
+        name_format=name_format,
+    )
+
+    logger.info(f"Generated {num_plots} plots")
+
+    if save_data:
+        saveData(grouped_data, computeStatistics, output_dir / "data.json")
+
+    logger.info(f"Analysis complete. Results saved to {output_dir}")
+
+
 @main.command()
 @click.option(
     "--signal",
@@ -843,7 +966,8 @@ def windowFit(input: tuple[str, ...], spread: float, rebin: int, output_format: 
     logger.info(
         f"Producing windows for {len(input)} signals using window spread {spread:0.2f}"
     )
-    for signal_path in track(input, total=len(input)):
+    # for signal_path in track(input, total=len(input)):
+    for signal_path in input:
         sig_loader = FileLoader.forPath(signal_path)
         sig_raw = sig_loader.load(signal_path)
         sig_hist_full = extractHistogram(sig_raw)
