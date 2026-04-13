@@ -10,6 +10,8 @@ import gpjax
 logger = logging.getLogger(__name__)
 
 USEFUL_PARAMETER_NAMES = {
+    "scale",
+    "offset",
     "lengthscale",
     "variance",
     "period",

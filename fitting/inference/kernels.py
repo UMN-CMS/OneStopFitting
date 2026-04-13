@@ -346,7 +346,8 @@ class DeepKernelFunction(AbstractKernel):
     def __call__(self, x, y):
         xt = self.network(x)
         yt = self.network(y)
-        return self.base_kernel(xt, yt)
+        ret =  self.base_kernel(xt, yt)
+        return ret
 
     def cross_covariance(self, x: jax.Array, y: jax.Array) -> jax.Array:
         xt = self.network(x)
@@ -580,8 +581,8 @@ class MultiFidelityResidualKernelConfig(KernelConfig):
 class HeteroscedasticWhiteKernel(AbstractKernel):
     _ref_X: jnp.ndarray = nnx.data()
     _ref_var: jnp.ndarray = nnx.data()
-    offset: gpp.Real | None = None
-    scale: gpp.Real | None = None
+    # offset: gpp.NonNegativeReal | None = None
+    # scale: gpp.NonNegativeReal | None = None
     compute_engine: AbstractKernelComputation = attrs.field(
         factory=DenseKernelComputation
     )
@@ -590,25 +591,36 @@ class HeteroscedasticWhiteKernel(AbstractKernel):
         self,
         ref_X: jnp.ndarray,
         ref_var: jnp.ndarray,
+        scale,
+        offset,
         scale_prior=None,
         offset_prior=None,
     ):
         self._ref_X = jax.lax.stop_gradient(ref_X)
         self._ref_var = jax.lax.stop_gradient(ref_var)
-        self.scale = self._param("scale", 1.0, self.scale_prior)
-        self.offset = self._param("scale", 1e-6, self.offset_prior)
+        if isinstance(scale, nnx.Variable):
+            self.scale = scale
+        else:
+            self.scale = gpp.NonNegativeReal(scale)
+
+        if isinstance(offset, nnx.Variable):
+            self.offset = offset
+        else:
+            self.offset = gpp.NonNegativeReal(offset)
 
 
     def __call__(self, x, y):
         dist = jnp.sum((x - y) ** 2)
         is_same = dist < 1e-10
 
+
         diffs = jnp.sum((self._ref_X - x[None, :]) ** 2, axis=-1)
         idx = jnp.argmin(diffs)
         var_x = self._ref_var[idx]
+        noise = self.scale * var_x + self.offset
 
-        noise = self.scale[...] * var_x + self.offset[...]
-        return jnp.where(is_same, noise, 0.0)
+        ret =  jnp.where(is_same, noise, 0.0)
+        return ret
 
 
 @attrs.define
@@ -622,10 +634,13 @@ class HeteroscedasticWhiteConfig(KernelConfig):
         dataset = kwargs.get("dataset")
         if not dataset:
             raise RuntimeError(f"Heteroscedastic config must be provided the dataset")
+        scale = self._get_param("scale", 0.01, self.scale_prior)
+        offset = self._get_param("offset", 1e-8, self.offset_prior)
         base = HeteroscedasticWhiteKernel(
             dataset.X,
-            dataset.y,
+            dataset.y[:,0],
+            scale=scale,
+            offset=offset,
             scale_prior=self.scale_prior,
             offset_prior=self.offset_prior,
         )
-        return base
