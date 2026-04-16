@@ -132,8 +132,8 @@ def extractFitDiagnostics(root_file: uproot.ReadOnlyDirectory) -> tuple[dict, di
 
 def extractMultiDimFit(tree: uproot.TTree) -> tuple[dict, dict]:
     tree = tree["limit"]
-    limit_vals = tree["limit"].array()
-    limit_err_vals = tree["limitErr"].array()
+    limit_vals = tree["r"].array()
+    limit_err_vals = tree["deltaNLL"].array()
 
     if len(limit_vals) > 0:
         return {

@@ -71,7 +71,7 @@ def generateBatchSubmit(
         from .condor_tools import generateCondorSubmit
 
         generateCondorSubmit(
-            signal_pattern=signal_pattern,
+            signal_pattern=(signal_pattern,),
             background_pattern=background_pattern,
             years=years,
             pipelines=pipelines,

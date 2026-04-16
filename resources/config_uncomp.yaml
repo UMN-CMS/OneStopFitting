@@ -1,6 +1,6 @@
 injection_rate: 0.0
 min_counts: 0.0
-window_spread: 1.75
+window_spread: 1.6
 optimization:
   mode: optimization
   objective: mll
@@ -17,3 +17,18 @@ model:
     variance_floor_quantile: 0.01
   mean_function:
     _type: ConstantMeanConfig
+
+# model: 
+#   _type: ExactGPConfig
+# 
+#   kernel: 
+#     _type: SumKernelConfig
+#     kernels:
+#       - _type: NNKernelConfig
+#         hidden_shapes: [20,20]
+#       - _type: HeteroscedasticWhiteConfig
+#   likelihood:
+#     _type: FixedGaussianNoiseConfig
+#     variance_floor_quantile: 0.01
+#   mean_function:
+#     _type: ConstantMeanConfig

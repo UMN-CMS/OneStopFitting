@@ -2,7 +2,7 @@
 
 # Default values
 DATASET=${1:-qcd_inclusive_2018}
-OUTPUT_BASE=${2:-"smoothed/{era.name}/{pipeline}/{dataset_name}"}
+OUTPUT_BASE=${2:-"smoothed2/{era.name}/{pipeline}/{dataset_name}"}
 YEARS=${3:-"2018"}  # Comma-separated or space-separated years
 PYTHON=".venv/bin/python"
 
@@ -26,7 +26,7 @@ for YEAR in "${YEAR_ARRAY[@]}"; do
             echo "Processing year: $YEAR, version: $VERSION, category: $CATEGORY for dataset: $CURRENT_DATASET"
             
             # Construct paths
-            BG_FILE="subsetexported/$YEAR/$VERSION/$CURRENT_DATASET/${CATEGORY}_mStop_vs_mChiRatio.pklz4"
+            BG_FILE="export2018nosyst/$YEAR/$VERSION/$CURRENT_DATASET/${CATEGORY}_mStop_vs_mChiRatio.pklz4"
             CONFIG="resources/smoothing_configs/$VERSION/${CATEGORY}.yaml"
             OUT_DIR="${OUTPUT_BASE}/${CATEGORY}"
             
@@ -55,7 +55,7 @@ for YEAR in "${YEAR_ARRAY[@]}"; do
                 --state "$OUT_PATH" \
                 --name "$CATEGORY" \
                 --output-dir "$SMOOTHED_OUTPUT" \
-                --num-samples 50
+                --num-samples 200
 
             echo "Completed: $CATEGORY for $YEAR/$VERSION"
             echo "----------------------------------------"

@@ -10,7 +10,7 @@ import os
 from pathlib import Path
 
 from .file_tools import tarDirectory, tarFiles
-from ..utils import getSignal, getCategory
+from ..utils import getSignal, getCategory, getRecoCategory
 from attrs import define
 from jinja2 import Environment
 import fitting
@@ -27,7 +27,7 @@ class CondorPackage:
 
 COMBINE_SHORT_COMMANDS = {
     "fit-diagnostics": "combine -M FitDiagnostics -d datacard.root --saveShapes --saveNormalizations",
-    "multidimfit": "combine -M MultiDimFit -d datacard.root",
+    "multidimfit": "combine -M MultiDimFit -d datacard.root --rMin=-10 --rMax=20",
     "limits": "combine -M AsymptoticLimits -d datacard.root",
     "significance": "combine -M Significance -d datacard.root",
     "gof-saturated": (
@@ -174,7 +174,7 @@ def compressNeededFiles(
 
 
 def getJobs(
-    signal_pattern: str,
+    signal_pattern: tuple[str, ...],
     background_pattern: str,
     years: list[str],
     pipelines: list[str],
@@ -184,9 +184,11 @@ def getJobs(
 ) -> list[dict]:
     jobs = []
     for year, pipeline in it.product(years, pipelines):
-        sig_glob = signal_pattern.replace("{category}", "*")
-        sig_glob = sig_glob.format(year=year, pipeline=pipeline)
-        sig_files = list(glob.glob(sig_glob, recursive=True))
+        sig_files = set()
+        for p in signal_pattern:
+            sig_glob = p.replace("{category}", "*")
+            sig_glob = sig_glob.format(year=year, pipeline=pipeline)
+            sig_files |= set(glob.glob(sig_glob, recursive=True))
         if not sig_files:
             logger.warning(
                 f"No signal files found for year {year} with pattern {sig_glob}"
@@ -196,13 +198,26 @@ def getJobs(
         for sig_file in sig_files:
             sig_params = getSignal(sig_file)
             category = getCategory(sig_params[1], sig_params[2])
-            if not fnmatch.fnmatch(
-                sig_file,
-                signal_pattern.format(year=year, pipeline=pipeline, category=category),
+            reco_category = getRecoCategory(Path(sig_file).name)
+            if not any(
+                fnmatch.fnmatch(
+                    sig_file,
+                    x.format(
+                        year=year,
+                        pipeline=pipeline,
+                        category=category,
+                        reco_category=reco_category,
+                    ),
+                )
+                for x in signal_pattern
             ):
                 continue
             bkg_file = background_pattern.format(
-                year=year, pipeline=pipeline, category=category, toy_index=toy_index
+                year=year,
+                pipeline=pipeline,
+                category=category,
+                toy_index=toy_index,
+                reco_category=reco_category,
             )
             if not Path(bkg_file).exists():
                 raise FileNotFoundError(f"Background file not found: {bkg_file}")
@@ -214,7 +229,9 @@ def getJobs(
                     "category": category,
                     "mstop": sig_params[1],
                     "mchi": sig_params[2],
-                    "config": config_pattern.format(category=category),
+                    "config": config_pattern.format(
+                        category=category, reco_category=reco_category
+                    ),
                 }
             )
     return jobs
@@ -280,7 +297,7 @@ def makeSubmitScript(
 
 
 def generateCondorSubmit(
-    signal_pattern: str,
+    signal_pattern: tuple[str, ...],
     background_pattern: str,
     years: list[str],
     pipelines: list[str],

@@ -597,6 +597,7 @@ def toyAnalyze(
 @click.option(
     "--signal",
     required=True,
+    multiple=True,
     help="Signal pattern (e.g. '**/signal_{year}_*.pklz4')",
 )
 @click.option(
@@ -634,7 +635,7 @@ def toyAnalyze(
     help="Combine commands to run after the fit",
 )
 def makecondor(
-    signal: str,
+    signal: tuple[str,...],
     background: str,
     years: tuple[str, ...],
     pipelines: tuple[str, ...],

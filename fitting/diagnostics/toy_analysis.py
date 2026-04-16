@@ -91,6 +91,7 @@ def drawBox(ax, values, all_vars, toy_indices):
     for patch in bp["boxes"]:
         patch.set_facecolor("lightblue")
     ax.set_ylabel(all_vars["metric_name"])
+    # ax.set_ylim([-5,5])
     ax.grid(True, alpha=0.3, axis="y")
 
 
@@ -100,6 +101,7 @@ def drawViolin(ax, values, all_vars, toy_indices):
         pc.set_facecolor("lightblue")
         pc.set_alpha(0.7)
     ax.set_ylabel(all_vars["metric_name"])
+    # ax.set_ylim([-5,5])
     ax.grid(True, alpha=0.3, axis="y")
 
 
