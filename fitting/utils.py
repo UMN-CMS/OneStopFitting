@@ -3,6 +3,7 @@ from collections.abc import Mapping, Iterator, MutableMapping, Generator
 import re
 from collections import OrderedDict
 from attrs import asdict
+from pathlib import Path
 import string
 from typing import Any, TypeVar
 import copy
@@ -88,7 +89,8 @@ def getSignal(path):
 
 
 def getRecoCategory(name):
-    found = next((x for x in ["uncomp", "verycomp", "comp"] if x in name), None)
+    n = str(Path(name).name)
+    found = next((x for x in ["uncomp", "verycomp", "comp"] if n.startswith(x)), None)
     if not found:
         raise RuntimeError("Could not determine reco category.")
     return found
@@ -106,7 +108,7 @@ def getRecoCategory(name):
 def getCategory(mstop, mchi):
     if mchi < (0.75 * mstop):
         return "uncomp"
-    if mchi < (0.95 * mstop):
+    if mchi < (0.90 * mstop):
         return "comp"
     else:
         return "verycomp"

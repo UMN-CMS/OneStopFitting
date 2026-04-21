@@ -26,7 +26,7 @@ def writeConfigFile(config: dict[str, Any], output_path: Path) -> None:
 
 
 def generateBatchSubmit(
-    signal_pattern: str,
+    signal_pattern: tuple[str,...],
     background_pattern: str,
     years: list[str],
     pipelines: list[str],
@@ -71,7 +71,7 @@ def generateBatchSubmit(
         from .condor_tools import generateCondorSubmit
 
         generateCondorSubmit(
-            signal_pattern=(signal_pattern,),
+            signal_pattern=signal_pattern,
             background_pattern=background_pattern,
             years=years,
             pipelines=pipelines,

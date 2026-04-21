@@ -301,7 +301,7 @@ def smooth(
 
     output_dir.mkdir(parents=True, exist_ok=True)
     plot_dir = output_dir / "smoothing_diagnostics"
-    savePlots(plots, plot_dir)
+    savePlots(plots, plot_dir, [state.metadata])
     logger.info(f"Smoothing diagnostic plots saved to {plot_dir}")
 
     for idx, hist in enumerate(hists):
@@ -319,7 +319,7 @@ def smooth(
         pure_plot_dir = output_dir / "pure_smooth_diagnostics"
         pure_plot_dir.mkdir(exist_ok=True, parents=True)
         h, plots = generateAsimovSmoothed(analysis_state, rng_key)
-        savePlots(plots, pure_plot_dir)
+        savePlots(plots, pure_plot_dir, [state.metadata])
         o = output_dir / f"pure_smoothed.pklz4"
         metadata = copy.deepcopy(analysis_state.background_metadata)
         with lz4.frame.open(o, "wb") as f:
@@ -452,21 +452,20 @@ def aggregatePlot(
             json.dump(cattrs.unstructure(all_points), f)
     plots = {}
     for k, p in points.items():
-        plots.update(
-            makeAggregateMassPlanePlot(
-                p,
-                metric_name=metric_dotpath,
-                title=title,
-                cmap=cmap,
-                cmin=cmin,
-                cmax=cmax,
-                smooth_sigma=smooth_sigma,
-                smooth_truncate=smooth_truncate,
-                name_format=name_format,
-                params=dict(k),
-            )
+        plots = makeAggregateMassPlanePlot(
+            p,
+            metric_name=metric_dotpath,
+            title=title,
+            cmap=cmap,
+            cmin=cmin,
+            cmax=cmax,
+            smooth_sigma=smooth_sigma,
+            smooth_truncate=smooth_truncate,
+            name_format=name_format,
+            params=dict(k),
         )
-    savePlots(plots, output, formats=formats)
+
+        savePlots(plots, output, [x.metadata for x in p], formats=formats)
     logger.info(f"Aggregate plot saved to {output}")
 
 
@@ -635,7 +634,7 @@ def toyAnalyze(
     help="Combine commands to run after the fit",
 )
 def makecondor(
-    signal: tuple[str,...],
+    signal: tuple[str, ...],
     background: str,
     years: tuple[str, ...],
     pipelines: tuple[str, ...],
@@ -668,6 +667,7 @@ def makecondor(
 @click.option(
     "--signal",
     required=True,
+    multiple=True,
     help="Signal pattern (e.g. '**/signal_{year}_*.pklz4')",
 )
 @click.option(
@@ -727,7 +727,7 @@ def makecondor(
     help="Comma-separated window spread values (e.g., '1.5,2.0,3.0')",
 )
 def makebatch(
-    signal: str,
+    signal: tuple[str, ...],
     background: str,
     years: tuple[str, ...],
     pipelines: tuple[str, ...],
@@ -925,7 +925,7 @@ def harvest(summaries: tuple[Path, ...]) -> None:
 
         summary_data["combine"] = extracted
 
-        savePlots(plots, plot_dir)
+        savePlots(plots, plot_dir, [summary_data["metadata"]])
         with open(summary_path, "w") as f:
             json.dump(summary_data, f, indent=2)
 
@@ -945,7 +945,7 @@ def harvest(summaries: tuple[Path, ...]) -> None:
 @click.option("--rebin", default=1, type=int)
 @click.option("-o", "--output-format", type=str)
 def windowFit(input: tuple[str, ...], spread: float, rebin: int, output_format: str):
-    from .data.windowing import fitGaussianWindow
+    from .data.windowing import fitGaussianWindow, fitCoreDilatedWindow
     from .utils import getRecoCategory
     from .data.loading import (
         FileLoader,
@@ -977,7 +977,9 @@ def windowFit(input: tuple[str, ...], spread: float, rebin: int, output_format: 
         reco_cat = getRecoCategory(sig_metadata["name"])
 
         try:
-            window = fitGaussianWindow(signal, spread=spread)
+            #window = fitGaussianWindow(signal, spread=spread)
+            # window = fitDensityWindow(signal, dilation_margin=0.0)
+            window = fitCoreDilatedWindow(signal, core_threshold_fraction=0.3, dilation_margin=0.1)
         except RuntimeError as e:
             logger.warning(f"Failed to fit {sig_metadata['dataset_name']}")
             failures += 1

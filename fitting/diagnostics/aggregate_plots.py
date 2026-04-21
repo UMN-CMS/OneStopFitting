@@ -76,6 +76,7 @@ class AggregatePoint:
     value: float
     source: Path | None = None
     groups: dict | None = None
+    metadata: dict | None = None
 
 
 def collectPoints(
@@ -103,7 +104,12 @@ def collectPoints(
             logger.warning(f"Skipping {path}: {e}")
         points[key].append(
             AggregatePoint(
-                mstop=mstop, mchi=mchi, value=value, source=path, groups=dict(key)
+                mstop=mstop,
+                mchi=mchi,
+                value=value,
+                source=path,
+                groups=dict(key),
+                metadata=summary["metadata"],
             )
         )
     return dict(points)

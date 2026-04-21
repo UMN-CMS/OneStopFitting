@@ -8,11 +8,11 @@ if [[ -n "$SINGULARITY_NAME" ]] || [[ -n "$APPTAINER_NAME" ]]; then
     if [ -f "$HOME/.bashrc" ]; then
         . "$HOME/.bashrc"
     fi
+    echo $PATH
 
     if ! command -v uv &> /dev/null; then
         echo "Error: 'uv' is not installed or not in PATH."
         echo "Please install 'uv' and try again."
-        exit 1
     fi
 
     echo "Found uv: $(uv --version)"
@@ -37,14 +37,22 @@ else
         IS_LPC="true"
     fi
     SCRIPT_PATH=$(realpath "$0")
+    SCRIPT_PATH=$0
     ARGS=""
     if [[ "$IS_LPC" == "true" ]]; then
         ARGS="-B $HOME,/uscmst1b_scratch,$(realpath "$HOME"),/uscms_data,/cvmfs,/etc/condor/,/usr/local/bin/cmslpc-local-conf.py,$(realpath .):$PWD"
     else
-        ARGS="-B $(realpath .):$PWD,$(realpath "$HOME")" 
+        if [[ -d $(realpath "$HOME/.config") ]]; then 
+            ARGS="-B $(realpath .):$PWD,/local/cms/user/ckapsiak/,$(realpath "$HOME"),/cvmfs,$(realpath "$HOME/.local"),$(realpath "$HOME/.cache"),$(realpath "$HOME/.config")"
+        else
+            ARGS="-B $(realpath .):$PWD,/local/cms/user/ckapsiak/,$(realpath "$HOME"),/cvmfs"
+        fi
+        
     fi
 
     echo "Entering container..."
     export IS_LPC
+    echo $SCRIPT_PATH
+    echo apptainer exec $ARGS "$container" /bin/bash  "$SCRIPT_PATH"
     apptainer exec $ARGS "$container" /bin/bash  "$SCRIPT_PATH"
 fi 

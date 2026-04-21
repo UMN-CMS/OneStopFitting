@@ -116,6 +116,7 @@ def trainModel(state: AnalysisState, rng_key: jax.Array) -> AnalysisState:
     mean_cfg = state.config.model.mean_function
     pre_fit_mean = None
 
+
     if hasattr(mean_cfg, "needsPreFit") and mean_cfg.needsPreFit():
         logger.info("=== Stage 1: Background GP Mean Estimation ===")
         pre_fit_mean = _buildStage1Mean(

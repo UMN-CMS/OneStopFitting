@@ -16,7 +16,7 @@ def runPointReport(state: AnalysisState, rng_key: jax.Array) -> AnalysisState:
         latex_engine="pdflatex",
         keep_build=False,
         keep_tex=False,
-        image_format="png",
+        image_format="pdf",
     )
 
     if state.signal is not None:

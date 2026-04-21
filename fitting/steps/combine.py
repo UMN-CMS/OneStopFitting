@@ -113,7 +113,7 @@ def prepareCombine(state: AnalysisState, rng_key: jax.Array) -> None:
     plots.update(plotCombineInputs(state))
     plots.update(verifyEigenvariations(state))
     plots.update(visualizeEigenvariations(state))
-    savePlots(plots,diag_dir)
+    savePlots(plots, diag_dir, [state.metadata])
 
     logger.info(f"Combine preparation complete. Datacard: {datacard_path}")
 

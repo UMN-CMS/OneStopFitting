@@ -77,7 +77,7 @@ def _inferNdim(
 
 
 def _selectPlotNames(
-    *, ndim: int, diagnostics_dir: Path, image_format: str
+    *, ndim: int, diagnostics_dir: Path, image_format: str, version="_private_work"
 ) -> dict[str, str]:
     if ndim == 1:
         return {
@@ -88,31 +88,24 @@ def _selectPlotNames(
 
     if ndim == 2:
         plot_names = {
-            "signal": "signal_template",
+            "signal": "injected_signal",
             "observed": "observed_outputs",
             "gpr": "gpr_mean",
             "predvar": "predicted_variances",
             "pulls": "pull_map",
             "covar_center": "covariance_at_blind_center",
             "rel_unc": "relative_uncertainty",
-            "ppc_map": "ppc_mean_map",
             "total_pulls": "total_pulls_hist",
             "ppc_blinded": "ppc_dist_chi2_blinded",
             "ppc_unblinded": "ppc_dist_chi2_unblinded",
         }
-
-        signal_path = diagnostics_dir / f"{plot_names['signal']}.{image_format}"
-        if not signal_path.exists():
-            injected_path = diagnostics_dir / f"injected_signal.{image_format}"
-            if injected_path.exists():
-                plot_names["signal"] = "injected_signal"
-
         return plot_names
-
     raise NotImplementedError(f"Unsupported ndim={ndim}")
 
 
-def gatherPointContext(*, point_dir: Path, image_format: str) -> dict[str, Any]:
+def gatherPointContext(
+    *, point_dir: Path, image_format: str, version="_private_work"
+) -> dict[str, Any]:
     point_dir = Path(point_dir)
     summary_path = point_dir / "summary.json"
     diagnostics_dir = point_dir / "diagnostics"
@@ -125,6 +118,7 @@ def gatherPointContext(*, point_dir: Path, image_format: str) -> dict[str, Any]:
     plot_names = _selectPlotNames(
         ndim=ndim, diagnostics_dir=diagnostics_dir, image_format=image_format
     )
+    plot_names = {x: y + version for x, y in plot_names.items()}
 
     image_paths: dict[str, str] = {}
     for role, plot_name in plot_names.items():
@@ -137,15 +131,19 @@ def gatherPointContext(*, point_dir: Path, image_format: str) -> dict[str, Any]:
         for f in post_combine_dir.glob("*"):
             if f.suffix[1:] in ["png", "pdf", image_format]:
                 image_paths[f.stem] = str(f.resolve())
-                
-        combine_keys = [k for k in image_paths.keys() if k.startswith("fit_diagnostic_")]
+
+        combine_keys = [
+            k for k in image_paths.keys() if k.startswith("fit_diagnostic_")
+        ]
         show_sig_keys = [k for k in combine_keys if "show_signal" in k]
         no_sig_keys = [k for k in combine_keys if "show_signal" not in k]
-        
+
         if no_sig_keys:
             image_paths["combine_fit_diagnostic"] = image_paths[no_sig_keys[0]]
         if show_sig_keys:
-            image_paths["combine_fit_diagnostic_show_signal"] = image_paths[show_sig_keys[0]]
+            image_paths["combine_fit_diagnostic_show_signal"] = image_paths[
+                show_sig_keys[0]
+            ]
         if "gof_test" in image_paths:
             image_paths["combine_gof_test"] = image_paths["gof_test"]
 

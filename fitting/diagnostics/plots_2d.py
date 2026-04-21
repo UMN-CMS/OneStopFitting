@@ -37,8 +37,8 @@ def makeDiagnosticPlots2D(
 
     # --- Training data ---
     if train_data is not None:
-        fig, ax = plt.subplots(layout="tight")
-        plotBinnedData(ax, train_data)
+        fig, ax = plt.subplots()
+        plotBinnedData(ax, train_data, cbar_title="Events")
         ax.set_title("Training Data (Blinded)")
         if test_data.axis_names and len(test_data.axis_names) >= 2:
             ax.set_xlabel(test_data.axis_names[0])
@@ -46,8 +46,8 @@ def makeDiagnosticPlots2D(
         ret["training_points"] = (fig, ax)
 
     # --- GP mean prediction ---
-    fig, ax = plt.subplots(layout="tight")
-    plotRaw(ax, edges, X, pred_mean)
+    fig, ax = plt.subplots()
+    plotRaw(ax, edges, X, pred_mean, cbar_title="Events")
     ax.set_title("GP Mean Prediction")
     if test_data.axis_names and len(test_data.axis_names) >= 2:
         ax.set_xlabel(test_data.axis_names[0])
@@ -56,19 +56,19 @@ def makeDiagnosticPlots2D(
     ret["gpr_mean"] = (fig, ax)
 
     # --- Prior mean prediction ---
-    if prior_mean is not None:
-        fig, ax = plt.subplots(layout="tight")
-        plotRaw(ax, edges, X, np.asarray(prior_mean))
-        ax.set_title("Prior Mean (Parametric)")
-        if test_data.axis_names and len(test_data.axis_names) >= 2:
-            ax.set_xlabel(test_data.axis_names[0])
-            ax.set_ylabel(test_data.axis_names[1])
-        plotBlinding2D(ax, edges, X, blind_mask)
-        ret["prior_mean"] = (fig, ax)
+    # if prior_mean is not None:
+    #     fig, ax = plt.subplots()
+    #     plotRaw(ax, edges, X, np.asarray(prior_mean))
+    #     ax.set_title("Prior Mean (Parametric)")
+    #     if test_data.axis_names and len(test_data.axis_names) >= 2:
+    #         ax.set_xlabel(test_data.axis_names[0])
+    #         ax.set_ylabel(test_data.axis_names[1])
+    #     plotBlinding2D(ax, edges, X, blind_mask)
+    #     ret["prior_mean"] = (fig, ax)
 
     # --- Observed ---
-    fig, ax = plt.subplots(layout="tight")
-    plotRaw(ax, edges, X, obs_Y)
+    fig, ax = plt.subplots()
+    plotRaw(ax, edges, X, obs_Y, cbar_title="Events")
     ax.set_title("Observed")
     if test_data.axis_names and len(test_data.axis_names) >= 2:
         ax.set_xlabel(test_data.axis_names[0])
@@ -76,20 +76,20 @@ def makeDiagnosticPlots2D(
     plotBlinding2D(ax, edges, X, blind_mask)
     ret["observed_outputs"] = (fig, ax)
 
-    fig, ax = plt.subplots(layout="tight")
-    log_norm = colors.LogNorm(vmin=max(1e-1, obs_Y.min()), vmax=obs_Y.max())
-    plotRaw(ax, edges, X, obs_Y, norm=log_norm)
-    ax.set_title("Observed (log)")
-    if test_data.axis_names and len(test_data.axis_names) >= 2:
-        ax.set_xlabel(test_data.axis_names[0])
-        ax.set_ylabel(test_data.axis_names[1])
-    plotBlinding2D(ax, edges, X, blind_mask)
-    ret["observed_outputs_log"] = (fig, ax)
+    # fig, ax = plt.subplots()
+    # log_norm = colors.LogNorm(vmin=max(1e-1, obs_Y.min()), vmax=obs_Y.max())
+    # plotRaw(ax, edges, X, obs_Y, norm=log_norm)
+    # ax.set_title("Observed (log)")
+    # if test_data.axis_names and len(test_data.axis_names) >= 2:
+    #     ax.set_xlabel(test_data.axis_names[0])
+    #     ax.set_ylabel(test_data.axis_names[1])
+    # plotBlinding2D(ax, edges, X, blind_mask)
+    # ret["observed_outputs_log"] = (fig, ax)
 
     # --- Signal (if provided) ---
     if signal_data is not None:
-        fig, ax = plt.subplots(layout="tight")
-        plotBinnedData(ax, signal_data)
+        fig, ax = plt.subplots()
+        plotBinnedData(ax, signal_data, cbar_title="Events")
         ax.set_title("Injected Signal")
         if test_data.axis_names and len(test_data.axis_names) >= 2:
             ax.set_xlabel(test_data.axis_names[0])
@@ -97,20 +97,20 @@ def makeDiagnosticPlots2D(
         plotBlinding2D(ax, edges, X, blind_mask)
         ret["injected_signal"] = (fig, ax)
 
-    # --- Signal Template (unscaled) ---
-    if signal_template is not None:
-        fig, ax = plt.subplots(layout="tight")
-        plotBinnedData(ax, signal_template)
-        ax.set_title("Signal Template")
-        if test_data.axis_names and len(test_data.axis_names) >= 2:
-            ax.set_xlabel(test_data.axis_names[0])
-            ax.set_ylabel(test_data.axis_names[1])
-        plotBlinding2D(ax, edges, X, blind_mask)
-        ret["signal_template"] = (fig, ax)
+    # # --- Signal Template (unscaled) ---
+    # if signal_template is not None:
+    #     fig, ax = plt.subplots()
+    #     plotBinnedData(ax, signal_template)
+    #     ax.set_title("Signal Template")
+    #     if test_data.axis_names and len(test_data.axis_names) >= 2:
+    #         ax.set_xlabel(test_data.axis_names[0])
+    #         ax.set_ylabel(test_data.axis_names[1])
+    #     plotBlinding2D(ax, edges, X, blind_mask)
+    #     ret["signal_template"] = (fig, ax)
 
     # --- Observed variances ---
-    fig, ax = plt.subplots(layout="tight")
-    plotRaw(ax, edges, X, obs_V)
+    fig, ax = plt.subplots()
+    plotRaw(ax, edges, X, obs_V, cbar_title="Observed Variances")
     ax.set_title("Observed Variances")
     if test_data.axis_names and len(test_data.axis_names) >= 2:
         ax.set_xlabel(test_data.axis_names[0])
@@ -119,8 +119,8 @@ def makeDiagnosticPlots2D(
     ret["observed_variances"] = (fig, ax)
 
     # --- Predicted variances ---
-    fig, ax = plt.subplots(layout="tight")
-    plotRaw(ax, edges, X, pred_var)
+    fig, ax = plt.subplots()
+    plotRaw(ax, edges, X, pred_var, cbar_title="Predicted Variances")
     ax.set_title("Predicted Variances")
     if test_data.axis_names and len(test_data.axis_names) >= 2:
         ax.set_xlabel(test_data.axis_names[0])
@@ -130,8 +130,16 @@ def makeDiagnosticPlots2D(
 
     # --- Relative uncertainty ---
     rel_unc = np.asarray(jnp.sqrt(pred_var) / jnp.clip(pred_mean, 1e-10))
-    fig, ax = plt.subplots(layout="tight")
-    plotRaw(ax, edges, X, jnp.array(rel_unc), cmin=0, cmax=0.1)
+    fig, ax = plt.subplots()
+    plotRaw(
+        ax,
+        edges,
+        X,
+        jnp.array(rel_unc),
+        cmin=0,
+        cmax=0.1,
+        cbar_title="Relative Uncertainty (σ/μ)",
+    )
     ax.set_title("Relative Uncertainty (σ/μ)")
     if test_data.axis_names and len(test_data.axis_names) >= 2:
         ax.set_xlabel(test_data.axis_names[0])
@@ -140,8 +148,17 @@ def makeDiagnosticPlots2D(
     ret["relative_uncertainty"] = (fig, ax)
 
     # --- Pull map ---
-    fig, ax = plt.subplots(layout="tight")
-    plotRaw(ax, edges, X, jnp.array(pulls), cmap="coolwarm", cmin=-3, cmax=3)
+    fig, ax = plt.subplots()
+    plotRaw(
+        ax,
+        edges,
+        X,
+        jnp.array(pulls),
+        cmap="coolwarm",
+        cmin=-3,
+        cmax=3,
+        cbar_title="Pull",
+    )
     ax.set_title("Pull Map")
     if test_data.axis_names and len(test_data.axis_names) >= 2:
         ax.set_xlabel(test_data.axis_names[0])
@@ -149,15 +166,15 @@ def makeDiagnosticPlots2D(
     plotBlinding2D(ax, edges, X, blind_mask)
     ret["pull_map"] = (fig, ax)
 
-    # --- Total Pull map ---
-    fig, ax = plt.subplots(layout="tight")
-    plotRaw(ax, edges, X, jnp.array(total_pulls), cmap="coolwarm", cmin=-3, cmax=3)
-    ax.set_title("Total Pull Map (Stat + Model)")
-    if test_data.axis_names and len(test_data.axis_names) >= 2:
-        ax.set_xlabel(test_data.axis_names[0])
-        ax.set_ylabel(test_data.axis_names[1])
-    plotBlinding2D(ax, edges, X, blind_mask)
-    ret["total_pull_map"] = (fig, ax)
+    # # --- Total Pull map ---
+    # fig, ax = plt.subplots()
+    # plotRaw(ax, edges, X, jnp.array(total_pulls), cmap="coolwarm", cmin=-3, cmax=3)
+    # ax.set_title("Total Pull Map (Stat + Model)")
+    # if test_data.axis_names and len(test_data.axis_names) >= 2:
+    #     ax.set_xlabel(test_data.axis_names[0])
+    #     ax.set_ylabel(test_data.axis_names[1])
+    # plotBlinding2D(ax, edges, X, blind_mask)
+    # ret["total_pull_map"] = (fig, ax)
 
     # --- Covariance at blinding center ---
     if (
@@ -173,7 +190,7 @@ def makeDiagnosticPlots2D(
         abs_idx = mask.nonzero()[0][rel_idx]
 
         cov_row = pred_cov[abs_idx, :]
-        fig, ax = plt.subplots(layout="tight")
+        fig, ax = plt.subplots()
         plotRaw(ax, edges, X, cov_row)
         ax.set_title("Covariance at Blinding Center")
         if test_data.axis_names and len(test_data.axis_names) >= 2:
@@ -200,8 +217,10 @@ def makeDiagnosticPlots2D(
                     kernel.cross_covariance(center_pt, x_norm)
                 ).ravel()
 
-                fig, ax = plt.subplots(layout="tight")
-                plotRaw(ax, edges, X, kernel_values)
+                fig, ax = plt.subplots()
+                plotRaw(
+                    ax, edges, X, kernel_values, cbar_title=r"$K(x_{window center},x)$"
+                )
                 ax.set_title("Prior Kernel at Blinding Center")
                 if test_data.axis_names and len(test_data.axis_names) >= 2:
                     ax.set_xlabel(test_data.axis_names[0])
@@ -227,7 +246,7 @@ def makeDiagnosticPlots2D(
     gauss_y = np.exp(-(gauss_x**2) / 2) / np.sqrt(2 * np.pi)
 
     def _plotSinglePullHist(p_vals, tag_name, title_prefix):
-        fig_h, ax_h = plt.subplots(layout="tight")
+        fig_h, ax_h = plt.subplots()
         ax_h.hist(p_vals, bins=bins, density=True, alpha=0.7, label="All bins")
         if blind_mask is not None and np.any(np.asarray(blind_mask)):
             np_mask = np.asarray(blind_mask)
@@ -260,23 +279,23 @@ def makePosteriorPredictivePlots2D(
     summary = ppc_results["summary"]
     reps = ppc_results["test_reps"]
 
-    fig, ax = plt.subplots(layout="tight")
-    plotRaw(ax, edges, X, np.asarray(summary["mean"]))
-    ax.set_title("PPC Predictive Mean")
-    if test_data.axis_names and len(test_data.axis_names) >= 2:
-        ax.set_xlabel(test_data.axis_names[0])
-        ax.set_ylabel(test_data.axis_names[1])
-    plotBlinding2D(ax, edges, X, blind_mask)
-    ret[f"{prefix}_mean_map"] = (fig, ax)
+    # fig, ax = plt.subplots()
+    # plotRaw(ax, edges, X, np.asarray(summary["mean"]))
+    # ax.set_title("PPC Predictive Mean")
+    # if test_data.axis_names and len(test_data.axis_names) >= 2:
+    #     ax.set_xlabel(test_data.axis_names[0])
+    #     ax.set_ylabel(test_data.axis_names[1])
+    # plotBlinding2D(ax, edges, X, blind_mask)
+    # ret[f"{prefix}_mean_map"] = (fig, ax)
 
-    fig, ax = plt.subplots(layout="tight")
-    plotRaw(ax, edges, X, np.asarray(summary["std"]))
-    ax.set_title("PPC Predictive StdDev")
-    if test_data.axis_names and len(test_data.axis_names) >= 2:
-        ax.set_xlabel(test_data.axis_names[0])
-        ax.set_ylabel(test_data.axis_names[1])
-    plotBlinding2D(ax, edges, X, blind_mask)
-    ret[f"{prefix}_std_map"] = (fig, ax)
+    # fig, ax = plt.subplots()
+    # plotRaw(ax, edges, X, np.asarray(summary["std"]))
+    # ax.set_title("PPC Predictive StdDev")
+    # if test_data.axis_names and len(test_data.axis_names) >= 2:
+    #     ax.set_xlabel(test_data.axis_names[0])
+    #     ax.set_ylabel(test_data.axis_names[1])
+    # plotBlinding2D(ax, edges, X, blind_mask)
+    # ret[f"{prefix}_std_map"] = (fig, ax)
 
     test_stats = ppc_results["test_stats"]
     for stat_name, regions in test_stats.items():
@@ -284,7 +303,7 @@ def makePosteriorPredictivePlots2D(
             obs_val = float(summary_stats["obs"])
             pvalue = float(summary_stats["pvalue"])
 
-            fig, ax = plt.subplots(layout="tight")
+            fig, ax = plt.subplots()
             plotPPD(
                 ax,
                 reps[stat_name][region_name],
@@ -329,7 +348,7 @@ def plotNNTransformation2D(
     xt = points_t[:, 0].reshape(nx, ny)
     yt = points_t[:, 1].reshape(nx, ny)
 
-    fig, ax = plt.subplots(layout="tight")
+    fig, ax = plt.subplots()
     for i in range(nx):
         ax.plot(xt[i, :], yt[i, :], color="purple", alpha=0.5, lw=0.5)
     for j in range(ny):
@@ -406,7 +425,7 @@ def makeSmoothingPlots2D(
     smooth_Y = np.asarray(smoothed_data.Y)
 
     # 1. Original noisy data
-    fig, ax = plt.subplots(layout="tight")
+    fig, ax = plt.subplots()
     plotRaw(ax, edges, X, original_data.Y)
     ax.set_title("Original Noisy MC")
     if original_data.axis_names and len(original_data.axis_names) >= 2:
@@ -415,7 +434,7 @@ def makeSmoothingPlots2D(
     ret["smoothing_original_2d"] = (fig, ax)
 
     # 2. GPR Mean Prediction
-    fig, ax = plt.subplots(layout="tight")
+    fig, ax = plt.subplots()
     plotRaw(ax, edges, X, pred_Y)
     ax.set_title("GPR Latent Mean")
     if original_data.axis_names and len(original_data.axis_names) >= 2:
@@ -424,7 +443,7 @@ def makeSmoothingPlots2D(
     ret["smoothing_gpr_mean_2d"] = (fig, ax)
 
     # 3. Smoothed Poisson-sampled data
-    fig, ax = plt.subplots(layout="tight")
+    fig, ax = plt.subplots()
     plotRaw(ax, edges, X, smooth_Y)
     ax.set_title("Smoothed Background (Poisson sample)")
     if original_data.axis_names and len(original_data.axis_names) >= 2:
@@ -434,7 +453,7 @@ def makeSmoothingPlots2D(
 
     # 4. Consistency: (Smoothed - Mean) / sqrt(Mean)
     resid = (smooth_Y - pred_Y) / np.sqrt(np.maximum(pred_Y, 1e-10))
-    fig, ax = plt.subplots(layout="tight")
+    fig, ax = plt.subplots()
     plotRaw(ax, edges, X, resid, cmap="coolwarm", cmin=-4, cmax=4)
     ax.set_title("Smoothing Consistency (Resid / sqrt(μ))")
     if original_data.axis_names and len(original_data.axis_names) >= 2:
@@ -449,7 +468,7 @@ def makeSmoothingPlots2D(
         rel_unc = pred_std / np.maximum(pred_Y, 1e-10)
 
         # Absolute Uncertainty (Sigma)
-        fig, ax = plt.subplots(layout="tight")
+        fig, ax = plt.subplots()
         plotRaw(ax, edges, X, jnp.array(pred_std))
         ax.set_title(r"GPR Absolute Uncertainty ($\sigma$)")
         if original_data.axis_names and len(original_data.axis_names) >= 2:
@@ -458,7 +477,7 @@ def makeSmoothingPlots2D(
         ret["smoothing_sigma_2d"] = (fig, ax)
 
         # Relative Uncertainty (Sigma/Mu)
-        fig, ax = plt.subplots(layout="tight")
+        fig, ax = plt.subplots()
         plotRaw(ax, edges, X, jnp.array(rel_unc), cmin=0, cmax=0.5)
         ax.set_title(r"GPR Relative Uncertainty ($\sigma/\mu$)")
         if original_data.axis_names and len(original_data.axis_names) >= 2:

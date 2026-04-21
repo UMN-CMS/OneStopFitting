@@ -77,6 +77,7 @@ def preprocess(
             Y=injected_Y,
             V=injected_V,
             edges=state.background.edges,
+            axis_names=state.background.axis_names,
         )
     else:
         logger.info("Background only fit, no signal injection")

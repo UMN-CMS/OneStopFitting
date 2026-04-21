@@ -54,7 +54,7 @@ class BinnedData:
     Y: jnp.ndarray = attrs.field(validator=_jnpArrayValidator)
     V: jnp.ndarray = attrs.field(validator=_jnpArrayValidator)
     edges: tuple[jnp.ndarray, ...] = attrs.field(validator=_edgesValidator)
-    axis_names: tuple[str, ...] = attrs.field(default=())
+    axis_names: tuple[str, ...] = attrs.field(factory=tuple)
 
     @property
     def ndim(self) -> int:

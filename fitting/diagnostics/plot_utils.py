@@ -7,8 +7,11 @@ import logging
 import mplhep
 import numpy as np
 from uhi.numpy_plottable import NumPyPlottableHistogram
+import matplotlib.patheffects as path_effects
 
 from ..core.data import BinnedData
+
+plt.rcParams["figure.constrained_layout.use"] = True
 
 CMS_COLORS = [
     "#3f90da",
@@ -26,6 +29,7 @@ CMS_COLORS = [
 
 logger = logging.getLogger(__name__)
 
+
 def addAxesToHist(ax, size=0.1, pad=0.1, position="bottom", extend=False):
     new_ax = mplhep.append_axes(ax, size, pad, position, extend)
     current_axes = getattr(ax, f"{position}_axes", [])
@@ -34,16 +38,10 @@ def addAxesToHist(ax, size=0.1, pad=0.1, position="bottom", extend=False):
 
 
 def plotBinnedData(ax, data: BinnedData, **kwargs):
-    h = data.toHist()
-    if data.ndim == 1:
-        drop_keys = {"cmin", "cmax", "cmap"}
-        clean_kwargs = {k: v for k, v in kwargs.items() if k not in drop_keys}
-        return mplhep.histplot(h, ax=ax, **clean_kwargs)
-    elif data.ndim == 2:
-        return mplhep.hist2dplot(h, ax=ax, flow=None, **kwargs)
+    return plotRaw(ax, data.edges, data.X, data.Y, V=data.V, **kwargs)
 
 
-def plotRaw(ax, edges, X, Y, V=None, **kwargs):
+def plotRaw(ax, edges, X, Y, V=None, cbar_title=None, **kwargs):
     np_edges = tuple(np.asarray(e) for e in edges)
     np_X = np.asarray(X)
     np_Y = np.asarray(Y)
@@ -70,25 +68,25 @@ def plotRaw(ax, edges, X, Y, V=None, **kwargs):
         ].astype(bool)
         vals = np.where(filled, hist_vals, np.nan)
         variances = None
+        drop_keys = {"cmin", "cmax"}
+        clean_kwargs = {k: v for k, v in kwargs.items() if k not in drop_keys}
         if V is not None:
             np_V = np.asarray(V)
             var_hist = np.histogramdd(np_X, bins=np_edges, weights=np_V)[0]
             variances = np.where(filled, var_hist, np.nan)
         h = NumPyPlottableHistogram(vals, *np_edges, variances=variances)
-        return mplhep.hist2dplot(h, ax=ax, flow=None, **kwargs)
+        objs = mplhep.hist2dplot(h, ax=ax, flow=None, **clean_kwargs)
+        pc = objs.pcolormesh
+        cbar = objs.cbar
+        if cbar_title and cbar is not None:
+            cbar.set_label(cbar_title)
 
-
-def savePlots(plots: dict[str, tuple], save_dir, formats=("pdf",)):
-    save_dir = Path(save_dir)
-    save_dir.mkdir(parents=True, exist_ok=True)
-    for name, (fig, ax) in plots.items():
-        for fmt in formats:
-            # ensure format string doesn't start with a dot if provided that way
-            ext = f".{fmt.lstrip('.')}"
-            out = (save_dir / name).with_suffix(ext)
-            fig.savefig(out, bbox_inches="tight")
-        plt.close(fig)
-    logger.info(f"Saved {len(plots)} to directory {save_dir}")
+        clim_relevant = {
+            x.replace("c", "v"): kwargs[x] for x in kwargs if x in ("cmin", "cmax")
+        }
+        if clim_relevant:
+            pc.set_clim(**clim_relevant)
+        return objs
 
 
 DEFAULT_QUANTILE_LINES = (("black", 0.5),)
@@ -161,8 +159,8 @@ def plotFitDiagnostic(
     xlabel: str = "Bin Index",
     log: bool = True,
 ):
-    gs_kw = dict(height_ratios=[3, 1, 1,1])
-    fig, (ax, rax, pax,sbax) = plt.subplots(
+    gs_kw = dict(height_ratios=[3, 1, 1, 1])
+    fig, (ax, rax, pax, sbax) = plt.subplots(
         figsize=(12, 16), nrows=4, sharex=True, gridspec_kw=gs_kw, layout="tight"
     )
 
@@ -172,7 +170,6 @@ def plotFitDiagnostic(
     color_b_sb = CMS_COLORS[2]
     color_s_sb = CMS_COLORS[3]
     color_sb_sb = CMS_COLORS[4]
-
 
     plotBinnedData(
         ax,
@@ -270,17 +267,13 @@ def plotFitDiagnostic(
             alpha=0.8,
         )
 
-
     def addPre(num, den, color):
         ratio = num.Y / den.Y
         centers = num.X.ravel()
         # pulls = (num.Y - den.Y) / np.sqrt(num.V)
         # pulls = np.where(np.isfinite(pulls), pulls, 0)
 
-
-        sbax.errorbar(
-            centers, ratio, fmt="ko", markersize=3, color=color
-        )
+        sbax.errorbar(centers, ratio, fmt="ko", markersize=3, color=color)
 
         # sbax.bar(
         #     centers,
@@ -295,12 +288,12 @@ def plotFitDiagnostic(
     add(data, b_background, color_b_background)
     add(data, s_background, color_b_sb)
     addPre(prefit_b, s_background, color_b_sb)
-    addPre(prefit_b, s_signal+s_background, color_sb_sb)
+    addPre(prefit_b, s_signal + s_background, color_sb_sb)
 
     rax.axhline(1, color="black", linestyle="--", alpha=0.5)
     rax.set_ylabel(r"$\frac{Data}{Bkg.}$")
     rax.set_ylim(0.5, 1.5)
-    
+
     pax.axhline(0, color="black", linestyle="-", alpha=0.5)
     pax.set_ylabel(r"$\frac{Data - Bkg.}{\sigma_{Data}}$")
     pax.set_ylim(-3, 3)
@@ -308,7 +301,6 @@ def plotFitDiagnostic(
     sbax.axhline(1, color="black", linestyle="--", alpha=0.5)
     sbax.set_ylabel(r"$\frac{Bkg.}{Prefit}$")
     sbax.set_ylim(0.8, 1.2)
-
 
     sbax.set_xlabel(xlabel)
 
@@ -335,3 +327,191 @@ def plotBlinding2D(ax, edges, X, blind_mask, color="magenta", linewidth=2):
     for j, i in it.product(range(len(ey) - 1), range(len(ex))):
         if padded[i, j + 1] != padded[i + 1, j + 1]:
             ax.plot([ex[i], ex[i]], [ey[j], ey[j + 1]], color=color, lw=linewidth)
+
+
+def _getSampleCategory(all_meta):
+    sample_types = set()
+    for meta in all_meta:
+        st = meta.get("sample_type")
+        if st is not None:
+            val = st.value if hasattr(st, "value") else str(st)
+            sample_types.add(val)
+    has_mc = "MC" in sample_types
+    has_data = "Data" in sample_types
+    return has_mc, has_data
+
+
+def isSimulationOnly(all_meta):
+    has_mc, has_data = _getSampleCategory(all_meta)
+    return has_mc and not has_data
+
+
+def _buildCMSText(cms_text, all_meta):
+    has_mc, has_data = _getSampleCategory(all_meta)
+    sim_only = has_mc and not has_data
+    sim_only = True
+    label = cms_text or ""
+    is_private = label.lower().startswith("private work")
+
+    if is_private:
+        if has_mc and has_data:
+            data_label = "CMS Data/Simulation"
+        elif sim_only:
+            data_label = "CMS Simulation"
+        else:
+            data_label = "CMS Data"
+        return "", f"Private Work ({data_label})"
+    else:
+        if sim_only:
+            label = f"Simulation {label}" if label else "Simulation"
+        return "CMS", label
+
+
+def addCMSBits(
+    ax,
+    all_meta,
+    extra_text=None,
+    cms_text="Private Work",
+    text_color="black",
+    cms_text_pos=1,
+):
+    lumis = set(str(x["era"]["lumi"]) for x in all_meta)
+    energies = set(str(x["era"]["energy"]) for x in all_meta)
+    era = set(str(x["era"]["name"]) for x in all_meta)
+    era_text = f"{'/'.join(era)}"
+    lumi_text = f"{'/'.join(lumis)} fb$^{{-1}}$ ({'/'.join(energies)} TeV)"
+    info_text = era_text + ", " + lumi_text
+
+    exp, text = _buildCMSText(cms_text, all_meta)
+
+    if extra_text is not None:
+        text += "\n" + extra_text
+
+    if exp:
+        artists = mplhep.cms.text(
+            text=text,
+            # exp=exp,
+            lumi=info_text,
+            ax=ax,
+            loc=cms_text_pos,
+            color=text_color,
+        )
+    else:
+        loc = cms_text_pos
+        color = text_color
+
+        lumi_artist = None
+        if info_text is not None:
+            lumi_artist = mplhep.add_text(
+                info_text,
+                loc="over right",
+                xpad=0,
+                ypad=0,
+                ax=ax,
+            )
+
+        loc_map = {0: "over left", 1: "upper left", 2: "upper left", 3: "over left"}
+        text_loc = loc_map.get(loc, "over left")
+        label_artist = mplhep.label.add_text(
+            text,
+            loc=text_loc,
+            ax=ax,
+            fontstyle="italic",
+            color=color,
+        )
+        artists = (label_artist, None, lumi_artist, None)
+
+    for artist in artists:
+        if artist:
+            artist.set_path_effects(
+                [
+                    path_effects.Stroke(linewidth=1, foreground="white"),
+                    path_effects.Normal(),
+                ]
+            )
+    ax._cms_text_artists = artists
+    ax.set_title("")
+    return artists
+
+
+def removeCMSAnnotations(ax):
+    if hasattr(ax, "_cms_text_artists"):
+        for artist in ax._cms_text_artists:
+            if artist is not None:
+                artist.remove()
+        del ax._cms_text_artists
+
+
+def labelAxis(ax, which, axes, label=None, label_complete=None):
+    mapping = dict(x=0, y=1, z=2)
+    idx = mapping[which]
+
+    if idx != len(axes):
+        this_unit = getattr(axes[idx], "unit", None)
+        if not label:
+            label = axes[idx].label
+            if this_unit:
+                label += f" [{this_unit}]"
+
+        getattr(ax, f"set_{which}label")(label.replace("textrm", "text"))
+    else:
+        label = label or "Events"
+        units = [getattr(x, "unit", None) for x in axes]
+        units = [x for x in units if x]
+        getattr(ax, f"set_{which}label")(label.replace("textrm", "text"))
+
+
+def saveFigVariants(
+    fig,
+    ax,
+    out,
+    all_meta,
+    metadata=None,
+    extra_text=None,
+    text_color=None,
+    cms_texts=None,
+    formats=None,
+    **save_kwargs,
+):
+
+    cms_texts = cms_texts or ["Preliminary", "Private Work"]
+    suffix_text = len(cms_texts) > 1
+
+    raw_types = formats or [".pdf"]
+    extensions = [ext if ext.startswith(".") else f".{ext}" for ext in raw_types]
+    suffix_ext = len(extensions) > 1
+
+    base_path = Path(out)
+    base_path.parent.mkdir(exist_ok=True, parents=True)
+
+    for variant in cms_texts:
+        removeCMSAnnotations(ax)
+        addCMSBits(ax, all_meta, cms_text=variant)
+
+        text_suffix = f"_{variant.lower().replace(' ', '_')}" if suffix_text else ""
+        for ext in extensions:
+            variant_path = base_path.with_stem(
+                f"{base_path.stem}{text_suffix}"
+            ).with_suffix(ext)
+            fig.savefig(variant_path, **save_kwargs)
+
+    # if INCLUDE_SIDECAR:
+    #     with open(base_path.with_suffix(".json"), "w") as f:
+    #         json.dump(makeDict(metadata), f)
+
+
+def savePlots(plots: dict[str, tuple], save_dir, all_meta, formats=("pdf",)):
+    save_dir = Path(save_dir)
+    save_dir.mkdir(parents=True, exist_ok=True)
+    for name, (fig, ax) in plots.items():
+        out = save_dir / name
+        if isinstance(ax, (np.ndarray, list, tuple)):
+            ax = ax[0]
+        saveFigVariants(fig, ax, out, all_meta)
+        # for fmt in formats:
+        #     # ensure format string doesn't start with a dot if provided that way
+        #     ext = f".{fmt.lstrip('.')}"
+        #     out = (save_dir / name).with_suffix(ext)
+        #     fig.savefig(out, bbox_inches="tight")
+        plt.close(fig)
+    logger.info(f"Saved {len(plots)} to directory {save_dir}")

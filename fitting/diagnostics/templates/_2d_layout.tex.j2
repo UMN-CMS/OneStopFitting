@@ -6,7 +6,6 @@
 [- set observed_path     = image_paths["observed"]      -]
 [- set gpr_path          = image_paths["gpr"]           -]
 [- set pulls_2d_path     = image_paths["pulls"]         -]
-[- set ppc_map_path      = image_paths["ppc_map"]       -]
 [- set predvar_path      = image_paths["predvar"]       -]
 [- set ppc_blinded_path  = image_paths["ppc_blinded"]   -]
 [- set ppc_unblinded_path = image_paths["ppc_unblinded"] -]
@@ -38,14 +37,14 @@
 \smallskip\noindent\textcolor{gray!60}{\rule{\textwidth}{0.3pt}}\smallskip
 
 %% ============================================================
-%%  Row 2 — Pull Map | PPC Predictive Mean | Pred. Variance
+%%  Row 2 — Pull Map | Pred. Variance
 %% ============================================================
 \begin{tabularx}{\textwidth}{@{\hspace{2pt}} L @{\hspace{4pt}} L @{\hspace{4pt}} L @{\hspace{2pt}}}
   \includegraphics[width=\linewidth]{[[ pulls_2d_path ]]} &
-  \includegraphics[width=\linewidth]{[[ ppc_map_path ]]}  &
+  &
   \includegraphics[width=\linewidth]{[[ predvar_path ]]}  \\
   \centering\scriptsize Pull Map &
-  \centering\scriptsize PPC Predictive Mean &
+  \centering\scriptsize  &
   \centering\scriptsize Predictive Variance \\
 \end{tabularx}
 
