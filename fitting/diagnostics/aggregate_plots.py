@@ -4,7 +4,7 @@ import glob
 import json
 import logging
 from pathlib import Path
-from fitting.utils import dictToDot, dotFormat
+from fitting.utils import dictToDot, dotFormat, commonDict
 from collections import defaultdict
 import attrs
 from typing import Any, Iterable, Iterator
@@ -25,29 +25,28 @@ def iterSummaryFiles(inputs: Iterable[str | Path]) -> Iterator[Path]:
     seen: set[Path] = set()
     for inp in inputs:
         inp_str = str(inp)
-        expanded: list[Path]
 
         if any(ch in inp_str for ch in ["*", "?", "["]):
-            expanded = [Path(p) for p in glob.glob(inp_str, recursive=True)]
+            expanded = [Path(p) for p in Path(".").glob(inp_str)]
             if not expanded:
                 logger.warning(f"No matches for input pattern: {inp_str}")
         else:
             expanded = [Path(inp_str)]
 
         for path in expanded:
-            if path.is_dir():
-                for summary_path in path.rglob("summary.json"):
-                    resolved = summary_path.resolve()
-                    if resolved not in seen:
-                        seen.add(resolved)
-                        yield resolved
-            else:
-                # if path.name != "summary.json":
-                #     continue
-                resolved = path.resolve()
-                if resolved not in seen:
-                    seen.add(resolved)
-                    yield resolved
+            # if path.is_dir():
+            #     for summary_path in path.rglob("summary.json"):
+            #         resolved = summary_path.resolve()
+            #         if resolved not in seen:
+            #             seen.add(resolved)
+            #             yield resolved
+            # else:
+            # if path.name != "summary.json":
+            #     continue
+            resolved = path.resolve()
+            if resolved not in seen:
+                seen.add(resolved)
+                yield resolved
 
 
 def readSummary(path: Path) -> dict[str, Any]:
@@ -73,8 +72,19 @@ def getByDotpath(dct: dict[str, Any], dotpath: str) -> Any:
 class AggregatePoint:
     mstop: float
     mchi: float
-    value: float
+    value: Any
     source: Path | None = None
+    groups: dict | None = None
+    metadata: dict | None = None
+
+
+@attrs.define(frozen=True)
+class MultiPoint:
+    mstop: float
+    mchi: float
+    value: list[Any]
+    stats: dict
+    source: list[Path] | None = None
     groups: dict | None = None
     metadata: dict | None = None
 
@@ -100,19 +110,65 @@ def collectPoints(
             mchi = float(getByDotpath(summary, chi_dotpath))
             value_raw = getByDotpath(summary, metric_dotpath)
             value = float(value_raw)
+            points[key].append(
+                AggregatePoint(
+                    mstop=mstop,
+                    mchi=mchi,
+                    value=value,
+                    source=path,
+                    groups=dict(key),
+                    metadata=summary["metadata"],
+                )
+            )
         except Exception as e:
             logger.warning(f"Skipping {path}: {e}")
-        points[key].append(
-            AggregatePoint(
-                mstop=mstop,
-                mchi=mchi,
-                value=value,
-                source=path,
-                groups=dict(key),
-                metadata=summary["metadata"],
+
+    return dict(points)
+
+
+def computeStatistics(values: list[float]) -> dict[str, float]:
+    if not values:
+        return {}
+
+    arr = np.array(values, dtype=float)
+
+    stats = {
+        "mean": float(np.mean(arr)),
+        "std": float(np.std(arr, ddof=1)),
+        "min": float(np.min(arr)),
+        "max": float(np.max(arr)),
+        "median": float(np.median(arr)),
+        "q05": float(np.percentile(arr, 5)),
+        "q25": float(np.percentile(arr, 25)),
+        "q75": float(np.percentile(arr, 75)),
+        "q95": float(np.percentile(arr, 95)),
+        "n": len(arr),
+    }
+
+    return stats
+
+
+def makeMulti(points):
+    grouped = defaultdict(list)
+
+    for p in points:
+        k = (p.mstop, p.mchi)
+        grouped[k].append(p)
+
+    ret = []
+    for k, group in grouped.items():
+        values = ([x.value for x in group],)
+        ret.append(
+            MultiPoint(
+                *k,
+                values,
+                computeStatistics(values),
+                [x.source for x in group],
+                group[0].groups,
+                commonDict([x.metadata for x in group]),
             )
         )
-    return dict(points)
+    return ret
 
 
 def _edgesFromCenters(centers: np.ndarray) -> np.ndarray:
@@ -134,6 +190,7 @@ def makeAggregateMassPlanePlot(
     points: list[AggregatePoint],
     *,
     metric_name: str,
+    get_value_func=lambda x: x.stats["median"],
     title: str | None = None,
     cmap: str = "viridis",
     cmin: float | None = None,
@@ -149,7 +206,7 @@ def makeAggregateMassPlanePlot(
     params = params or {}
     xs = np.array([p.mstop for p in points], dtype=float)
     ys = np.array([p.mchi for p in points], dtype=float)
-    vs = np.array([p.value for p in points], dtype=float)
+    vs = np.array([get_value_func(p) for p in points], dtype=float)
 
     x_unique = np.unique(xs)
     y_unique = np.unique(ys)
@@ -158,7 +215,7 @@ def makeAggregateMassPlanePlot(
     uniq_pairs = {(p.mstop, p.mchi) for p in points}
     has_full_grid = (len(points) == grid_n) and (len(uniq_pairs) == len(points))
 
-    fig, ax = plt.subplots(layout="tight")
+    fig, ax = plt.subplots()
 
     # Use p-value bands if requested or if metric is a p-value and cmap is default
     actual_norm = None
@@ -195,7 +252,6 @@ def makeAggregateMassPlanePlot(
         cb = fig.colorbar(sc, ax=ax)
         cb.set_label(metric_name)
     else:
-        # Grid the points (even if sparse) to support smoothing and/or heatmap rendering.
         x_edges = _edgesFromCenters(x_unique)
         y_edges = _edgesFromCenters(y_unique)
         grid = np.full((y_unique.size, x_unique.size), np.nan, dtype=float)

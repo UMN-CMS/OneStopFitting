@@ -3,16 +3,17 @@ from __future__ import annotations
 import copy
 import logging
 from pathlib import Path
-from rich import print
 
 import attrs
 import click
 import jax
 import lz4.frame
+import enum
 import pickle
 from .diagnostics.plot_utils import savePlots
 from .distributed.batch_tools import generateBatchSubmit
 from .distributed.condor_tools import generateCondorSubmit
+from fitting.utils import dotFormat
 
 from .core.serialization import converter, load
 from .diagnostics.aggregate_plots import (
@@ -332,7 +333,7 @@ def smooth(
     logger.info(f"Smoothed background saved to {output_dir}")
 
 
-@main.command(name="aggregate-plot")
+@main.command("aggregate")
 @click.argument(
     "inputs",
     nargs=-1,
@@ -388,7 +389,7 @@ def smooth(
     show_default=True,
     help="Gaussian filter truncate (in sigmas).",
 )
-@click.option("--save-data", default=False, is_flag=True)
+@click.option("--save-data", default=True, is_flag=True)
 @click.option(
     "--stop-dotpath",
     type=str,
@@ -401,7 +402,7 @@ def smooth(
     default="metadata.other_data.chargino_mass",
     show_default=True,
 )
-def aggregatePlot(
+def aggregate(
     inputs: tuple[str, ...],
     metric_dotpath: str,
     output: Path,
@@ -422,6 +423,7 @@ def aggregatePlot(
     from .diagnostics.plot_utils import savePlots
     import json
     import cattrs
+    from .diagnostics.aggregate_plots import makeMulti
 
     summary_files = list(iterSummaryFiles(inputs))
     if not summary_files:
@@ -435,6 +437,9 @@ def aggregatePlot(
         chi_dotpath=chi_dotpath,
     )
 
+    for k in list(points):
+        points[k] = makeMulti(points[k])
+
     all_points = [x for y in points.values() for x in y]
     logger.info(f"Gathered {len(all_points)} points into {len(points)} groups")
     if not points:
@@ -446,10 +451,13 @@ def aggregatePlot(
     output.mkdir(exist_ok=True, parents=True)
 
     if save_data:
-        p = output / "data.json"
-        logger.info(f"Saving data to {p}")
-        with open(p, "w") as f:
-            json.dump(cattrs.unstructure(all_points), f)
+        for k, d in points.items():
+            n = dotFormat(name_format, metric_name=metric_dotpath, **dict(k))
+            n = n.replace(".","p")
+            p = (output / n).with_suffix(".json")
+            logger.info(f"Saving data to {p}")
+            with open(p, "w") as f:
+                json.dump(cattrs.unstructure(d), f)
     plots = {}
     for k, p in points.items():
         plots = makeAggregateMassPlanePlot(
@@ -522,6 +530,7 @@ def aggregatePlot(
 @click.option(
     "--save-data",
     is_flag=True,
+    default=True,
     help="Save grouped data and statistics as JSON.",
 )
 @click.option(
@@ -876,6 +885,7 @@ def resolveOutput(
     output_format: str,
 ) -> None:
     from .pipeline import PipelineConfig, loadData
+    import sys
 
     with open(config, "r") as f:
         config_data = yaml.safe_load(f)
@@ -887,7 +897,8 @@ def resolveOutput(
     pipeline_config = attrs.evolve(pipeline_config, **config_data)
     state = loadData(pipeline_config)
     output_path = state.getRealOutPath()
-    print(output_path)
+    logger.info(f"Resolved output to '{str(output_path)}'")
+    print(output_path, flush=True)
 
 
 @main.command()
@@ -977,9 +988,11 @@ def windowFit(input: tuple[str, ...], spread: float, rebin: int, output_format: 
         reco_cat = getRecoCategory(sig_metadata["name"])
 
         try:
-            #window = fitGaussianWindow(signal, spread=spread)
+            # window = fitGaussianWindow(signal, spread=spread)
             # window = fitDensityWindow(signal, dilation_margin=0.0)
-            window = fitCoreDilatedWindow(signal, core_threshold_fraction=0.3, dilation_margin=0.1)
+            window = fitCoreDilatedWindow(
+                signal, core_threshold_fraction=0.4, dilation_margin=0.2
+            )
         except RuntimeError as e:
             logger.warning(f"Failed to fit {sig_metadata['dataset_name']}")
             failures += 1
