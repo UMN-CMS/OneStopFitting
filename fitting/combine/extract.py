@@ -15,6 +15,14 @@ from ..data.loading import histToBinnedData
 from ..diagnostics.plot_utils import plotPPD
 from contextlib import ExitStack
 
+class OptionalPattern:
+    def __init__(self, pattern: re.Pattern):
+        self.pattern = pattern
+        self.is_optional = True
+
+    def search(self, string: str):
+        return self.pattern.search(string)
+
 logger = logging.getLogger(__name__)
 
 
@@ -145,6 +153,67 @@ def extractMultiDimFit(tree: uproot.TTree) -> tuple[dict, dict]:
     return {}, {}
 
 
+def extractLikelihoodScan(std_file, froz_file) -> tuple[dict, dict]:
+    from scipy.interpolate import make_interp_spline
+
+    ret = {}
+    plots = {}
+    
+    def get_data(f):
+        tree = f["limit"]
+        limit_vals = tree["r"].array()
+        limit_err_vals = tree["deltaNLL"].array()
+        q = tree["quantileExpected"].array()
+        
+        mask = q > -1.5
+        r_vals = np.array(limit_vals[mask])
+        dnll = np.array(limit_err_vals[mask]) * 2.0
+        
+        idx = np.argsort(r_vals)
+        r_vals = r_vals[idx]
+        dnll = dnll[idx]
+
+        r_vals, unique_idx = np.unique(r_vals, return_index=True)
+        dnll = dnll[unique_idx]
+        return r_vals, dnll
+
+    def makeSpline(r_vals, dnll):
+        new_points = np.linspace(r_vals.min(), r_vals.max(), 1000)
+        spl = make_interp_spline(r_vals, dnll, k=3)
+        return new_points, spl(new_points)
+    
+    def maskData(r_vals, dnll, max_val=6):
+        mask = dnll <= max_val
+        return r_vals[mask], dnll[mask]
+        
+
+    fig, ax = plt.subplots()
+
+    if std_file is not None:
+        std_r, std_dnll = maskData(*makeSpline(*get_data(std_file)))
+
+        ax.plot(std_r, std_dnll, "k-", label="Standard", linewidth=2)
+
+        bestfit_idx = np.argmin(std_dnll)
+        ret["likelihood_scan_best_r"] = float(std_r[bestfit_idx])
+    
+    if froz_file is not None:
+        froz_r, froz_dnll = maskData(*makeSpline(*get_data(froz_file)))
+        ax.plot(froz_r, froz_dnll, "b-", label="Frozen", linewidth=2)
+        
+    ax.axhline(1.0, color="gray", linestyle="--")
+    ax.axhline(4.0, color="gray", linestyle="--")
+    ax.set_xlabel("r")
+    ax.set_ylabel("-2 $\Delta ln L$")
+    ax.set_ylim(0, 6.0)
+    
+    ax.legend()
+    fig.tight_layout()
+    
+    plots["likelihood_scan"] = (fig, ax)
+    return ret, plots
+
+
 EXTRACTORS: list[
     tuple[tuple[re.Pattern] | re.Pattern, Callable[[uproot.TTree], dict]]
 ] = [
@@ -158,7 +227,14 @@ EXTRACTORS: list[
         ),
         extractGof,
     ),
-    (re.compile(r"\.MultiDimFit\."), extractMultiDimFit),
+    (re.compile(r"higgsCombine\.mdimnon\.MultiDimFit\."), extractMultiDimFit),
+    (
+        (
+            re.compile(r"higgsCombine\.mdimgrid\.MultiDimFit\."),
+            OptionalPattern(re.compile(r"higgsCombine\.mdimgridfreeze\.MultiDimFit\.")),
+        ),
+        extractLikelihoodScan,
+    ),
 ]
 
 
@@ -216,24 +292,32 @@ def extractCombineResults(combine_dir: Path) -> dict:
     for patterns, extractor in EXTRACTORS:
         patterns = patterns if isinstance(patterns, (list, tuple)) else [patterns]
         matched = []
+        skip = False
         for pattern in patterns:
-            matched_files = [f for f in files if pattern.search(f.name)]
+            is_optional = hasattr(pattern, "is_optional")
+            actual_pattern = pattern.pattern if is_optional else pattern
+            matched_files = [f for f in files if actual_pattern.search(f.name)]
             if len(matched_files) == 0:
+                if is_optional:
+                    matched.append(None)
+                    continue
+                skip = True
                 break
 
             if len(matched_files) > 1:
                 raise ValueError(
-                    f"Multiple files found for pattern {pattern}: {matched_files}"
+                    f"Multiple files found for pattern {actual_pattern}: {matched_files}"
                 )
             matched.append(matched_files[0])
-        if len(matched) != len(patterns):
+            
+        if skip or len(matched) != len(patterns):
             logger.debug(f"No extractor found for {patterns}, skipping.")
             continue
 
         logger.info(f"Extracting results from {matched} using {extractor.__name__}")
         try:
             with ExitStack() as stack:
-                f = [stack.enter_context(uproot.open(f)) for f in matched]
+                f = [stack.enter_context(uproot.open(m)) if m is not None else None for m in matched]
                 extracted_data, extracted_plots = extractor(*f)
                 merged_results.update(extracted_data)
                 plots.update(extracted_plots)

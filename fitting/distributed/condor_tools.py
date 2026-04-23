@@ -26,24 +26,28 @@ class CondorPackage:
 
 
 COMBINE_SHORT_COMMANDS = {
-    "fit-diagnostics": "combine -M FitDiagnostics -d datacard.root --saveShapes --saveNormalizations",
-    "multidimfit": "combine -M MultiDimFit -d datacard.root --rMin=-10 --rMax=20",
-    "limits": "combine -M AsymptoticLimits -d datacard.root",
-    "significance": "combine -M Significance -d datacard.root",
+    "fit-diagnostics": "combine -M FitDiagnostics -d datacard.root --saveShapes --saveNormalizations --rMin=-10 --rMax=20",
+    "multidimfit": (
+        "combine -M MultiDimFit -d datacard.root --rMin=-10 --rMax=20 -n .mdimnon;"
+        "combine -M MultiDimFit -d datacard.root --rMin=-10 --rMax=20 -n .mdimgrid --algo grid --points 100;"
+        "combine -M MultiDimFit -d datacard.root --rMin=-10 --rMax=20 -n .mdimgridfreeze --algo grid --points 100 --freezeParameters allConstrainedNuisances;"
+    ),
+    "limits": "combine -M AsymptoticLimits -d datacard.root --rMin=-10 --rMax=20",
+    "significance": "combine -M Significance -d datacard.root --rMin=-10 --rMax=20",
     "gof-saturated": (
         "combine -M GoodnessOfFit --algorithm saturated -d datacard.root --name gof_saturated;"
         "combine -M GoodnessOfFit --algorithm saturated -d datacard.root --name gof_saturated_toys"
-        " --toys 200 --toysFrequentist"
+        " --toys 200"
     ),
     "gof-ks": (
         "combine -M GoodnessOfFit --algorithm KS -d datacard.root --name gof_ks;"
         "combine -M GoodnessOfFit --algorithm KS -d datacard.root --name gof_ks_toys"
-        " --toys 200 --toysFrequentist"
+        " --toys 200"
     ),
     "gof-ad": (
         "combine -M GoodnessOfFit --algorithm AD -d datacard.root --name gof_ad;"
         "combine -M GoodnessOfFit --algorithm AD -d datacard.root --name gof_ad_toys"
-        " --toys 200 --toysFrequentist"
+        " --toys 200"
     ),
     "impacts": (
         "combineTool.py -M Impacts -d datacard.root -m 125 --doInitialFit --robustFit 1; "
@@ -51,7 +55,7 @@ COMBINE_SHORT_COMMANDS = {
         "combineTool.py -M Impacts -d datacard.root -m 125 -o impacts.json; "
         "plotImpacts.py -i impacts.json -o impacts"
     ),
-    "limit": "limits",
+    "limit": "limits ",
     "sig": "significance",
     "gof": "gof-saturated",
 }
