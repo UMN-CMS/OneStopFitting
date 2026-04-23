@@ -243,8 +243,8 @@ def plotFitDiagnostic(
         ax.set_yscale("log")
 
     # CMS Label
-    mplhep.cms.label(ax=ax, label="Preliminary", data=True)
-    ax.legend(ncols=2, loc="upper right")
+    # mplhep.cms.label(ax=ax, label="Preliminary", data=True)
+    ax.legend(ncols=1, loc="upper right")
     mplhep.utils.yscale_legend(ax, soft_fail=True, N=20)
 
     def add(num, den, color):
