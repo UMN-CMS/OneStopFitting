@@ -11,7 +11,7 @@ function run_combine {
     echo "--------------------------------------------------"
     echo "Running: $cmd"
     echo "--------------------------------------------------"
-    apptainer exec -B /cvmfs {{ container }} \
+    apptainer exec --home ${_CONDOR_SCRATCH_DIR:-$PWD} -B /cvmfs {{ container }} \
         /bin/bash -c "source /cvmfs/cms.cern.ch/cmsset_default.sh && cd /home/cmsusr/CMSSW_14_1_0_pre4 && cmsenv && cd - && $cmd"
     echo "Completed: $cmd"
     echo ""
