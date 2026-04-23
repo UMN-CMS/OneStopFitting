@@ -370,7 +370,7 @@ def smooth(
 
     output_dir.mkdir(parents=True, exist_ok=True)
     plot_dir = output_dir / "smoothing_diagnostics"
-    savePlots(plots, plot_dir, [state.metadata])
+    savePlots(plots, plot_dir, [analysis_state.metadata])
     logger.info(f"Smoothing diagnostic plots saved to {plot_dir}")
 
     for idx, hist in enumerate(hists):
@@ -388,7 +388,7 @@ def smooth(
         pure_plot_dir = output_dir / "pure_smooth_diagnostics"
         pure_plot_dir.mkdir(exist_ok=True, parents=True)
         h, plots = generateAsimovSmoothed(analysis_state, rng_key)
-        savePlots(plots, pure_plot_dir, [state.metadata])
+        savePlots(plots, pure_plot_dir, [analysis_state.metadata])
         o = output_dir / f"pure_smoothed.pklz4"
         metadata = copy.deepcopy(analysis_state.background_metadata)
         with lz4.frame.open(o, "wb") as f:
