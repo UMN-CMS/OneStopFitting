@@ -67,17 +67,18 @@ RUN_FIT_TEMPLATE = """#!/usr/bin/env bash
 # GENERATED AUTOMATICALLY on {{ timestamp }}
 echo "STARTING SETUP"
 
+
 function run_combine {
     local cmd="$1"
     echo $PWD
     echo "RUNNING COMBINE: $cmd"
-    apptainer exec  -B /cvmfs /cvmfs/unpacked.cern.ch/gitlab-registry.cern.ch/cms-analysis/general/combine-container:latest \
+    apptainer exec --home $_CONDOR_SCRATCH_DIR -B /cvmfs /cvmfs/unpacked.cern.ch/gitlab-registry.cern.ch/cms-analysis/general/combine-container:latest \
         /bin/bash -c "source /cvmfs/cms.cern.ch/cmsset_default.sh && cd /home/cmsusr/CMSSW_14_1_0_pre4 && cmsenv && cd - && $cmd"
 }
 
 function run_fit {
     local cmd="$1"
-    apptainer exec {{ container }} /bin/bash -c "source {{ venv_activate_path }} && $cmd"
+    apptainer exec --home "$_CONDOR_SCRATCH_DIR" {{ container }} /bin/bash -c "source {{ venv_activate_path }} && $cmd"
 }
 
 
@@ -86,6 +87,9 @@ echo "UNTARRING {{item}}"
 tar zxf {{ item }}
 {% endfor %}
 ls -alhtr
+
+export MPLCONFIGDIR=$_CONDOR_SCRATCH_DIR
+
 
 # Fitting Run
 ACTUAL_OUTPUT=$(run_fit "python3 -m fitting resolveoutput \
@@ -106,12 +110,12 @@ COMBINE_SCRIPT="$ACTUAL_OUTPUT/combine/run_combine_commands.sh"
 if [ -f "$COMBINE_SCRIPT" ]; then
     echo "Running combine commands from: $COMBINE_SCRIPT"
     bash "$COMBINE_SCRIPT"
+    echo "Starting harvest"
+    run_fit "python3 -m fitting harvest $ACTUAL_OUTPUT/summary.json"
 else
     echo "No combine script found at: $COMBINE_SCRIPT"
 fi
 
-echo "Starting harvest"
-run_fit "python3 -m fitting harvest $ACTUAL_OUTPUT/summary.json"
 
 """
 
