@@ -97,16 +97,16 @@ def makeDiagnosticPlots2D(
         plotBlinding2D(ax, edges, X, blind_mask)
         ret["injected_signal"] = (fig, ax)
 
-    # # --- Signal Template (unscaled) ---
-    # if signal_template is not None:
-    #     fig, ax = plt.subplots()
-    #     plotBinnedData(ax, signal_template)
-    #     ax.set_title("Signal Template")
-    #     if test_data.axis_names and len(test_data.axis_names) >= 2:
-    #         ax.set_xlabel(test_data.axis_names[0])
-    #         ax.set_ylabel(test_data.axis_names[1])
-    #     plotBlinding2D(ax, edges, X, blind_mask)
-    #     ret["signal_template"] = (fig, ax)
+    # --- Signal Template (unscaled) ---
+    if signal_template is not None:
+        fig, ax = plt.subplots()
+        plotBinnedData(ax, signal_template, cbar_title="Events (No Scaling)")
+        ax.set_title("Signal Template")
+        if test_data.axis_names and len(test_data.axis_names) >= 2:
+            ax.set_xlabel(test_data.axis_names[0])
+            ax.set_ylabel(test_data.axis_names[1])
+        plotBlinding2D(ax, edges, X, blind_mask)
+        ret["signal_template"] = (fig, ax)
 
     # --- Observed variances ---
     fig, ax = plt.subplots()
