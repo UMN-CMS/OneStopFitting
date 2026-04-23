@@ -6,7 +6,7 @@
 [- set era_name_safe = era.get("name", "") | replace("_", "\\_") -]
 [- set coupling_safe = other.get("coupling", "") | replace("_", "\\_") -]
 [- set injection_rate = meta.get("injection_rate", "") -]
-[- set window_spread = meta.get("window_spread", "") -]
+[- set window_type = meta.get("window_type", "") -]
 [- set stop_mass = other.get("stop_mass", "") -]
 [- set chargino_mass = other.get("chargino_mass", "") -]
 [- set dataset_title = meta.get("dataset_title", "") -]
@@ -26,7 +26,7 @@
   $m_{\tilde{\chi}^\pm}$:~[[ chargino_mass ]] \quad
   \textbf{Coupling:}~[[ coupling_safe ]] \quad
   \textbf{Injection:}~[[ injection_rate ]] \quad
-  \textbf{Window:}~[[ window_spread ]] \\
+  \textbf{Window:}~[[ window_type ]] \\
   \arrayrulecolor{gray!40}\bottomrule
 \end{tabularx}
 

@@ -19,7 +19,7 @@ from .core.transforms import (
     NormalizeAxes,
     TransformConfig,
 )
-from .data.windowing import Window
+from .data.windowing import Window, WindowConfig, GaussianWindowConfig
 from .inference.models import ExactGPConfig, GPModelConfig
 from .inference.optimization import OptimizationConfig
 
@@ -61,7 +61,7 @@ class PipelineConfig:
     min_counts: float = 0.0
     rng_seed: int = 0xBEEFBEEF
     domain_window: Window | None = None
-    window_spread: float = 2.0
+    window: WindowConfig | None = attrs.Factory(GaussianWindowConfig)
     transform: TransformConfig = attrs.Factory(StandardizationConfig)
     model: GPModelConfig = attrs.Factory(ExactGPConfig)
     optimization: OptimizationConfig = attrs.Factory(OptimizationConfig)

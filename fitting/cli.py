@@ -33,6 +33,55 @@ from .pipeline import (
     runPipeline,
     PipelineStep,
 )
+from .data.windowing import (
+    WindowConfig,
+    GaussianWindowConfig,
+    CoreDilatedWindowConfig,
+    RectangularWindowConfig,
+    CutWindowConfig,
+)
+
+WINDOW_TYPE_MAP: dict[str, type[WindowConfig]] = {
+    "gaussian": GaussianWindowConfig,
+    "core-dilated": CoreDilatedWindowConfig,
+    "rectangular": RectangularWindowConfig,
+    "cut": CutWindowConfig,
+}
+
+
+def _parseWindowParams(window_type: str | None, window_params: tuple[str, ...]) -> WindowConfig | None:
+    """Build a WindowConfig from CLI --window-type and --window-param flags."""
+    if window_type is None:
+        return None  # signal: use whatever the config/default provides
+    if window_type == "none":
+        return None  # explicitly disable windowing
+
+    cls = WINDOW_TYPE_MAP.get(window_type)
+    if cls is None:
+        valid = ", ".join(list(WINDOW_TYPE_MAP.keys()) + ["none"])
+        raise click.UsageError(f"Unknown window type '{window_type}'. Valid: {valid}")
+
+    kwargs: dict[str, object] = {}
+    for param in window_params:
+        if "=" not in param:
+            raise click.UsageError(f"Window param must be key=value, got: '{param}'")
+        key, raw = param.split("=", 1)
+        # Try numeric conversion
+        try:
+            value: object = int(raw)
+        except ValueError:
+            try:
+                value = float(raw)
+            except ValueError:
+                # Try list of floats (comma-separated)
+                if "," in raw:
+                    value = [float(x.strip()) for x in raw.split(",")]
+                else:
+                    value = raw
+        kwargs[key] = value
+
+    return cls(**kwargs)
+
 from .steps.generators import generateSmoothedBackground, generateAsimovSmoothed
 from .inference.optimization import (
     OptimizationConfig,
@@ -96,7 +145,18 @@ def main(verbose: bool) -> None:
 @click.option("--num-iters", type=int, default=None, help="Training iterations.")
 @click.option("--lr", type=float, default=0.01, help="Learning rate.")
 @click.option("--seed", type=int, default=0xBEEFBEEF, help="RNG seed.")
-@click.option("--window-spread", type=float, default=None, help="Window spread.")
+@click.option(
+    "--window-type",
+    type=str,
+    default=None,
+    help="Window strategy: gaussian, core-dilated, rectangular, cut, none.",
+)
+@click.option(
+    "--window-param",
+    "window_params",
+    multiple=True,
+    help="Window parameter as key=value (repeatable). E.g. --window-param spread=1.5",
+)
 @click.option(
     "--mode",
     type=click.Choice(InferenceMode, case_sensitive=False),
@@ -160,7 +220,8 @@ def run(
     num_iters: int,
     lr: float,
     seed: int,
-    window_spread: float | None,
+    window_type: str | None,
+    window_params: tuple[str, ...],
     mode: InferenceMode,
     optimizer: OptimizerType,
     objective: ObjectiveType,
@@ -193,8 +254,15 @@ def run(
             raw["optimization"]["num_iters"] = num_iters
         if lr is not None:
             raw["optimization"]["lr"] = lr
-        if window_spread is not None:
-            raw["window_spread"] = window_spread
+
+        # CLI window overrides config-level window
+        window_config = _parseWindowParams(window_type, window_params)
+        if window_config is not None or window_type == "none":
+            if window_config is None:
+                raw["window"] = None
+            else:
+                from .core.serialization import converter as _conv
+                raw["window"] = _conv.unstructure(window_config)
         if mode is not None:
             raw["optimization"]["mode"] = mode
 
@@ -216,7 +284,7 @@ def run(
             rebin=rebin,
             min_counts=min_counts,
             rng_seed=seed,
-            window_spread=window_spread,
+            window=_parseWindowParams(window_type, window_params),
             optimization=OptimizationConfig(
                 mode=mode,
                 lr=lr,
@@ -730,11 +798,6 @@ def makecondor(
     help="Comma-separated min counts values (e.g., '1.0,5.0')",
 )
 @click.option("--num-toys", type=int, default=None, help="Number of toys to run over")
-@click.option(
-    "--window-spread",
-    type=str,
-    help="Comma-separated window spread values (e.g., '1.5,2.0,3.0')",
-)
 def makebatch(
     signal: tuple[str, ...],
     background: str,
@@ -750,7 +813,6 @@ def makebatch(
     rebin: str | None,
     min_counts: str | None,
     num_toys: int | None,
-    window_spread: str | None,
 ) -> None:
     """Generate HTCondor submit files for a batch of jobs with parameter sweeps."""
 
@@ -768,7 +830,6 @@ def makebatch(
         rates=parse_csv_float(rates) if rates else None,
         rebin=parse_csv_int(rebin) if rebin else None,
         min_counts=parse_csv_float(min_counts) if min_counts else None,
-        window_spread=parse_csv_float(window_spread) if window_spread else None,
         num_toys=num_toys,
     )
 
@@ -952,11 +1013,27 @@ def harvest(summaries: tuple[Path, ...]) -> None:
 
 @main.command("window-fit")
 @click.argument("input", nargs=-1)
-@click.option("--spread", type=float)
+@click.option(
+    "--window-type",
+    type=str,
+    default="core-dilated",
+    help="Window strategy: gaussian, core-dilated, rectangular, cut.",
+)
+@click.option(
+    "--window-param",
+    "window_params",
+    multiple=True,
+    help="Window parameter as key=value (repeatable).",
+)
 @click.option("--rebin", default=1, type=int)
 @click.option("-o", "--output-format", type=str)
-def windowFit(input: tuple[str, ...], spread: float, rebin: int, output_format: str):
-    from .data.windowing import fitGaussianWindow, fitCoreDilatedWindow
+def windowFit(
+    input: tuple[str, ...],
+    window_type: str,
+    window_params: tuple[str, ...],
+    rebin: int,
+    output_format: str,
+):
     from .utils import getRecoCategory
     from .data.loading import (
         FileLoader,
@@ -975,8 +1052,12 @@ def windowFit(input: tuple[str, ...], spread: float, rebin: int, output_format: 
     mplhep.style.use("CMS")
     failures = 0
 
+    window_config = _parseWindowParams(window_type, window_params)
+    if window_config is None:
+        raise click.UsageError("window-fit requires a valid --window-type")
+
     logger.info(
-        f"Producing windows for {len(input)} signals using window spread {spread:0.2f}"
+        f"Producing windows for {len(input)} signals using {type(window_config).__name__}"
     )
     # for signal_path in track(input, total=len(input)):
     for signal_path in input:
@@ -988,13 +1069,9 @@ def windowFit(input: tuple[str, ...], spread: float, rebin: int, output_format: 
         reco_cat = getRecoCategory(sig_metadata["name"])
 
         try:
-            # window = fitGaussianWindow(signal, spread=spread)
-            # window = fitDensityWindow(signal, dilation_margin=0.0)
-            window = fitCoreDilatedWindow(
-                signal, core_threshold_fraction=0.4, dilation_margin=0.2
-            )
-        except RuntimeError as e:
-            logger.warning(f"Failed to fit {sig_metadata['dataset_name']}")
+            window = window_config.buildWindow(signal)
+        except (RuntimeError, ValueError) as e:
+            logger.warning(f"Failed to fit {sig_metadata['dataset_name']}: {e}")
             failures += 1
             continue
         blind_mask = window(signal.X)
@@ -1009,7 +1086,7 @@ def windowFit(input: tuple[str, ...], spread: float, rebin: int, output_format: 
         blind_mask_size = int(np.count_nonzero(blind_mask))
         all_data = {
             "reco_category": reco_cat,
-            "window_spread": spread,
+            "window_type": window_type,
             "blind_mask_size": blind_mask_size,
             **sig_metadata,
         }
@@ -1027,3 +1104,4 @@ def windowFit(input: tuple[str, ...], spread: float, rebin: int, output_format: 
 
 if __name__ == "__main__":
     main()
+

@@ -34,7 +34,7 @@ def loadData(config: PipelineConfig) -> AnalysisState:
         **config.metadata,
         **file_metadata,
         "injection_rate": config.injection_rate,
-        "window_spread": config.window_spread,
+        "window_type": type(config.window).__name__ if config.window else "none",
         "rebin": config.rebin,
         "min_counts": config.min_counts,
     }

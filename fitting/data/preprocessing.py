@@ -5,7 +5,7 @@ import logging
 import jax.numpy as jnp
 
 from ..core.data import AnalysisState, BinnedData
-from .windowing import Window, fitGaussianWindow
+from .windowing import Window
 import attrs
 
 logger = logging.getLogger(__name__)
@@ -56,17 +56,11 @@ def preprocess(
     domain_window = state.config.domain_window
 
     window = state.window
-    if window is None and state.signal is not None:
-        logger.info("Fitting Gaussian window from signal data")
-        spread = (
-            state.config.get("window_spread", 1.3)
-            if isinstance(state.config, dict)
-            else getattr(state.config, "window_spread", 1.3)
-        )
-        logger.info(f"Fitting Gaussian window from signal data with spread {spread}")
-        window = fitGaussianWindow(state.signal, spread=spread)
+    if window is None and state.signal is not None and state.config.window is not None:
+        window_config = state.config.window
+        logger.info(f"Building window from config: {type(window_config).__name__}")
+        window = window_config.buildWindow(state.signal)
 
-    # Inject signal if requested
     to_estimate = state.background
     if state.signal is not None and state.injection_rate != 0.0:
         logger.info(f"Injecting signal with rate {state.injection_rate}")

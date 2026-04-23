@@ -345,3 +345,93 @@ def fitCoreDilatedWindow(
         raise NotImplementedError(f"fitCoreDilatedWindow not implemented for ndim={ndim}")
     hull_vertices = hull_norm * x_range + x_min
     return ConvexHullWindow(hull_vertices=hull_vertices, ndim=ndim)
+
+
+# ---------------------------------------------------------------------------
+# WindowConfig hierarchy — declarative, YAML-serialisable window specs
+# ---------------------------------------------------------------------------
+
+
+@attrs.define
+class WindowConfig(ABC):
+    """Base class for declarative window configuration.
+
+    Subclasses are registered as a tagged union (``_type`` key) so they can
+    be round-tripped through YAML / JSON via the project ``cattrs`` converter.
+    """
+
+    @abstractmethod
+    def buildWindow(self, signal_data: BinnedData | None = None) -> Window:
+        """Construct a concrete ``Window`` from this configuration.
+
+        Parameters
+        ----------
+        signal_data : BinnedData | None
+            Signal histogram, required by data-driven strategies
+            (Gaussian, CoreDilated).  Static window types may ignore it.
+        """
+        ...
+
+
+@attrs.define
+class GaussianWindowConfig(WindowConfig):
+
+    spread: float = 1.3
+
+    def buildWindow(self, signal_data: BinnedData | None = None) -> GaussianWindow:
+        if signal_data is None:
+            raise ValueError("GaussianWindowConfig requires signal data to fit")
+        logger.info(f"Building GaussianWindow with spread={self.spread}")
+        return fitGaussianWindow(signal_data, spread=self.spread)
+
+
+@attrs.define
+class CoreDilatedWindowConfig(WindowConfig):
+
+    core_threshold_fraction: float = 0.08
+    smooth_sigma: float = 1.5
+    dilation_margin: float = 0.25
+
+    def buildWindow(self, signal_data: BinnedData | None = None) -> ConvexHullWindow:
+        if signal_data is None:
+            raise ValueError("CoreDilatedWindowConfig requires signal data to fit")
+        logger.info(
+            f"Building CoreDilatedWindow with core_threshold_fraction="
+            f"{self.core_threshold_fraction}, smooth_sigma={self.smooth_sigma}, "
+            f"dilation_margin={self.dilation_margin}"
+        )
+        return fitCoreDilatedWindow(
+            signal_data,
+            core_threshold_fraction=self.core_threshold_fraction,
+            smooth_sigma=self.smooth_sigma,
+            dilation_margin=self.dilation_margin,
+        )
+
+
+@attrs.define
+class RectangularWindowConfig(WindowConfig):
+
+    lower: list[float] = attrs.Factory(lambda: [0.0])
+    upper: list[float] = attrs.Factory(lambda: [1.0])
+
+    def buildWindow(self, signal_data: BinnedData | None = None) -> RectangularWindow:
+        logger.info(f"Building RectangularWindow: lower={self.lower}, upper={self.upper}")
+        return RectangularWindow(
+            lower=jnp.array(self.lower),
+            upper=jnp.array(self.upper),
+        )
+
+
+@attrs.define
+class CutWindowConfig(WindowConfig):
+
+    axis: int = 0
+    lower: float = float("-inf")
+    upper: float = float("inf")
+
+    def buildWindow(self, signal_data: BinnedData | None = None) -> CutWindow:
+        logger.info(
+            f"Building CutWindow: axis={self.axis}, "
+            f"lower={self.lower}, upper={self.upper}"
+        )
+        return CutWindow(axis=self.axis, lower=self.lower, upper=self.upper)
