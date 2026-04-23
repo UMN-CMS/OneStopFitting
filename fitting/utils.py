@@ -105,6 +105,17 @@ def getRecoCategory(name):
 #         return "verycomp"
 
 
+def commonDict(items):
+    i = iter(items)
+    ret = copy.deepcopy(dict(next(i)))
+    for item in i:
+        data = item
+        for k in data:
+            if k in ret and not ret[k] == data[k]:
+                del ret[k]
+    return ret
+
+
 def getCategory(mstop, mchi):
     if mchi < (0.75 * mstop):
         return "uncomp"
