@@ -245,7 +245,7 @@ def plotFitDiagnostic(
     # CMS Label
     mplhep.cms.label(ax=ax, label="Preliminary", data=True)
     ax.legend(ncols=2, loc="upper right")
-    mplhep.utils.yscale_legend(ax)
+    mplhep.utils.yscale_legend(ax, soft_fail=True, N=20)
 
     def add(num, den, color):
         ratio = num.Y / den.Y
@@ -360,7 +360,7 @@ def _buildCMSText(cms_text, all_meta):
             data_label = "CMS Simulation"
         else:
             data_label = "CMS Data"
-        return "", f"Private Work ({data_label})"
+        return "", f"Private Work\n({data_label})"
     else:
         if sim_only:
             label = f"Simulation {label}" if label else "Simulation"
@@ -495,10 +495,6 @@ def saveFigVariants(
             ).with_suffix(ext)
             fig.savefig(variant_path, **save_kwargs)
 
-    # if INCLUDE_SIDECAR:
-    #     with open(base_path.with_suffix(".json"), "w") as f:
-    #         json.dump(makeDict(metadata), f)
-
 
 def savePlots(plots: dict[str, tuple], save_dir, all_meta, formats=("pdf",)):
     save_dir = Path(save_dir)
@@ -508,10 +504,5 @@ def savePlots(plots: dict[str, tuple], save_dir, all_meta, formats=("pdf",)):
         if isinstance(ax, (np.ndarray, list, tuple)):
             ax = ax[0]
         saveFigVariants(fig, ax, out, all_meta)
-        # for fmt in formats:
-        #     # ensure format string doesn't start with a dot if provided that way
-        #     ext = f".{fmt.lstrip('.')}"
-        #     out = (save_dir / name).with_suffix(ext)
-        #     fig.savefig(out, bbox_inches="tight")
         plt.close(fig)
     logger.info(f"Saved {len(plots)} to directory {save_dir}")
