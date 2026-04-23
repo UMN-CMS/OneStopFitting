@@ -28,7 +28,7 @@ class Channel:
     observation: float
     processes: list[Process]
     shapes_file: str | None = None
-    use_auto_mc_stats: bool = True
+    use_auto_mc_stats: bool = False
 
 
 def formatLines(elems: list[list[str]], separator: str = "  ") -> list[str]:
@@ -106,7 +106,7 @@ class DataCard:
 
         for ch in self.channels:
             if ch.use_auto_mc_stats:
-                lines.append(f"{ch.name} autoMCStats 1")
+                lines.append(f"{ch.name} autoMCStats 0 1")
 
         return "\n".join(lines) + "\n"
 

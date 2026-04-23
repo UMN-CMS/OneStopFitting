@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import logging
 import os
 from pathlib import Path
@@ -61,6 +62,7 @@ def prepareCombine(state: AnalysisState, rng_key: jax.Array) -> None:
             observation=observation,
             processes=processes,
             shapes_file=shapes_file,
+            use_auto_mc_stats=True,
         )
     )
 
@@ -104,6 +106,14 @@ def prepareCombine(state: AnalysisState, rng_key: jax.Array) -> None:
 
     card = DataCard(channels=channels, systematics=systematics)
     card.write(datacard_path)
+
+    channelsnomcstats = copy.deepcopy(channels)
+    for ch in channelsnomcstats:
+        ch.use_auto_mc_stats = False
+    cardnomcstats = DataCard(channels=channelsnomcstats, systematics=systematics)
+    nomc_path = datacard_path.with_name(datacard_path.stem + "_nomcstats.txt")
+    cardnomcstats.write(nomc_path)
+    logger.info(f"Datacard without MC statistics: {nomc_path}")
 
     # Combine Diagnostics
     diag_dir = state.getRealOutPath() / "diagnostics" / "combine"
