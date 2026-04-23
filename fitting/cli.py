@@ -411,7 +411,8 @@ def smooth(
     "--metric",
     "metric_dotpath",
     required=True,
-    help="Dot-path into summary.json, e.g. 'metrics.blinded_chi2_per_bin'.",
+    multiple=True,
+    help="Dot-path into summary.json, e.g. 'metrics.blinded_chi2_per_bin'. Can be specified multiple times.",
 )
 @click.option(
     "-o",
@@ -434,6 +435,13 @@ def smooth(
     default=("png",),
     show_default=True,
     help="Image formats to write (repeatable), e.g. --formats png --formats pdf.",
+)
+@click.option(
+    "--plot-types",
+    multiple=True,
+    default=("mass_plane",),
+    show_default=True,
+    help="Types of aggregate plots to generate: mass_plane, violin, scatter.",
 )
 @click.option(
     "-g",
@@ -472,7 +480,7 @@ def smooth(
 )
 def aggregate(
     inputs: tuple[str, ...],
-    metric_dotpath: str,
+    metric_dotpath: tuple[str, ...],
     output: Path,
     formats: tuple[str, ...],
     name_format: str,
@@ -486,6 +494,7 @@ def aggregate(
     save_data: bool,
     stop_dotpath: str,
     chi_dotpath: str,
+    plot_types: tuple[str, ...],
 ) -> None:
     """Create an aggregate 2D mass-plane plot from many summary.json files."""
     from .diagnostics.plot_utils import savePlots
@@ -527,21 +536,42 @@ def aggregate(
             with open(p, "w") as f:
                 json.dump(cattrs.unstructure(d), f)
     plots = {}
+    metric_name_str = metric_dotpath[0] if isinstance(metric_dotpath, tuple) and len(metric_dotpath) > 0 else metric_dotpath
     for k, p in points.items():
-        plots = makeAggregateMassPlanePlot(
-            p,
-            metric_name=metric_dotpath,
-            title=title,
-            cmap=cmap,
-            cmin=cmin,
-            cmax=cmax,
-            smooth_sigma=smooth_sigma,
-            smooth_truncate=smooth_truncate,
-            name_format=name_format,
-            params=dict(k),
-        )
+        plots_k = {}
+        if "mass_plane" in plot_types:
+            plots_k.update(makeAggregateMassPlanePlot(
+                p,
+                metric_name=metric_name_str,
+                title=title,
+                cmap=cmap,
+                cmin=cmin,
+                cmax=cmax,
+                smooth_sigma=smooth_sigma,
+                smooth_truncate=smooth_truncate,
+                name_format="{plot_type}_" + name_format if "{plot_type}" not in name_format else name_format,
+                params=dict(k, plot_type="mass_plane"),
+            ))
+        if "violin" in plot_types:
+            from .diagnostics.aggregate_plots import makeAggregateViolinPlot
+            plots_k.update(makeAggregateViolinPlot(
+                p,
+                metric_name=metric_name_str,
+                title=title,
+                name_format="{plot_type}_" + name_format if "{plot_type}" not in name_format else name_format,
+                params=dict(k, plot_type="violin"),
+            ))
+        if "scatter" in plot_types:
+            from .diagnostics.aggregate_plots import makeAggregateScatterPlot
+            plots_k.update(makeAggregateScatterPlot(
+                p,
+                metric_name=metric_name_str,
+                title=title,
+                name_format="{plot_type}_" + name_format if "{plot_type}" not in name_format else name_format,
+                params=dict(k, plot_type="scatter"),
+            ))
 
-        savePlots(plots, output, [x.metadata for x in p], formats=formats)
+        savePlots(plots_k, output, [x.metadata for x in p], formats=formats)
     logger.info(f"Aggregate plot saved to {output}")
 
 

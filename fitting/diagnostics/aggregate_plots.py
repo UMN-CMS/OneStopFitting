@@ -92,7 +92,7 @@ class MultiPoint:
 def collectPoints(
     summary_files: Iterable[Path],
     *,
-    metric_dotpath: str,
+    metric_dotpath: str | tuple[str,...],
     group_by: list[str] | None = None,
     stop_dotpath: str = "metadata.other_data.stop_mass",
     chi_dotpath: str = "metadata.other_data.chargino_mass",
@@ -108,8 +108,14 @@ def collectPoints(
                 key = tuple()
             mstop = float(getByDotpath(summary, stop_dotpath))
             mchi = float(getByDotpath(summary, chi_dotpath))
-            value_raw = getByDotpath(summary, metric_dotpath)
-            value = float(value_raw)
+
+            if isinstance(metric_dotpath, str):
+                value_raw = getByDotpath(summary, metric_dotpath)
+                value = float(value_raw)
+            else:
+                value_raw = tuple(float(getByDotpath(summary, d)) for d in metric_dotpath)
+                value = value_raw[0] if len(value_raw) == 1 else value_raw
+
             points[key].append(
                 AggregatePoint(
                     mstop=mstop,
@@ -299,10 +305,121 @@ def makeAggregateMassPlanePlot(
     ax.set_ylabel(r"$m_{\tilde{\chi}^{\pm}}$ [GeV]")
     ax.set_title(title or f"Aggregate: {metric_name}")
 
-    safe = "".join(
-        ch if ch.isalnum() or ch in ("-", "_") else "_" for ch in metric_name
-    )
 
-    n = dotFormat(name_format, metric_name=safe, **params)
+    n = dotFormat(name_format, metric_name=metric_name, **params)
     n = n.replace(".", "p")
     return {n: (fig, ax)}
+
+
+def makeAggregateViolinPlot(
+    points: list[MultiPoint],
+    *,
+    metric_name: str,
+    title: str | None = None,
+    params: dict[str, Any] | None = None,
+    name_format: str = "aggregate_violin_{metric_name}",
+    vlines: tuple[float,...] | None = (0.0,),
+) -> dict[str, tuple]:
+    if not points:
+        raise ValueError("No points to plot.")
+
+    params = params or {}
+    fig, ax = plt.subplots(figsize=(12, max(6, len(points) * 0.4)))
+
+    if vlines is not None:
+        for vline in vlines:
+            ax.axvline(vline, color="black", linestyle='--', linewidth=1)
+
+    sorted_points = sorted(points, key=lambda p: (p.mstop, p.mchi))
+
+    labels = []
+    data = []
+    for p in sorted_points:
+        labels.append(f"({p.mstop}, {p.mchi})")
+        vals = p.value[0]
+        if vals and isinstance(vals[0], tuple):
+            vals = [v[0] for v in vals]
+        data.append(vals)
+
+    ax.violinplot(data, vert=False, showmeans=True)
+    ax.set_yticks(np.arange(1, len(labels) + 1))
+    ax.set_yticklabels(labels)
+    ax.set_xlabel(metric_name)
+    ax.set_ylabel(r"$(m_{\tilde{t}}, m_{\tilde{\chi}^{\pm}})$ [GeV]")
+    ax.set_title(title or f"Aggregate Violin: {metric_name}")
+    ax.grid(axis='x', linestyle='--', alpha=0.7)
+
+    n = dotFormat(name_format, metric_name=metric_name, **params)
+    n = n.replace(".", "p")
+    return {n: (fig, ax)}
+
+
+def makeAggregateScatterPlot(
+    points: list[MultiPoint],
+    *,
+    metric_name: str,
+    title: str | None = None,
+    params: dict[str, Any] | None = None,
+    name_format: str = "aggregate_scatter_{metric_name}",
+    vlines: tuple[float,...] | None = (0.0,),
+) -> dict[str, tuple]:
+    if not points:
+        raise ValueError("No points to plot.")
+
+    params = params or {}
+    n_points = len(points)
+    sorted_points = sorted(points, key=lambda p: (p.mstop, p.mchi))
+    fig, axes = plt.subplots(
+        n_points, 1, 
+        sharex=True, 
+        figsize=(12, max(6, n_points * 0.4)), 
+        squeeze=False,
+        gridspec_kw={'hspace': 0}
+    )
+
+    if vlines is not None:
+        for ax in axes.flatten():
+            for vline in vlines:
+                ax.axvline(vline, color='r', linestyle='--', linewidth=1)
+
+    for i, p in enumerate(sorted_points):
+        ax = axes[i, 0]
+        vals = p.value[0]
+        if not vals:
+            continue
+        if isinstance(vals[0], (tuple, list, np.ndarray)) and len(vals[0]) >= 2:
+            x = np.array([v[0] for v in vals])
+            xerr = np.array([v[1] for v in vals])
+            ax.errorbar(x, np.zeros_like(x), xerr=xerr, fmt='o', alpha=0.5, markersize=3, elinewidth=1)
+        else:
+            if isinstance(vals[0], (tuple, list, np.ndarray)):
+                x = np.array([v[0] for v in vals])
+            else:
+                x = np.array(vals)
+            ax.scatter(x, np.zeros_like(x), alpha=0.5, s=10)
+        
+        ax.set_yticks([])
+        mstop_str = f"{p.mstop:.0f}" if p.mstop == int(p.mstop) else f"{p.mstop:.1f}"
+        mchi_str = f"{p.mchi:.0f}" if p.mchi == int(p.mchi) else f"{p.mchi:.1f}"
+        ax.set_ylabel(f"({mstop_str}, {mchi_str})", rotation=0, labelpad=10, ha='right', va='center', fontsize=8)
+        
+        if i % 2 == 0:
+            ax.set_facecolor('#fdfdfd')
+        else:
+            ax.set_facecolor('#f5f5f5')
+            
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        if i < n_points - 1:
+            ax.spines['bottom'].set_visible(False)
+            ax.tick_params(axis='x', which='both', bottom=False, labelbottom=False)
+        
+        ax.grid(axis='x', linestyle='--', alpha=0.3)
+
+    axes[-1, 0].set_xlabel(metric_name)
+    fig.suptitle(title or f"Aggregate Scatter: {metric_name}", fontsize=12)
+
+
+    n = dotFormat(name_format, metric_name=metric_name, **params)
+    n = n.replace(".", "p")
+    return {n: (fig, axes)}
