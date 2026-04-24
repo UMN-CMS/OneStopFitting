@@ -25,15 +25,21 @@ class CondorPackage:
     setup_script: str
 
 
+RMIN = -20
+RMAX = 20
+
+
 COMBINE_SHORT_COMMANDS = {
-    "fit-diagnostics": "combine -M FitDiagnostics -d datacard.root --saveShapes --saveNormalizations --rMin=-10 --rMax=20",
-    "multidimfit": (
-        "combine -M MultiDimFit -d datacard.root --rMin=-10 --rMax=20 -n .mdimnon;"
-        "combine -M MultiDimFit -d datacard.root --rMin=-10 --rMax=20 -n .mdimgrid --algo grid --points 100;"
-        "combine -M MultiDimFit -d datacard.root --rMin=-10 --rMax=20 -n .mdimgridfreeze --algo grid --points 100 --freezeParameters allConstrainedNuisances;"
+    "fit-diagnostics": (
+        f"combine -M FitDiagnostics -d datacard.root --saveShapes --saveNormalizations --rMin={RMIN} --rMax={RMAX}"
     ),
-    "limits": "combine -M AsymptoticLimits -d datacard.root --rMin=-10 --rMax=20",
-    "significance": "combine -M Significance -d datacard.root --rMin=-10 --rMax=20",
+    "multidimfit": (
+        f"combine -M MultiDimFit -d datacard.root --rMin={RMIN} --rMax={RMAX} -n .mdimnon --algo singles;"
+        f"combine -M MultiDimFit -d datacard.root --rMin={RMIN} --rMax={RMAX} -n .mdimgrid --algo grid --points 100;"
+        f"combine -M MultiDimFit -d datacard.root --rMin={RMIN} --rMax={RMAX} -n .mdimgridfreeze --algo grid --points 100 --freezeParameters allConstrainedNuisances;"
+    ),
+    "limits": f"combine -M AsymptoticLimits -d datacard.root --rMin={RMIN} --rMax={RMAX}",
+    "significance": f"combine -M Significance -d datacard.root --rMin={RMIN} --rMax={RMAX}",
     "gof-saturated": (
         "combine -M GoodnessOfFit --algorithm saturated -d datacard_nomcstats.root --name gof_saturated;"
         "combine -M GoodnessOfFit --algorithm saturated -d datacard_nomcstats.root --name gof_saturated_toys"

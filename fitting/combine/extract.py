@@ -140,17 +140,10 @@ def extractFitDiagnostics(root_file: uproot.ReadOnlyDirectory) -> tuple[dict, di
 
 def extractMultiDimFit(tree: uproot.TTree) -> tuple[dict, dict]:
     tree = tree["limit"]
-    limit_vals = tree["r"].array()
-    limit_err_vals = tree["deltaNLL"].array()
-
-    if len(limit_vals) > 0:
-        return {
-            "multidim_fit": {
-                "r": float(limit_vals[0]),
-                "r_err": float(limit_err_vals[0]) if len(limit_err_vals) > 0 else None,
-            }
-        }, {}
-    return {}, {}
+    rates = tree["r"].array()
+    r = rates[0]
+    r_err = [abs(rates[1] - r), abs(rates[2] - r)]
+    return {"multidim_fit": {"r": float(r), "r_err": r_err}}, {}
 
 
 def extractLikelihoodScan(std_file, froz_file) -> tuple[dict, dict]:
