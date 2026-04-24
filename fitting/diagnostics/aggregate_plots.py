@@ -369,57 +369,53 @@ def makeAggregateScatterPlot(
     params = params or {}
     n_points = len(points)
     sorted_points = sorted(points, key=lambda p: (p.mstop, p.mchi))
-    fig, axes = plt.subplots(
-        n_points, 1, 
-        sharex=True, 
-        figsize=(12, max(6, n_points * 0.4)), 
-        squeeze=False,
-        gridspec_kw={'hspace': 0}
-    )
+    
+    fig, ax = plt.subplots(figsize=(12, max(8, n_points * 0.6)))
 
     if vlines is not None:
-        for ax in axes.flatten():
-            for vline in vlines:
-                ax.axvline(vline, color='r', linestyle='--', linewidth=1)
+        for vline in vlines:
+            ax.axvline(vline, color='red', linestyle='--', linewidth=1, zorder=0)
 
+    rng = np.random.default_rng(42)
+    
+    labels = []
     for i, p in enumerate(sorted_points):
-        ax = axes[i, 0]
-        vals = p.value[0]
-        if not vals:
-            continue
-        if isinstance(vals[0], (tuple, list, np.ndarray)) and len(vals[0]) >= 2:
-            x = np.array([v[0] for v in vals])
-            xerr = np.array([v[1] for v in vals])
-            ax.errorbar(x, np.zeros_like(x), xerr=xerr, fmt='o', alpha=0.5, markersize=3, elinewidth=1)
-        else:
-            if isinstance(vals[0], (tuple, list, np.ndarray)):
-                x = np.array([v[0] for v in vals])
-            else:
-                x = np.array(vals)
-            ax.scatter(x, np.zeros_like(x), alpha=0.5, s=10)
+        y_center = n_points - i
         
-        ax.set_yticks([])
+        vals = p.value[0]
         mstop_str = f"{p.mstop:.0f}" if p.mstop == int(p.mstop) else f"{p.mstop:.1f}"
         mchi_str = f"{p.mchi:.0f}" if p.mchi == int(p.mchi) else f"{p.mchi:.1f}"
-        ax.set_ylabel(f"({mstop_str}, {mchi_str})", rotation=0, labelpad=10, ha='right', va='center', fontsize=8)
-        
-        if i % 2 == 0:
-            ax.set_facecolor('#fdfdfd')
-        else:
-            ax.set_facecolor('#f5f5f5')
+        labels.append(f"({mstop_str}, {mchi_str})")
+
+        if not vals:
+            continue
             
-        ax.spines['top'].set_visible(False)
-        ax.spines['right'].set_visible(False)
-        if i < n_points - 1:
-            ax.spines['bottom'].set_visible(False)
-            ax.tick_params(axis='x', which='both', bottom=False, labelbottom=False)
+        if isinstance(vals[0], (tuple, list, np.ndarray)):
+            x = np.array([v[0] for v in vals])
+        else:
+            x = np.array(vals)
+
+        y_jitter = y_center + rng.uniform(-0.3, 0.3, size=len(x))
+        plot_color = 'black'
+
+        if isinstance(vals[0], (tuple, list, np.ndarray)) and len(vals[0]) >= 2:
+            xerr = np.array([v[1] for v in vals])
+            ax.errorbar(x, y_jitter, xerr=xerr, fmt='o', alpha=0.4, markersize=3, elinewidth=1, color=plot_color)
+        else:
+            ax.scatter(x, y_jitter, alpha=0.4, s=10, color=plot_color)
         
-        ax.grid(axis='x', linestyle='--', alpha=0.3)
+        bg_color = '#fdfdfd' if i % 2 == 0 else '#f5f5f5'
+        ax.axhspan(y_center - 0.5, y_center + 0.5, color=bg_color, zorder=-2)
 
-    axes[-1, 0].set_xlabel(metric_name)
-    fig.suptitle(title or f"Aggregate Scatter: {metric_name}", fontsize=12)
-
+    ax.set_yticks(np.arange(1, n_points + 1))
+    ax.set_yticklabels(reversed(labels))
+    ax.tick_params(axis='y', which='both', length=0)
+    ax.set_ylabel("")
+    
+    ax.set_xlabel(metric_name)
+    ax.set_ylim(0.5, n_points + 1.2)
+    ax.grid(axis='x', linestyle='--', alpha=0.3)
 
     n = dotFormat(name_format, metric_name=metric_name, **params)
     n = n.replace(".", "p")
-    return {n: (fig, axes)}
+    return {n: (fig, ax)}
