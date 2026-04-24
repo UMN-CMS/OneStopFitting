@@ -15,6 +15,8 @@ from matplotlib.colors import ListedColormap, BoundaryNorm
 
 logger = logging.getLogger(__name__)
 
+plt.rcParams["figure.constrained_layout.use"] = True
+
 PVALUE_BOUNDARIES = [0, 0.05, 0.16, 0.84, 0.95, 1]
 PVALUE_COLORS = ["red", "yellow", "green", "yellow", "red"]
 PVALUE_CMAP = ListedColormap(PVALUE_COLORS)
@@ -177,21 +179,6 @@ def makeMulti(points):
     return ret
 
 
-def _edgesFromCenters(centers: np.ndarray) -> np.ndarray:
-    centers = np.asarray(centers, dtype=float)
-    centers = np.unique(centers)
-    centers = np.sort(centers)
-
-    if centers.size == 1:
-        c0 = centers[0]
-        return np.array([c0 - 1.0, c0 + 1.0], dtype=float)
-
-    mids = 0.5 * (centers[1:] + centers[:-1])
-    first = centers[0] - 0.5 * (centers[1] - centers[0])
-    last = centers[-1] + 0.5 * (centers[-1] - centers[-2])
-    return np.concatenate([[first], mids, [last]])
-
-
 def makeAggregateMassPlanePlot(
     points: list[AggregatePoint],
     *,
@@ -205,6 +192,7 @@ def makeAggregateMassPlanePlot(
     smooth_truncate: float = 4.0,
     params: dict[str, Any] | None = None,
     name_format: str = "aggregate_{metric}",
+    draw_contours: tuple[float, ...] | None = None,
 ) -> dict[str, tuple]:
     if not points:
         raise ValueError("No points to plot.")
@@ -213,17 +201,77 @@ def makeAggregateMassPlanePlot(
     xs = np.array([p.mstop for p in points], dtype=float)
     ys = np.array([p.mchi for p in points], dtype=float)
     vs = np.array([get_value_func(p) for p in points], dtype=float)
+    fig, ax = plt.subplots()
+    actual_norm = None
+    if "pvalue" in metric_name.lower() and cmap == "viridis":
+        cmap = PVALUE_CMAP
+        actual_norm = PVALUE_NORM
+        if cmin is None:
+            cmin = 0.0
+        if cmax is None:
+            cmax = 1.0
+    vmin = cmin if cmin is not None else None
+    vmax = cmax if cmax is not None else None
+    plot_kwargs: dict[str, Any] = {
+        "cmap": cmap,
+        "norm": actual_norm,
+    }
+    if actual_norm is None:
+        plot_kwargs["vmin"] = vmin
+        plot_kwargs["vmax"] = vmax
 
-    x_unique = np.unique(xs)
-    y_unique = np.unique(ys)
+    sc = ax.scatter(
+        xs,
+        ys,
+        c=vs,
+        marker="s",
+        s=150,
+        linewidths=0.0,
+        edgecolors="black",
+        **plot_kwargs,
+    )
+    cb = fig.colorbar(sc, ax=ax)
 
-    grid_n = int(x_unique.size * y_unique.size)
-    uniq_pairs = {(p.mstop, p.mchi) for p in points}
-    has_full_grid = (len(points) == grid_n) and (len(uniq_pairs) == len(points))
+    cb.set_label(metric_name)
+    ax.set_xlabel(r"$m_{\tilde{t}}$ [GeV]")
+    ax.set_ylabel(r"$m_{\tilde{\chi}^{\pm}}$ [GeV]")
+
+    n = dotFormat(name_format, metric_name=metric_name, **params)
+    n = n.replace(".", "p")
+    return {n: (fig, ax)}
+
+def makeAggregateSmoothPlot(
+    points: list[AggregatePoint],
+    *,
+    metric_name: str,
+    get_value_func=lambda x: x.stats["median"],
+    title: str | None = None,
+    cmap: str = "viridis",
+    cmin: float | None = None,
+    cmax: float | None = None,
+    smooth_sigma: float | None = None,
+    smooth_truncate: float = 4.0,
+    params: dict[str, Any] | None = None,
+    name_format: str = "aggregate_smooth_{metric}",
+    draw_contours: tuple[float, ...] | None = (1.0,2.0),
+) -> dict[str, tuple]:
+    from scipy.ndimage import gaussian_filter
+    from scipy.interpolate import CloughTocher2DInterpolator
+
+
+    if not points:
+        raise ValueError("No points to plot.")
+
+    params = params or {}
+    xs = np.array([p.mstop for p in points], dtype=float)
+    ys = np.array([p.mchi for p in points], dtype=float)
+    vs = np.array([get_value_func(p) for p in points], dtype=float)
+
+    y_min, y_max = ys.min(), ys.max()
+    x_min, x_max = xs.min(), xs.max()
+
 
     fig, ax = plt.subplots()
-
-    # Use p-value bands if requested or if metric is a p-value and cmap is default
     actual_norm = None
     if "pvalue" in metric_name.lower() and cmap == "viridis":
         cmap = PVALUE_CMAP
@@ -236,79 +284,40 @@ def makeAggregateMassPlanePlot(
     vmin = cmin if cmin is not None else None
     vmax = cmax if cmax is not None else None
 
-    if (smooth_sigma is None) and (not has_full_grid):
-        plot_kwargs: dict[str, Any] = {
-            "cmap": cmap,
-            "norm": actual_norm,
-        }
-        if actual_norm is None:
-            plot_kwargs["vmin"] = vmin
-            plot_kwargs["vmax"] = vmax
+    xls = np.linspace(x_min, x_max, num=200)
+    yls = np.linspace(y_min, y_max, num=200)
+    
+    X,Y=np.meshgrid(xls,yls)
+    interp = CloughTocher2DInterpolator(list(zip(xs,ys)), vs)
+    Z = interp(X, Y)
+    
+    plot_kwargs: dict[str, Any] = {
+        "cmap": cmap,
+        "norm": actual_norm,
+        "shading": "auto",
+    }
+    if actual_norm is None:
+        plot_kwargs["vmin"] = vmin
+        plot_kwargs["vmax"] = vmax
 
-        sc = ax.scatter(
-            xs,
-            ys,
-            c=vs,
-            marker="s",
-            s=150,
-            linewidths=0.0,
-            edgecolors="black",
-            **plot_kwargs,
-        )
-        cb = fig.colorbar(sc, ax=ax)
-        cb.set_label(metric_name)
-    else:
-        x_edges = _edgesFromCenters(x_unique)
-        y_edges = _edgesFromCenters(y_unique)
-        grid = np.full((y_unique.size, x_unique.size), np.nan, dtype=float)
+    mesh = ax.pcolormesh(X, Y, Z, **plot_kwargs)
 
-        x_index = {float(x): i for i, x in enumerate(x_unique)}
-        y_index = {float(y): i for i, y in enumerate(y_unique)}
-        for p in points:
-            grid[y_index[float(p.mchi)], x_index[float(p.mstop)]] = float(p.value)
+    if draw_contours:
+        for level in draw_contours:
+            ax.contour(X, Y, Z, [level], colors="k", linewidths=2)
 
-        if smooth_sigma is not None and smooth_sigma > 0:
-            from scipy.ndimage import gaussian_filter
+    cb = fig.colorbar(mesh, ax=ax)
 
-            finite = np.isfinite(grid)
-            values0 = np.where(finite, grid, 0.0)
-            weights = finite.astype(float)
-
-            values_s = gaussian_filter(
-                values0, sigma=smooth_sigma, truncate=smooth_truncate
-            )
-            weights_s = gaussian_filter(
-                weights, sigma=smooth_sigma, truncate=smooth_truncate
-            )
-            with np.errstate(invalid="ignore", divide="ignore"):
-                grid = np.where(weights_s > 0, values_s / weights_s, np.nan)
-
-        plot_kwargs: dict[str, Any] = {
-            "cmap": cmap,
-            "norm": actual_norm,
-            "shading": "auto",
-        }
-        if actual_norm is None:
-            plot_kwargs["vmin"] = vmin
-            plot_kwargs["vmax"] = vmax
-
-        mesh = ax.pcolormesh(
-            x_edges,
-            y_edges,
-            grid,
-            **plot_kwargs,
-        )
-        cb = fig.colorbar(mesh, ax=ax)
-        cb.set_label(metric_name)
-
+    cb.set_label(metric_name)
     ax.set_xlabel(r"$m_{\tilde{t}}$ [GeV]")
     ax.set_ylabel(r"$m_{\tilde{\chi}^{\pm}}$ [GeV]")
-    ax.set_title(title or f"Aggregate: {metric_name}")
+    #ax.set_title(title or f"Aggregate: {metric_name}")
 
 
     n = dotFormat(name_format, metric_name=metric_name, **params)
     n = n.replace(".", "p")
     return {n: (fig, ax)}
+
 
 
 def makeAggregateViolinPlot(

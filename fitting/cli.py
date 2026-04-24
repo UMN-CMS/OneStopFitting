@@ -20,6 +20,9 @@ from .diagnostics.aggregate_plots import (
     collectPoints,
     iterSummaryFiles,
     makeAggregateMassPlanePlot,
+    makeAggregateSmoothPlot,
+    makeAggregateViolinPlot,
+    makeAggregateScatterPlot,
 )
 
 from .diagnostics.point_report import (
@@ -541,6 +544,19 @@ def aggregate(
         plots_k = {}
         if "mass_plane" in plot_types:
             plots_k.update(makeAggregateMassPlanePlot(
+                p,
+                metric_name=metric_name_str,
+                title=title,
+                cmap=cmap,
+                cmin=cmin,
+                cmax=cmax,
+                smooth_sigma=smooth_sigma,
+                smooth_truncate=smooth_truncate,
+                name_format="{plot_type}_" + name_format if "{plot_type}" not in name_format else name_format,
+                params=dict(k, plot_type="mass_plane"),
+            ))
+        if "mass_plane_smooth" in plot_types:
+            plots_k.update(makeAggregateSmoothPlot(
                 p,
                 metric_name=metric_name_str,
                 title=title,
