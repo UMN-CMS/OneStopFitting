@@ -142,7 +142,7 @@ def extractMultiDimFit(tree: uproot.TTree) -> tuple[dict, dict]:
     tree = tree["limit"]
     rates = tree["r"].array()
     r = rates[0]
-    r_err = [abs(rates[1] - r), abs(rates[2] - r)]
+    r_err = [float(abs(rates[1] - r)), float(abs(rates[2] - r))]
     return {"multidim_fit": {"r": float(r), "r_err": r_err}}, {}
 
 

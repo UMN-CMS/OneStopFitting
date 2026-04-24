@@ -90,10 +90,11 @@ def getSignal(path):
 
 def getRecoCategory(name):
     n = str(Path(name).name)
-    found = next((x for x in ["uncomp", "verycomp", "comp"] if n.startswith(x)), None)
-    if not found:
-        raise RuntimeError("Could not determine reco category.")
+    found = next((x for x in ["uncomp_", "verycomp_", "comp_"] if n.startswith(x)), None)
     return found
+    # if not found:
+    #     raise RuntimeError("Could not determine reco category.")
+    # return found
 
 
 # def getCategory(mstop, mchi):

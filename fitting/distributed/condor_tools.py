@@ -213,6 +213,8 @@ def getJobs(
             sig_params = getSignal(sig_file)
             category = getCategory(sig_params[1], sig_params[2])
             reco_category = getRecoCategory(Path(sig_file).name)
+            if not reco_category:
+                continue
             if not any(
                 fnmatch.fnmatch(
                     sig_file,

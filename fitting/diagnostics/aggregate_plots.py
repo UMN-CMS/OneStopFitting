@@ -115,7 +115,7 @@ def collectPoints(
                 value_raw = getByDotpath(summary, metric_dotpath)
                 value = float(value_raw)
             else:
-                value_raw = tuple(float(getByDotpath(summary, d)) for d in metric_dotpath)
+                value_raw = tuple(getByDotpath(summary, d) for d in metric_dotpath)
                 value = value_raw[0] if len(value_raw) == 1 else value_raw
 
             points[key].append(
@@ -166,11 +166,17 @@ def makeMulti(points):
     ret = []
     for k, group in grouped.items():
         values = ([x.value for x in group],)
+        statistics = {}
+        try:
+            statistics = computeStatistics(values)
+        except Exception as e:
+            pass
+
         ret.append(
             MultiPoint(
                 *k,
                 values,
-                computeStatistics(values),
+                statistics,
                 [x.source for x in group],
                 group[0].groups,
                 commonDict([x.metadata for x in group]),
@@ -408,7 +414,7 @@ def makeAggregateScatterPlot(
         plot_color = 'black'
 
         if isinstance(vals[0], (tuple, list, np.ndarray)) and len(vals[0]) >= 2:
-            xerr = np.array([v[1] for v in vals])
+            xerr = np.stack([v[1] for v in vals], axis=1)
             ax.errorbar(x, y_jitter, xerr=xerr, fmt='o', alpha=0.4, markersize=3, elinewidth=1, color=plot_color)
         else:
             ax.scatter(x, y_jitter, alpha=0.4, s=10, color=plot_color)

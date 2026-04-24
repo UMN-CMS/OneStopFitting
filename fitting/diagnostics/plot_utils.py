@@ -474,7 +474,8 @@ def saveFigVariants(
     **save_kwargs,
 ):
 
-    cms_texts = cms_texts or ["Preliminary", "Private Work"]
+    # cms_texts = cms_texts or ["Preliminary", "Private Work"]
+    cms_texts = cms_texts or ["Private Work"]
     suffix_text = len(cms_texts) > 1
 
     raw_types = formats or [".pdf"]
