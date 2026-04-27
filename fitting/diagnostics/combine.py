@@ -56,6 +56,7 @@ def verifyEigenvariations(
     state: AnalysisState,
     n_samples: int = 1000,
     use_window_mask: bool = True,
+    eigenvar_threshold=0.001,
 ) -> dict[str, tuple]:
     """Verify that eigenvariations faithfully emulate the true MVN."""
 
@@ -66,7 +67,7 @@ def verifyEigenvariations(
 
     pred_cov = state.pred_cov[blind_mask, :][:, blind_mask]
     eigenvalues, scaled_vecs = computeScaledEigenvectors(
-        pred_cov, threshold_fraction=0.01
+        pred_cov, threshold_fraction=eigenvar_threshold,
     )
     recon_cov = scaled_vecs @ scaled_vecs.T
 
