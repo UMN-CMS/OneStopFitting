@@ -74,6 +74,7 @@ def makeDiagnosticPlots1D(
     signal_data: BinnedData | None = None,
     prior_mean: jnp.ndarray | None = None,
     pred_cov: jnp.ndarray | None = None,
+    transform: Any | None = None,
 ) -> dict[str, tuple]:
     ret = {}
     X = np.asarray(test_data.X).ravel()
@@ -150,6 +151,70 @@ def makeDiagnosticPlots1D(
 
     ret.update(_plotPullHistograms(pulls, blind_mask, tag="stat"))
     ret.update(_plotPullHistograms(total_pulls, blind_mask, tag="total"))
+
+    if transform is not None:
+        norm_data = transform.applyToBinnedData(test_data)
+        norm_pred_mean = transform.applyY(pred_mean)
+        norm_pred_var = transform.applyVariance(pred_mean, pred_var)
+        norm_pred_std = np.sqrt(norm_pred_var)
+        norm_X = np.asarray(norm_data.X).ravel()
+
+        fig_t, ax_t = plt.subplots(layout="tight")
+        addAxesToHist(ax_t, size=1.5)
+        plotBinnedData(ax_t, norm_data, histtype="errorbar", color="black", label="Transformed Observed")
+        
+        ax_t.plot(norm_X, norm_pred_mean, color="orange", label="Transformed GP Mean")
+        ax_t.fill_between(
+            norm_X,
+            norm_pred_mean + norm_pred_std,
+            norm_pred_mean - norm_pred_std,
+            color="orange",
+            alpha=0.3,
+            label=r"$\pm\sigma_{pred}$",
+        )
+        
+        if blind_mask is not None and np.any(blind_mask):
+            np_mask = np.asarray(blind_mask)
+            w_min = norm_X[np_mask].min()
+            w_max = norm_X[np_mask].max()
+            for boundary in [w_min, w_max]:
+                ax_t.axvline(boundary, ls="--", color="gray", alpha=0.5)
+                ax_t.bottom_axes[0].axvline(boundary, ls="--", color="gray", alpha=0.5)
+        
+        norm_pulls = (np.asarray(norm_data.Y) - np.asarray(norm_pred_mean)) / np.sqrt(np.asarray(norm_data.V))
+        ratio_ax_t = ax_t.bottom_axes[0]
+        ratio_ax_t.set_ylim(-3, 3)
+        ratio_ax_t.plot(norm_X, norm_pulls, "o", color="black", markersize=2)
+        ax_t.tick_params(axis="x", which="both", labelbottom=False)
+        ratio_ax_t.axhline(0, ls="--", color="gray", alpha=0.5)
+        ratio_ax_t.axhline(1, ls="-.", color="gray", alpha=0.3)
+        ratio_ax_t.axhline(-1, ls="-.", color="gray", alpha=0.3)
+        ratio_ax_t.set_ylabel("Pull")
+        if test_data.axis_names:
+            ratio_ax_t.set_xlabel(f"Transformed {test_data.axis_names[0]}")
+            
+        ratio_ax_t.bar(
+            x=norm_X,
+            bottom=np.nan_to_num(-norm_pred_std / np.sqrt(np.asarray(norm_data.V)), nan=0),
+            height=np.nan_to_num(2 * norm_pred_std / np.sqrt(np.asarray(norm_data.V)), nan=0),
+            width=norm_X[1] - norm_X[0] if len(norm_X)>1 else 1.0,
+            color="orange",
+            alpha=0.3,
+            fill=True,
+            lw=0,
+        )
+        
+        ax_t.legend()
+        ret["transformed_summary_plot"] = (fig_t, ax_t)
+
+        fig_v, ax_v = plt.subplots(layout="tight")
+        ax_v.plot(norm_X, np.asarray(norm_data.V), 'ko', label="Transformed Variances")
+        ax_v.plot(norm_X, norm_pred_var, color="orange", label="Transformed GP Variances")
+        ax_v.set_ylabel("Variance")
+        if test_data.axis_names:
+            ax_v.set_xlabel(f"Transformed {test_data.axis_names[0]}")
+        ax_v.legend()
+        ret["transformed_variances"] = (fig_v, ax_v)
 
     return ret
 

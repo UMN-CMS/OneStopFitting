@@ -85,6 +85,7 @@ def makeDiagnosticPlots(
             signal_data=signal_data,
             prior_mean=prior_mean,
             pred_cov=pred_cov,
+            transform=transform,
         )
     elif ndim == 2:
         plots = makeDiagnosticPlots2D(
@@ -106,30 +107,26 @@ def makeDiagnosticPlots(
             f"Consider contributing a plots_{ndim}d.py module."
         )
 
-    # --- NN Kernel Transformation Plots ---
     if kernel is not None:
         from .plots_1d import plotNNTransformation1D
         from .plots_2d import plotNNTransformation2D
         from ..inference.kernels import DeepKernelFunction
         from flax import nnx
 
-        # Recursively find all DeepKernelFunctions
         nn_kernels = []
 
-        def find_nn_kernels(k):
+        def findNNKernels(k):
             if isinstance(k, DeepKernelFunction):
                 nn_kernels.append(k)
-            # Handle standard gpjax combination kernels
             if hasattr(k, "kernels") and isinstance(k.kernels, (list, nnx.List)):
                 for sub_k in k.kernels:
-                    find_nn_kernels(sub_k)
-            # Handle multiplication/addition which might nest them
+                    findNNKernels(sub_k)
             if hasattr(k, "k1"):
-                find_nn_kernels(k.k1)
+                findNNKernels(k.k1)
             if hasattr(k, "k2"):
-                find_nn_kernels(k.k2)
+                findNNKernels(k.k2)
 
-        find_nn_kernels(kernel)
+        findNNKernels(kernel)
 
         for i, nnk in enumerate(nn_kernels):
             suffix = f"_{i}" if len(nn_kernels) > 1 else ""
