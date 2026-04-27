@@ -121,25 +121,25 @@ def prepareCombine(state: AnalysisState, rng_key: jax.Array) -> None:
 
     diag_dir.mkdir(parents=True, exist_ok=True)
     plots.update(plotCombineInputs(state))
-    plots.update(verifyEigenvariations(state))
+    plots.update(
+            verifyEigenvariations( state, eigenvar_threshold=state.config.combine.eigenvar_threshold))
     plots.update(visualizeEigenvariations(state))
     savePlots(plots, diag_dir, [state.metadata])
 
     logger.info(f"Combine preparation complete. Datacard: {datacard_path}")
 
-    # Generate bash script for combine commands if specified
     if state.config.combine.combine_commands:
         combine_dir = state.getRealOutPath() / "combine"
         combine_dir.mkdir(parents=True, exist_ok=True)
 
-        # Expand short command names
         expanded_cmds = []
         for cmd in state.config.combine.combine_commands:
             expanded_cmds.append(getCombineCommand(cmd))
 
-        # Generate bash script using jinja template
+        if state.config.injection_rate is not None and state.config.injection_rate > 0:
+            expanded_cmds = [x for x in expanded_cmds if "GoodnessOfFit" not in x and "Impacts" not in x]
+
         script_path = combine_dir / "run_combine_commands.sh"
-        # Template dir is up one level from steps package
         template_dir = Path(__file__).parent.parent / "templates"
         env = Environment(loader=FileSystemLoader(template_dir))
         template = env.get_template("run_combine_commands.sh.jinja")
