@@ -246,7 +246,9 @@ def getJobs(
                     "mstop": sig_params[1],
                     "mchi": sig_params[2],
                     "config": config_pattern.format(
-                        category=category, reco_category=reco_category
+                        pipeline=pipeline,
+                        category=category,
+                        reco_category=reco_category,
                     ),
                 }
             )
