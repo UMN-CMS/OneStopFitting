@@ -21,6 +21,7 @@ from numpyro.distributions.transforms import (
     PowerTransform,
     ExpTransform,
 )
+from numpyro.distributions import constraints
 
 from .data import BinnedData
 
@@ -122,6 +123,56 @@ class DataTransformation:
         return result
 
 
+class SafeLogTransform(Transform):
+    domain = constraints.real
+    codomain = constraints.real
+
+    def __init__(self, eps=1e-8):
+        self.eps = eps
+
+    def __call__(self, x):
+        return jnp.log(jnp.maximum(x + self.eps, self.eps))
+
+    def _inverse(self, y):
+        return jnp.exp(y) - self.eps
+
+    def log_abs_det_jacobian(self, x, y, intermediates=None):
+        val = jnp.maximum(x + self.eps, self.eps)
+        return -jnp.log(val)
+
+    def tree_flatten(self):
+        return (), (self.eps,)
+
+    @classmethod
+    def tree_unflatten(cls, aux_data, params):
+        return cls(*aux_data)
+
+
+class SafeSqrtTransform(Transform):
+    domain = constraints.real
+    codomain = constraints.real
+
+    def __init__(self, eps=1e-8):
+        self.eps = eps
+
+    def __call__(self, x):
+        return jnp.sqrt(jnp.maximum(x, self.eps))
+
+    def _inverse(self, y):
+        return y**2
+
+    def log_abs_det_jacobian(self, x, y, intermediates=None):
+        val = jnp.maximum(x, self.eps)
+        return -0.5 * jnp.log(val) - jnp.log(2.0)
+
+    def tree_flatten(self):
+        return (), (self.eps,)
+
+    @classmethod
+    def tree_unflatten(cls, aux_data, params):
+        return cls(*aux_data)
+
+
 @attrs.define
 class TransformConfig(ABC):
     @abstractmethod
@@ -192,7 +243,7 @@ class SqrtStandardizationConfig(TransformConfig):
 
         transform_y = ComposeTransform(
             [
-                PowerTransform(0.5),
+                SafeSqrtTransform(eps=1e-8),
                 AffineTransform(loc=-y_mean / y_std, scale=1.0 / y_std),
             ]
         )
@@ -214,7 +265,7 @@ class SqrtConfig(TransformConfig):
             scale=1.0 / x_range,
         )
 
-        transform_y = ComposeTransform([PowerTransform(0.5)])
+        transform_y = ComposeTransform([SafeSqrtTransform(eps=1e-8)])
 
         return DataTransformation(transform_x=transform_x, transform_y=transform_y)
 
@@ -233,14 +284,14 @@ class LogStandardizationConfig(TransformConfig):
             scale=1.0 / x_range,
         )
 
-        eps = 1e-8
+        eps = 1.0
         log_Y = jnp.log(jnp.maximum(Y + eps, eps))
         y_mean = jnp.mean(log_Y)
         y_std = jnp.std(log_Y)
 
         transform_y = ComposeTransform(
             [
-                ExpTransform().inv,
+                SafeLogTransform(eps=eps),
                 AffineTransform(loc=-y_mean / y_std, scale=1.0 / y_std),
             ]
         )
