@@ -141,7 +141,7 @@ def main(verbose: bool) -> None:
     default="output",
     help="Output directory format.",
 )
-@click.option("--rebin", type=int, default=1, help="Rebin factor.")
+@click.option("--rebin", type=int, default=None, help="Rebin factor.")
 @click.option(
     "--min-counts", type=float, default=1.0, help="Min bin count for fit domain."
 )
@@ -249,6 +249,8 @@ def run(
             raw["background_path"] = str(background)
         if signal is not None:
             raw["signal_path"] = str(signal)
+        if rebin is not None:
+            raw["rebin"] = rebin
         if output is not None:
             raw["output_dir_format"] = str(output)
         if injection_rate is not None:
@@ -843,6 +845,11 @@ def makecondor(
     type=str,
     help="Comma-separated min counts values (e.g., '1.0,5.0')",
 )
+@click.option(
+    "--injection-rates",
+    type=str,
+    help="Comma-separated injection rates (e.g., '0.0,1.0,10.0')",
+)
 @click.option("--num-toys", type=int, default=None, help="Number of toys to run over")
 def makebatch(
     signal: tuple[str, ...],
@@ -857,6 +864,7 @@ def makebatch(
     combine_cmds: tuple[str, ...],
     rates: str | None,
     rebin: str | None,
+    injection_rates: str | None,
     min_counts: str | None,
     num_toys: int | None,
 ) -> None:
@@ -876,6 +884,7 @@ def makebatch(
         rates=parse_csv_float(rates) if rates else None,
         rebin=parse_csv_int(rebin) if rebin else None,
         min_counts=parse_csv_float(min_counts) if min_counts else None,
+        injection_rates=parse_csv_float(injection_rates) if injection_rates else None,
         num_toys=num_toys,
     )
 

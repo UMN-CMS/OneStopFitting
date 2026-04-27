@@ -39,6 +39,7 @@ def generateBatchSubmit(
     rates: list[float] | None,
     rebin: list[int] | None,
     min_counts: list[float] | None,
+    injection_rates: list[float] | None,
     num_toys: int | None,
 ) -> None:
     from .condor_tools import (
@@ -62,6 +63,8 @@ def generateBatchSubmit(
         param_grids["rebin"] = rebin
     if min_counts:
         param_grids["min_counts"] = min_counts
+    if injection_rates:
+        param_grids["injection_rate"] = injection_rates
 
     if not param_grids:
         logger.warning("No batch parameters specified. Generating single submit file.")
