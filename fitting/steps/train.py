@@ -109,6 +109,7 @@ def trainModel(state: AnalysisState, rng_key: jax.Array) -> AnalysisState:
     if state.background is None:
         raise ValueError("Background data not found in state. Cannot train model.")
     state = preprocess(state, min_counts=state.config.min_counts)
+    logger.info(f"Using transform: {type(state.config.transform).__name__}")
     transform = computeNormalization(state.train_data, config=state.config.transform)
     norm_train = transform.applyToBinnedData(state.train_data)
 
