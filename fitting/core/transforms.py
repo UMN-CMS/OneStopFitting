@@ -173,6 +173,38 @@ class SafeSqrtTransform(Transform):
         return cls(*aux_data)
 
 
+class AnscombeTransform(Transform):
+    """Anscombe variance-stabilizing transformation for Poisson data.
+
+    Forward:  z = 2 * sqrt(y + 3/8)
+    Inverse:  y = (z / 2)^2 - 3/8
+
+    Stabilizes variance to approximately 1 for large means,
+    making it well-suited for Poisson-distributed bin counts.
+    """
+
+    domain = constraints.real
+    codomain = constraints.positive
+
+    def __call__(self, x):
+        return 2.0 * jnp.sqrt(jnp.maximum(x + 3.0 / 8.0, 0.0))
+
+    def _inverse(self, y):
+        return (y / 2.0) ** 2 - 3.0 / 8.0
+
+    def log_abs_det_jacobian(self, x, y, intermediates=None):
+        # dz/dy = 1 / sqrt(y + 3/8)
+        val = jnp.maximum(x + 3.0 / 8.0, 1e-12)
+        return -0.5 * jnp.log(val)
+
+    def tree_flatten(self):
+        return (), ()
+
+    @classmethod
+    def tree_unflatten(cls, aux_data, params):
+        return cls()
+
+
 @attrs.define
 class TransformConfig(ABC):
     @abstractmethod
@@ -271,6 +303,58 @@ class SqrtConfig(TransformConfig):
 
 
 @attrs.define
+class AnscombeConfig(TransformConfig):
+    """Anscombe transform without standardization."""
+
+    def buildTransform(self, data: BinnedData) -> DataTransformation:
+        X = data.X
+
+        x_min = jnp.min(X, axis=0)
+        x_max = jnp.max(X, axis=0)
+        x_range = x_max - x_min
+
+        transform_x = AffineTransform(
+            loc=-x_min / x_range,
+            scale=1.0 / x_range,
+        )
+
+        transform_y = ComposeTransform([AnscombeTransform()])
+
+        return DataTransformation(transform_x=transform_x, transform_y=transform_y)
+
+
+@attrs.define
+class AnscombeStandardizationConfig(TransformConfig):
+    """Anscombe transform followed by z-score standardization."""
+
+    def buildTransform(self, data: BinnedData) -> DataTransformation:
+        X, Y = data.X, data.Y
+
+        x_min = jnp.min(X, axis=0)
+        x_max = jnp.max(X, axis=0)
+        x_range = x_max - x_min
+
+        transform_x = AffineTransform(
+            loc=-x_min / x_range,
+            scale=1.0 / x_range,
+        )
+
+        # Compute standardization parameters in Anscombe space
+        anscombe_Y = 2.0 * jnp.sqrt(jnp.maximum(Y + 3.0 / 8.0, 0.0))
+        y_mean = jnp.mean(anscombe_Y)
+        y_std = jnp.std(anscombe_Y)
+
+        transform_y = ComposeTransform(
+            [
+                AnscombeTransform(),
+                AffineTransform(loc=-y_mean / y_std, scale=1.0 / y_std),
+            ]
+        )
+
+        return DataTransformation(transform_x=transform_x, transform_y=transform_y)
+
+
+@attrs.define
 class LogStandardizationConfig(TransformConfig):
     def buildTransform(self, data: BinnedData) -> DataTransformation:
         X, Y = data.X, data.Y
@@ -295,6 +379,26 @@ class LogStandardizationConfig(TransformConfig):
                 AffineTransform(loc=-y_mean / y_std, scale=1.0 / y_std),
             ]
         )
+
+        return DataTransformation(transform_x=transform_x, transform_y=transform_y)
+
+
+@attrs.define
+class LogTransformConfig(TransformConfig):
+    def buildTransform(self, data: BinnedData) -> DataTransformation:
+        X, Y = data.X, data.Y
+
+        x_min = jnp.min(X, axis=0)
+        x_max = jnp.max(X, axis=0)
+        x_range = x_max - x_min
+
+        transform_x = AffineTransform(
+            loc=-x_min / x_range,
+            scale=1.0 / x_range,
+        )
+
+        eps = 1.0
+        transform_y = ComposeTransform([SafeLogTransform(eps=eps)])
 
         return DataTransformation(transform_x=transform_x, transform_y=transform_y)
 
