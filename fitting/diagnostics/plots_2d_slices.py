@@ -128,8 +128,21 @@ def _makeSliceSummaryPlot(
         ratio_ax.set_xlabel(slice_data.axis_names[0])
 
     ax.set_ylabel("Events")
-    ax.set_title(slice_title)
-    ax.legend()
+    leg = ax.legend(loc="upper right")
+
+    fig.canvas.draw()
+    leg_bb = leg.get_window_extent().transformed(ax.transAxes.inverted())
+    ax.text(
+        leg_bb.x1,
+        leg_bb.y0 - 0.05,
+        slice_title,
+        transform=ax.transAxes,
+        fontsize="small",
+        fontstyle="italic",
+        ha="right",
+        va="top",
+        color="0.3",
+    )
 
     return (fig, ax)
 
