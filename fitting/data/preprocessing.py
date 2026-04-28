@@ -76,12 +76,10 @@ def preprocess(
     else:
         logger.info("Background only fit, no signal injection")
 
-    # Apply domain mask
     domain_data, domain_mask = applyDomainMask(
         to_estimate, min_counts=min_counts, window=domain_window
     )
 
-    # Split train/test
     train_data, test_data, blind_mask = splitTrainTest(domain_data, window)
 
     logger.info(
