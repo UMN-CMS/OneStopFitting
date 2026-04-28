@@ -3,61 +3,63 @@ from __future__ import annotations
 import copy
 import logging
 from pathlib import Path
-
-import attrs
 import click
-import jax
-import lz4.frame
-import enum
-import pickle
-from .diagnostics.plot_utils import savePlots
-from .distributed.batch_tools import generateBatchSubmit
-from .distributed.condor_tools import generateCondorSubmit
-from fitting.utils import dotFormat
-
-from .core.serialization import converter, load
-from .diagnostics.aggregate_plots import (
-    collectPoints,
-    iterSummaryFiles,
-    makeAggregateMassPlanePlot,
-    makeAggregateSmoothPlot,
-    makeAggregateViolinPlot,
-    makeAggregateScatterPlot,
+from .inference.optimization import (
+    OptimizationConfig,
+    InferenceMode,
+    OptimizerType,
+    ObjectiveType,
 )
+from typing import TYPE_CHECKING
+from .pipeline import PipelineStep
 
-from .diagnostics.point_report import (
-    PointReportConfig,
-    generatePointReports,
-)
-
-from .pipeline import (
-    CombineConfig,
-    PipelineConfig,
-    runPipeline,
-    PipelineStep,
-)
-from .data.windowing import (
-    WindowConfig,
-    GaussianWindowConfig,
-    CoreDilatedWindowConfig,
-    RectangularWindowConfig,
-    CutWindowConfig,
-)
-
-WINDOW_TYPE_MAP: dict[str, type[WindowConfig]] = {
-    "gaussian": GaussianWindowConfig,
-    "core-dilated": CoreDilatedWindowConfig,
-    "rectangular": RectangularWindowConfig,
-    "cut": CutWindowConfig,
-}
+if TYPE_CHECKING:
+    from .data.windowing import WindowConfig
 
 
-def _parseWindowParams(window_type: str | None, window_params: tuple[str, ...]) -> WindowConfig | None:
+class CommaSeparatedFloat(click.ParamType):
+    name = "comma_float"
+
+    def convert(self, value, param, ctx):
+        try:
+            return [float(v.strip()) for v in value.split(",")]
+        except AttributeError:
+            self.fail(f"{value} is not a valid comma-separated list", param, ctx)
+
+
+class CommaSeparatedInt(click.ParamType):
+    name = "comma_int"
+
+    def convert(self, value, param, ctx):
+        try:
+            return [int(v.strip()) for v in value.split(",")]
+        except AttributeError:
+            self.fail(f"{value} is not a valid comma-separated list", param, ctx)
+
+
+def _parseWindowParams(
+    window_type: str | None, window_params: tuple[str, ...]
+) -> WindowConfig | None:
+
+    from .data.windowing import (
+        GaussianWindowConfig,
+        CoreDilatedWindowConfig,
+        RectangularWindowConfig,
+        CutWindowConfig,
+    )
+
     """Build a WindowConfig from CLI --window-type and --window-param flags."""
     if window_type is None:
         return None  # signal: use whatever the config/default provides
     if window_type == "none":
         return None  # explicitly disable windowing
+
+    WINDOW_TYPE_MAP: dict[str, type[WindowConfig]] = {
+        "gaussian": GaussianWindowConfig,
+        "core-dilated": CoreDilatedWindowConfig,
+        "rectangular": RectangularWindowConfig,
+        "cut": CutWindowConfig,
+    }
 
     cls = WINDOW_TYPE_MAP.get(window_type)
     if cls is None:
@@ -69,14 +71,12 @@ def _parseWindowParams(window_type: str | None, window_params: tuple[str, ...]) 
         if "=" not in param:
             raise click.UsageError(f"Window param must be key=value, got: '{param}'")
         key, raw = param.split("=", 1)
-        # Try numeric conversion
         try:
             value: object = int(raw)
         except ValueError:
             try:
                 value = float(raw)
             except ValueError:
-                # Try list of floats (comma-separated)
                 if "," in raw:
                     value = [float(x.strip()) for x in raw.split(",")]
                 else:
@@ -85,14 +85,6 @@ def _parseWindowParams(window_type: str | None, window_params: tuple[str, ...]) 
 
     return cls(**kwargs)
 
-from .steps.generators import generateSmoothedBackground, generateAsimovSmoothed
-from .inference.optimization import (
-    OptimizationConfig,
-    InferenceMode,
-    OptimizerType,
-    ObjectiveType,
-)
-import yaml
 
 logger = logging.getLogger("fitting")
 
@@ -132,7 +124,7 @@ def main(verbose: bool) -> None:
     help="Signal histogram file.",
 )
 @click.option(
-    "--injection-rate", "-r", type=float, default=0.0, help="Signal injection rate."
+    "--injection-rate", "-r", type=float, default=None, help="Signal injection rate."
 )
 @click.option(
     "--output",
@@ -239,6 +231,15 @@ def run(
     combine_commands: tuple[str, ...],
     combine_container: str | None,
 ) -> None:
+    from .core.serialization import converter
+    from .pipeline import (
+        CombineConfig,
+        PipelineConfig,
+        runPipeline,
+        PipelineStep,
+    )
+    import yaml
+
     start_from_step = start_from or PipelineStep.LOAD
 
     if config is not None:
@@ -255,6 +256,7 @@ def run(
             raw["output_dir_format"] = str(output)
         if injection_rate is not None:
             raw["injection_rate"] = injection_rate
+
         if num_iters is not None:
             raw["optimization"]["num_iters"] = num_iters
         if lr is not None:
@@ -266,8 +268,7 @@ def run(
             if window_config is None:
                 raw["window"] = None
             else:
-                from .core.serialization import converter as _conv
-                raw["window"] = _conv.unstructure(window_config)
+                raw["window"] = converter.unstructure(window_config)
         if mode is not None:
             raw["optimization"]["mode"] = mode
 
@@ -312,16 +313,13 @@ def run(
 def printParams(input):
     from .diagnostics.parameters import (
         logKernelParameters,
-        logLikelihoodParameters,
         meanParameters,
     )
     from .core.serialization import load
 
     data = load(input)
     if data.training_result is None:
-        raise RuntimeError(
-            f"Can only print parameters on a state that has been trained"
-        )
+        raise RuntimeError("Can only print parameters on a state that has been trained")
 
     posterior = data.training_result.posterior
     logKernelParameters(posterior)
@@ -361,6 +359,12 @@ def smooth(
     include_smooth: bool,
     num_samples: int,
 ) -> None:
+    import lz4.frame
+    import pickle
+    import jax
+    from .core.serialization import load
+    from .steps.generators import generateSmoothedBackground, generateAsimovSmoothed
+    from .diagnostics.plot_utils import savePlots
 
     jax.config.update("jax_enable_x64", True)
     rng_key = jax.random.key(seed)
@@ -394,7 +398,7 @@ def smooth(
         pure_plot_dir.mkdir(exist_ok=True, parents=True)
         h, plots = generateAsimovSmoothed(analysis_state, rng_key)
         savePlots(plots, pure_plot_dir, [analysis_state.metadata])
-        o = output_dir / f"pure_smoothed.pklz4"
+        o = output_dir / "pure_smoothed.pklz4"
         metadata = copy.deepcopy(analysis_state.background_metadata)
         with lz4.frame.open(o, "wb") as f:
             to_save = {
@@ -404,6 +408,31 @@ def smooth(
             pickle.dump(to_save, f)
 
     logger.info(f"Smoothed background saved to {output_dir}")
+
+
+@main.command()
+@click.argument(
+    "inputs",
+    nargs=-1,
+)
+@click.option(
+    "-o",
+    "--output",
+    type=click.Path(path_type=Path),
+    required=True,
+)
+def gather(inputs: tuple[str, ...], output: Path):
+    import json
+    from .diagnostics.aggregate_plots import (
+        iterSummaryFiles,
+        readSummary,
+    )
+
+    summary_files = iterSummaryFiles(inputs)
+    to_save = [readSummary(x) for x in summary_files]
+    output.parent.mkdir(exist_ok=True, parents=True)
+    with open(output, "w") as f:
+        json.dump(to_save, f, indent=2)
 
 
 @main.command("aggregate")
@@ -430,7 +459,7 @@ def smooth(
     "-n",
     "--name-format",
     type=str,
-    default="{metric_name}.png",
+    default="{metric_name}",
     help="Format for output filenames.",
 )
 @click.option(
@@ -457,6 +486,8 @@ def smooth(
 @click.option("--cmap", type=str, default="viridis", show_default=True)
 @click.option("--cmin", type=float, default=None, help="Color scale min.")
 @click.option("--cmax", type=float, default=None, help="Color scale max.")
+@click.option("--xlim", type=CommaSeparatedFloat(), default=None)
+@click.option("--vlines", type=CommaSeparatedFloat(), default=None)
 @click.option(
     "--smooth-sigma",
     type=float,
@@ -483,6 +514,8 @@ def smooth(
     default="metadata.other_data.chargino_mass",
     show_default=True,
 )
+@click.option("--merge/--no-merge", default=True, is_flag=True)
+@click.option("--pval-mode", default=False, is_flag=True)
 def aggregate(
     inputs: tuple[str, ...],
     metric_dotpath: tuple[str, ...],
@@ -494,18 +527,32 @@ def aggregate(
     cmap: str,
     cmin: float | None,
     cmax: float | None,
+    xlim: list[float] | None,
+    vlines: list[float] | None,
     smooth_sigma: float | None,
     smooth_truncate: float,
     save_data: bool,
     stop_dotpath: str,
     chi_dotpath: str,
     plot_types: tuple[str, ...],
+    merge: bool,
+    pval_mode: bool,
 ) -> None:
     """Create an aggregate 2D mass-plane plot from many summary.json files."""
     from .diagnostics.plot_utils import savePlots
     import json
     import cattrs
-    from .diagnostics.aggregate_plots import makeMulti
+    from .diagnostics.aggregate_plots import (
+        makeMulti,
+        collectPoints,
+        iterSummaryFiles,
+        makeAggregateMassPlanePlot,
+        makeAggregateSmoothPlot,
+        makeAggregateViolinPlot,
+        makeAggregateScatterPlot,
+    )
+
+    from fitting.utils import dotFormat
 
     summary_files = list(iterSummaryFiles(inputs))
     if not summary_files:
@@ -519,8 +566,9 @@ def aggregate(
         chi_dotpath=chi_dotpath,
     )
 
-    for k in list(points):
-        points[k] = makeMulti(points[k])
+    if merge:
+        for k in list(points):
+            points[k] = makeMulti(points[k])
 
     all_points = [x for y in points.values() for x in y]
     logger.info(f"Gathered {len(all_points)} points into {len(points)} groups")
@@ -534,187 +582,95 @@ def aggregate(
 
     if save_data:
         for k, d in points.items():
-            n = dotFormat(name_format, metric_name=metric_dotpath, **dict(k))
-            n = n.replace(".","p")
+            n = dotFormat(name_format, metric_name="__".join(metric_dotpath), **dict(k))
+            n = n.replace(".", "p")
             p = (output / n).with_suffix(".json")
             logger.info(f"Saving data to {p}")
             with open(p, "w") as f:
-                json.dump(cattrs.unstructure(d), f)
-    plots = {}
-    metric_name_str = metric_dotpath[0] if isinstance(metric_dotpath, tuple) and len(metric_dotpath) > 0 else metric_dotpath
+                json.dump(cattrs.unstructure(d), f, indent=2)
+        n = dotFormat(
+            "ALL_" + name_format, metric_name="__".join(metric_dotpath), **dict(k)
+        )
+        n = n.replace(".", "p")
+        p = (output / n).with_suffix(".json")
+        logger.info(f"Saving data to {p}")
+        with open(p, "w") as f:
+            json.dump(cattrs.unstructure(all_points), f, indent=2)
+    metric_name_str = (
+        metric_dotpath[0]
+        if isinstance(metric_dotpath, tuple) and len(metric_dotpath) > 0
+        else metric_dotpath
+    )
     for k, p in points.items():
         plots_k = {}
         if "mass_plane" in plot_types:
-            plots_k.update(makeAggregateMassPlanePlot(
-                p,
-                metric_name=metric_name_str,
-                title=title,
-                cmap=cmap,
-                cmin=cmin,
-                cmax=cmax,
-                smooth_sigma=smooth_sigma,
-                smooth_truncate=smooth_truncate,
-                name_format="{plot_type}_" + name_format if "{plot_type}" not in name_format else name_format,
-                params=dict(k, plot_type="mass_plane"),
-            ))
+            plots_k.update(
+                makeAggregateMassPlanePlot(
+                    p,
+                    metric_name=metric_name_str,
+                    title=title,
+                    cmap=cmap,
+                    cmin=cmin,
+                    cmax=cmax,
+                    smooth_sigma=smooth_sigma,
+                    smooth_truncate=smooth_truncate,
+                    name_format="{plot_type}_" + name_format
+                    if "{plot_type}" not in name_format
+                    else name_format,
+                    params=dict(k, plot_type="mass_plane"),
+                )
+            )
         if "mass_plane_smooth" in plot_types:
-            plots_k.update(makeAggregateSmoothPlot(
-                p,
-                metric_name=metric_name_str,
-                title=title,
-                cmap=cmap,
-                cmin=cmin,
-                cmax=cmax,
-                smooth_sigma=smooth_sigma,
-                smooth_truncate=smooth_truncate,
-                name_format="{plot_type}_" + name_format if "{plot_type}" not in name_format else name_format,
-                params=dict(k, plot_type="mass_plane"),
-            ))
+            plots_k.update(
+                makeAggregateSmoothPlot(
+                    p,
+                    metric_name=metric_name_str,
+                    title=title,
+                    cmap=cmap,
+                    cmin=cmin,
+                    cmax=cmax,
+                    smooth_sigma=smooth_sigma,
+                    smooth_truncate=smooth_truncate,
+                    name_format="{plot_type}_" + name_format
+                    if "{plot_type}" not in name_format
+                    else name_format,
+                    params=dict(k, plot_type="mass_plane"),
+                )
+            )
         if "violin" in plot_types:
             from .diagnostics.aggregate_plots import makeAggregateViolinPlot
-            plots_k.update(makeAggregateViolinPlot(
-                p,
-                metric_name=metric_name_str,
-                title=title,
-                name_format="{plot_type}_" + name_format if "{plot_type}" not in name_format else name_format,
-                params=dict(k, plot_type="violin"),
-            ))
+
+            plots_k.update(
+                makeAggregateViolinPlot(
+                    p,
+                    metric_name=metric_name_str,
+                    title=title,
+                    name_format="{plot_type}_" + name_format
+                    if "{plot_type}" not in name_format
+                    else name_format,
+                    params=dict(k, plot_type="violin"),
+                )
+            )
         if "scatter" in plot_types:
             from .diagnostics.aggregate_plots import makeAggregateScatterPlot
-            plots_k.update(makeAggregateScatterPlot(
-                p,
-                metric_name=metric_name_str,
-                title=title,
-                name_format="{plot_type}_" + name_format if "{plot_type}" not in name_format else name_format,
-                params=dict(k, plot_type="scatter"),
-            ))
+
+            plots_k.update(
+                makeAggregateScatterPlot(
+                    p,
+                    metric_name=metric_name_str,
+                    title=title,
+                    name_format="{plot_type}_" + name_format
+                    if "{plot_type}" not in name_format
+                    else name_format,
+                    params=dict(k, plot_type="scatter"),
+                    xlim=xlim,
+                    vlines=vlines,
+                    pval_bands=pval_mode,
+                )
+            )
 
         savePlots(plots_k, output, [x.metadata for x in p], formats=formats)
     logger.info(f"Aggregate plot saved to {output}")
-
-
-@main.command("toy-analyze")
-@click.option(
-    "-i",
-    "--inputs",
-    "inputs",
-    multiple=True,
-    required=True,
-    help="Directory, summary.json path, or glob pattern.",
-)
-@click.option(
-    "-o",
-    "--output",
-    type=click.Path(path_type=Path),
-    required=True,
-    help="Output directory for analysis results.",
-)
-@click.option(
-    "-m",
-    "--metric",
-    "metric_dotpath",
-    required=True,
-    help="Dot-path to metric to analyze (e.g., 'metrics.blinded_chi2_per_bin').",
-)
-@click.option(
-    "-g",
-    "--group-by",
-    multiple=True,
-    default=["metadata.dataset_name"],
-    help="Dot-paths to group by (hierarchical, in order).",
-)
-@click.option(
-    "-n",
-    "--name-format",
-    type=str,
-    default="{plot_type}_{metric_short}",
-    help="Format for output filenames using dotFormat syntax. "
-    "Available: {plot_type}, {metric_name}, {metric_short}, and all group variables.",
-)
-@click.option(
-    "--plot-types",
-    multiple=True,
-    default=["box", "violin", "histogram"],
-    help="Types of plots to generate: box, violin, histogram, scatter.",
-)
-@click.option(
-    "--formats",
-    multiple=True,
-    default=["png"],
-    help="Output image formats (e.g., png, pdf).",
-)
-@click.option(
-    "--save-data",
-    is_flag=True,
-    default=True,
-    help="Save grouped data and statistics as JSON.",
-)
-@click.option(
-    "--correlation",
-    is_flag=True,
-    help="Generate scatter plots to check for trends across toy index.",
-)
-def toyAnalyze(
-    inputs: tuple[str, ...],
-    output: Path,
-    metric_dotpath: str,
-    group_by: tuple[str, ...],
-    name_format: str,
-    plot_types: tuple[str, ...],
-    formats: tuple[str, ...],
-    save_data: bool,
-    correlation: bool,
-) -> None:
-    """Analyze toy-to-toy variation in a single metric."""
-    from .diagnostics.toy_analysis import (
-        collectToyData,
-        computeStatistics,
-        makeToyVariationPlots,
-        saveData,
-    )
-
-    summary_files = list(iterSummaryFiles(inputs))
-    if not summary_files:
-        raise click.UsageError("No summary.json files found.")
-
-    logger.info(f"Found {len(summary_files)} summary files")
-
-    grouped_data = collectToyData(
-        summary_files,
-        group_by=list(group_by),
-        metric_dotpath=metric_dotpath,
-    )
-
-    if not grouped_data:
-        raise click.ClickException(
-            f"No valid data found for metric '{metric_dotpath}' with grouping {group_by}"
-        )
-
-    logger.info(f"Grouped data into {len(grouped_data)} groups")
-
-    output_dir = Path(output)
-    output_dir.mkdir(parents=True, exist_ok=True)
-    metric_short = metric_dotpath.replace(".", "_")
-    all_plot_types = list(plot_types)
-    if correlation:
-        all_plot_types.append("scatter")
-
-    num_plots = makeToyVariationPlots(
-        grouped_data,
-        metric_dotpath=metric_dotpath,
-        metric_short=metric_short,
-        plot_types=all_plot_types,
-        output_dir=output_dir,
-        formats=list(formats),
-        name_format=name_format,
-    )
-
-    logger.info(f"Generated {num_plots} plots")
-
-    if save_data:
-        saveData(grouped_data, computeStatistics, output_dir / "data.json")
-
-    logger.info(f"Analysis complete. Results saved to {output_dir}")
 
 
 @main.command()
@@ -772,6 +728,7 @@ def makecondor(
     combine_cmds: tuple[str, ...],
 ) -> None:
     """Generate HTCondor submit files for distributed processing."""
+    from .distributed.condor_tools import generateCondorSubmit
 
     generateCondorSubmit(
         signal_pattern=signal,
@@ -869,6 +826,7 @@ def makebatch(
     num_toys: int | None,
 ) -> None:
     """Generate HTCondor submit files for a batch of jobs with parameter sweeps."""
+    from .distributed.batch_tools import generateBatchSubmit
 
     generateBatchSubmit(
         signal_pattern=signal,
@@ -950,6 +908,11 @@ def report(
     keep_tex: bool,
     image_format: str,
 ) -> None:
+    from .diagnostics.point_report import (
+        PointReportConfig,
+        generatePointReports,
+    )
+
     config = PointReportConfig(
         latex_engine=latex_engine,
         keep_build=keep_build,
@@ -1001,7 +964,8 @@ def resolveOutput(
     output_format: str,
 ) -> None:
     from .pipeline import PipelineConfig, loadData
-    import sys
+    import attrs
+    import yaml
 
     with open(config, "r") as f:
         config_data = yaml.safe_load(f)
@@ -1097,12 +1061,11 @@ def windowFit(
         histToBinnedData,
     )
     import matplotlib.pyplot as plt
-    from .diagnostics.plot_utils import plotBinnedData, plotRaw, plotPPD, plotBlinding2D
+    from .diagnostics.plot_utils import plotBinnedData, plotBlinding2D
     from .utils import dictToDot, dotFormat
     import numpy as np
     import json
     import mplhep
-    from rich.progress import track
 
     mplhep.style.use("CMS")
     failures = 0
@@ -1143,7 +1106,7 @@ def windowFit(
             "reco_category": reco_cat,
             "window_type": window_type,
             "blind_mask_size": blind_mask_size,
-            **sig_metadata,
+            "metadata": sig_metadata,
         }
 
         output_path = Path(dotFormat(output_format, **dict(dictToDot(all_data))))
@@ -1159,4 +1122,3 @@ def windowFit(
 
 if __name__ == "__main__":
     main()
-
