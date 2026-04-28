@@ -2,9 +2,9 @@ from fitting.diagnostics.aggregate_plots import (
     makeAggregateMassPlanePlot,
     AggregatePoint,
 )
+from fitting.diagnostics.plot_utils import addCMSBits
 import mplhep
 from pathlib import Path
-from fitting.diagnostics.plot_utils import savePlots
 import numpy as np
 from collections import defaultdict
 from rich import print
@@ -31,8 +31,9 @@ def main(path, output):
     groups = defaultdict(list)
     for d in data:
         groups[d.groups["reco_category"]].append(d)
-    uncomp = toDict(groups["uncomp"])
-    comp = toDict(groups["comp"])
+    print(list(groups))
+    uncomp = toDict(groups["uncomp_"])
+    comp = toDict(groups["comp_"])
 
     sunc = set(uncomp)
     scomp = set(comp)
@@ -52,16 +53,26 @@ def main(path, output):
         cmax=2,
         cmap="coolwarm",
         name_format="",
+        get_value_func=lambda x: x.value,
     )
     fig, ax = list(p.values())[0]
     ax.set_title("")
-    mplhep.cms.label(llabel="Preliminary", year="2018")
-    x = np.linspace(900, 2000, 100)
-    y_old = 0.6 * x + 150
-    y_new = 0.75 * x 
-    ax.plot(x, y_old, color="orange", lw=3, label="0.6*x + 150")
-    ax.plot(x, y_new, color="green", lw=3, label="0.75*x")
-    ax.legend()
+    # mplhep.cms.label(llabel="Preliminary", year="2018")
+
+    addCMSBits(ax, all_meta=[{"era": {"lumi": 59.8, "energy": 13.6, "name": "2018"}}])
+
+    x = np.linspace(900, 2200, 100)
+    y_new = 0.75 * x
+    ax.set_xlim((900, 2050))
+    # ax.plot(x, y_old, color="orange", lw=3, label="0.6*x + 150")
+    ax.plot(
+        x,
+        y_new,
+        color="black",
+        lw=3,
+        label=r"$m_{\tilde{\chi}^{\pm}} = \frac{3}{4} m_{\tilde{t}}$",
+    )
+    ax.legend(loc=(0.05, 0.75))
     fig.savefig(output)
 
 
