@@ -107,14 +107,6 @@ def prepareCombine(state: AnalysisState, rng_key: jax.Array) -> None:
     card = DataCard(channels=channels, systematics=systematics)
     card.write(datacard_path)
 
-    channelsnomcstats = copy.deepcopy(channels)
-    for ch in channelsnomcstats:
-        ch.use_auto_mc_stats = False
-    cardnomcstats = DataCard(channels=channelsnomcstats, systematics=systematics)
-    nomc_path = datacard_path.with_name(datacard_path.stem + "_nomcstats.txt")
-    cardnomcstats.write(nomc_path)
-    logger.info(f"Datacard without MC statistics: {nomc_path}")
-
     # Combine Diagnostics
     diag_dir = state.getRealOutPath() / "diagnostics" / "combine"
     plots = {}
@@ -122,7 +114,10 @@ def prepareCombine(state: AnalysisState, rng_key: jax.Array) -> None:
     diag_dir.mkdir(parents=True, exist_ok=True)
     plots.update(plotCombineInputs(state))
     plots.update(
-            verifyEigenvariations( state, eigenvar_threshold=state.config.combine.eigenvar_threshold))
+        verifyEigenvariations(
+            state, eigenvar_threshold=state.config.combine.eigenvar_threshold
+        )
+    )
     plots.update(visualizeEigenvariations(state))
     savePlots(plots, diag_dir, [state.metadata])
 
@@ -137,7 +132,11 @@ def prepareCombine(state: AnalysisState, rng_key: jax.Array) -> None:
             expanded_cmds.append(getCombineCommand(cmd))
 
         if state.config.injection_rate is not None and state.config.injection_rate > 0:
-            expanded_cmds = [x for x in expanded_cmds if "GoodnessOfFit" not in x and "Impacts" not in x]
+            expanded_cmds = [
+                x
+                for x in expanded_cmds
+                if "GoodnessOfFit" not in x and "Impacts" not in x
+            ]
 
         script_path = combine_dir / "run_combine_commands.sh"
         template_dir = Path(__file__).parent.parent / "templates"

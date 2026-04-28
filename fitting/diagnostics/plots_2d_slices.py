@@ -8,7 +8,7 @@ import numpy as np
 
 from ..core.data import BinnedData
 from .metrics import pullDistribution
-from .plot_utils import addAxesToHist, plotBinnedData
+from .plot_utils import plotBinnedData
 
 logger = logging.getLogger(__name__)
 

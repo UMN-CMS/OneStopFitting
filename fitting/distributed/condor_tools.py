@@ -40,18 +40,18 @@ COMBINE_SHORT_COMMANDS = {
     "limits": f"combine -M AsymptoticLimits -d datacard.root --rMin={RMIN} --rMax={RMAX}",
     "significance": f"combine -M Significance -d datacard.root --rMin={RMIN} --rMax={RMAX}",
     "gof-saturated": (
-        "combine -M GoodnessOfFit --algorithm saturated -d datacard_nomcstats.root --name gof_saturated;"
-        "combine -M GoodnessOfFit --algorithm saturated -d datacard_nomcstats.root --name gof_saturated_toys"
+        "combine -M GoodnessOfFit --algorithm saturated -d datacard.root --name gof_saturated;"
+        "combine -M GoodnessOfFit --algorithm saturated -d datacard.root --name gof_saturated_toys"
         " --toys 200"
     ),
     "gof-ks": (
-        "combine -M GoodnessOfFit --algorithm KS -d datacard_nomcstats.root --name gof_ks;"
-        "combine -M GoodnessOfFit --algorithm KS -d datacard_nomcstats.root --name gof_ks_toys"
+        "combine -M GoodnessOfFit --algorithm KS -d datacard.root --name gof_ks;"
+        "combine -M GoodnessOfFit --algorithm KS -d datacard.root --name gof_ks_toys"
         " --toys 200"
     ),
     "gof-ad": (
-        "combine -M GoodnessOfFit --algorithm AD -d datacard_nomcstats.root --name gof_ad;"
-        "combine -M GoodnessOfFit --algorithm AD -d datacard_nomcstats.root --name gof_ad_toys"
+        "combine -M GoodnessOfFit --algorithm AD -d datacard.root --name gof_ad;"
+        "combine -M GoodnessOfFit --algorithm AD -d datacard.root --name gof_ad_toys"
         " --toys 200"
     ),
     "impacts": (

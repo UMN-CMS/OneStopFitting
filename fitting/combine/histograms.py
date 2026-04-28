@@ -21,6 +21,7 @@ def exportHistograms(
 ) -> None:
     from ..inference.prediction import computeScaledEigenvectors
     import uproot
+    import hist
 
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -30,7 +31,6 @@ def exportHistograms(
 
     histograms = {}
 
-    # Nominal
     if test_data.ndim == 1:
         histograms[process_name] = (np_mean, np_edges[0])
     else:
@@ -110,6 +110,7 @@ def exportCombineData(
     eigenvar_threshold=0.01,
 ) -> int:
     import uproot
+    import hist
     from .eigenvariations import computeEigenvariations
     from ..data.loading import hasVariationAxis, variationNames, histToBinnedData
 
@@ -137,7 +138,16 @@ def exportCombineData(
 
     histograms = {}
 
-    histograms["background"] = (np.asarray(pred_mean_masked), linear_edges)
+    background_hist = hist.Hist(
+        hist.axis.Variable(linear_edges, name="gpr_bin"), storage=hist.storage.Weight()
+    )
+
+    background_hist[...] = np.stack(
+        [np.asarray(pred_mean_masked), np.zeros_like(pred_mean_masked)], axis=-1
+    )
+
+    histograms["background"] = background_hist
+
     variations = computeEigenvariations(
         pred_mean_masked, pred_cov_masked, threshold_fraction=eigenvar_threshold
     )
