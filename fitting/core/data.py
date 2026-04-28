@@ -150,7 +150,6 @@ def floatToStr(f):
 
 @attrs.define
 class AnalysisState:
-    # --- Config (always present) ---
     config: Any = attrs.field(factory=dict)
 
     background: BinnedData | None = None
