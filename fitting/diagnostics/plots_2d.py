@@ -99,7 +99,9 @@ def makeDiagnosticPlots2D(
     # --- Signal Template (unscaled) ---
     if signal_template is not None:
         fig, ax = plt.subplots()
-        plotBinnedData(ax, signal_template, cbar_title="Events (No Scaling)")
+        plotBinnedData(
+            ax, signal_template, cbar_title=r"Events ($\lambda_{31j}''=0.1$)"
+        )
         ax.set_title("Signal Template")
         if test_data.axis_names and len(test_data.axis_names) >= 2:
             ax.set_xlabel(test_data.axis_names[0])
@@ -265,7 +267,6 @@ def makeDiagnosticPlots2D(
     if transform is not None:
         norm_data = transform.applyToBinnedData(test_data)
         norm_pred_mean = transform.applyY(pred_mean)
-        norm_pred_var = transform.applyVariance(pred_mean, pred_var)
         norm_edges = norm_data.edges
         norm_X = norm_data.X
 
