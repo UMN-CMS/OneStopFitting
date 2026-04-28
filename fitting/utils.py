@@ -1,5 +1,5 @@
 import itertools as it
-from collections.abc import Mapping, Iterator, MutableMapping, Generator
+from collections.abc import Mapping, MutableMapping, Generator
 import re
 from collections import OrderedDict
 from attrs import asdict
@@ -90,7 +90,9 @@ def getSignal(path):
 
 def getRecoCategory(name):
     n = str(Path(name).name)
-    found = next((x for x in ["uncomp_", "verycomp_", "comp_"] if n.startswith(x)), None)
+    found = next(
+        (x for x in ["uncomp_", "verycomp_", "comp_"] if n.startswith(x)), None
+    )
     return found
     # if not found:
     #     raise RuntimeError("Could not determine reco category.")

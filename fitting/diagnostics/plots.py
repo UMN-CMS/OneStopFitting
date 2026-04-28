@@ -15,6 +15,7 @@ from .plots_2d import (
     makePosteriorPredictivePlots2D,
     makeSmoothingPlots2D,
 )
+from .plots_2d_slices import makeSlicePlots2D
 
 
 def makeSmoothingPlots(
@@ -105,6 +106,18 @@ def makeDiagnosticPlots(
         raise NotImplementedError(
             f"Diagnostic plots for {ndim}D data are not yet implemented. "
             f"Consider contributing a plots_{ndim}d.py module."
+        )
+
+    if ndim == 2:
+        plots.update(
+            makeSlicePlots2D(
+                pred_mean=pred_mean,
+                pred_var=pred_var,
+                test_data=test_data,
+                blind_mask=blind_mask,
+                signal_data=signal_data,
+                signal_template=signal_template,
+            )
         )
 
     if kernel is not None:

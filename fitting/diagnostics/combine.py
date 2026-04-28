@@ -1,15 +1,13 @@
 from __future__ import annotations
 
-import copy
 import logging
-from pathlib import Path
 
 import matplotlib.pyplot as plt
 import mplhep
 import numpy as np
 import jax.numpy as jnp
 from ..core.data import AnalysisState
-from .plot_utils import savePlots, plotRaw
+from .plot_utils import plotRaw
 from ..inference.prediction import computeScaledEigenvectors
 import jax
 
@@ -67,7 +65,8 @@ def verifyEigenvariations(
 
     pred_cov = state.pred_cov[blind_mask, :][:, blind_mask]
     eigenvalues, scaled_vecs = computeScaledEigenvectors(
-        pred_cov, threshold_fraction=eigenvar_threshold,
+        pred_cov,
+        threshold_fraction=eigenvar_threshold,
     )
     recon_cov = scaled_vecs @ scaled_vecs.T
 
@@ -147,7 +146,7 @@ def visualizeEigenvariations(
     base = state.test_data
     plots = {}
     for i in range(scaled_vecs.shape[1]):
-        ev = scaled_vecs[:,i]
+        ev = scaled_vecs[:, i]
         fig, ax = plt.subplots()
         plotRaw(ax, base.edges, base.X[blind_mask], ev)
         plots[f"eigenvar_{i}"] = (fig, ax)

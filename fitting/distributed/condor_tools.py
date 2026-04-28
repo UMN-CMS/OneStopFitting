@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 import itertools as it
-import re
 import glob
 import fnmatch
 import datetime

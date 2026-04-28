@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import glob
 import json
 import logging
 from pathlib import Path
@@ -36,15 +35,6 @@ def iterSummaryFiles(inputs: Iterable[str | Path]) -> Iterator[Path]:
             expanded = [Path(inp_str)]
 
         for path in expanded:
-            # if path.is_dir():
-            #     for summary_path in path.rglob("summary.json"):
-            #         resolved = summary_path.resolve()
-            #         if resolved not in seen:
-            #             seen.add(resolved)
-            #             yield resolved
-            # else:
-            # if path.name != "summary.json":
-            #     continue
             resolved = path.resolve()
             if resolved not in seen:
                 seen.add(resolved)
@@ -54,8 +44,6 @@ def iterSummaryFiles(inputs: Iterable[str | Path]) -> Iterator[Path]:
 def readSummary(path: Path) -> dict[str, Any]:
     with open(path, "r") as f:
         data = json.load(f)
-    if not isinstance(data, dict):
-        raise ValueError(f"{path} did not contain a JSON object.")
     return data
 
 
@@ -91,45 +79,57 @@ class MultiPoint:
     metadata: dict | None = None
 
 
-def collectPoints(
-    summary_files: Iterable[Path],
-    *,
-    metric_dotpath: str | tuple[str,...],
+def _handleOneSummary(
+    points,
+    summary,
+    path,
+    metric_dotpath: str | tuple[str, ...],
     group_by: list[str] | None = None,
     stop_dotpath: str = "metadata.other_data.stop_mass",
     chi_dotpath: str = "metadata.other_data.chargino_mass",
 ) -> dict[tuple[tuple[str, Any], ...], list[AggregatePoint]]:
+    try:
+        dotted = dict(dictToDot(summary))
+        if group_by:
+            key = tuple((x, dotted[x]) for x in group_by)
+        else:
+            key = tuple()
+
+        mstop = float(getByDotpath(summary, stop_dotpath))
+        mchi = float(getByDotpath(summary, chi_dotpath))
+
+        if isinstance(metric_dotpath, str):
+            value_raw = getByDotpath(summary, metric_dotpath)
+            value = float(value_raw)
+        else:
+            value_raw = tuple(getByDotpath(summary, d) for d in metric_dotpath)
+            value = value_raw[0] if len(value_raw) == 1 else value_raw
+
+        points[key].append(
+            AggregatePoint(
+                mstop=mstop,
+                mchi=mchi,
+                value=value,
+                source=path,
+                groups=dict(key),
+                metadata=summary.get("metadata"),
+            )
+        )
+    except Exception as e:
+        logger.warning(f"Skipping {path}: {e}")
+
+
+def collectPoints(
+    summary_files: Iterable[Path], *args, **kwargs
+) -> dict[tuple[tuple[str, Any], ...], list[AggregatePoint]]:
     points = defaultdict(list)
     for path in summary_files:
-        try:
-            summary = readSummary(path)
-            dotted = dict(dictToDot(summary))
-            if group_by:
-                key = tuple((x, dotted[x]) for x in group_by)
-            else:
-                key = tuple()
-            mstop = float(getByDotpath(summary, stop_dotpath))
-            mchi = float(getByDotpath(summary, chi_dotpath))
-
-            if isinstance(metric_dotpath, str):
-                value_raw = getByDotpath(summary, metric_dotpath)
-                value = float(value_raw)
-            else:
-                value_raw = tuple(getByDotpath(summary, d) for d in metric_dotpath)
-                value = value_raw[0] if len(value_raw) == 1 else value_raw
-
-            points[key].append(
-                AggregatePoint(
-                    mstop=mstop,
-                    mchi=mchi,
-                    value=value,
-                    source=path,
-                    groups=dict(key),
-                    metadata=summary["metadata"],
-                )
-            )
-        except Exception as e:
-            logger.warning(f"Skipping {path}: {e}")
+        summary = readSummary(path)
+        if isinstance(summary, list):
+            for s in summary:
+                _handleOneSummary(points, s, path, *args, **kwargs)
+        else:
+            _handleOneSummary(points, summary, path, *args, **kwargs)
 
     return dict(points)
 
@@ -169,7 +169,7 @@ def makeMulti(points):
         statistics = {}
         try:
             statistics = computeStatistics(values)
-        except Exception as e:
+        except Exception:
             pass
 
         ret.append(
@@ -246,6 +246,7 @@ def makeAggregateMassPlanePlot(
     n = n.replace(".", "p")
     return {n: (fig, ax)}
 
+
 def makeAggregateSmoothPlot(
     points: list[AggregatePoint],
     *,
@@ -259,11 +260,9 @@ def makeAggregateSmoothPlot(
     smooth_truncate: float = 4.0,
     params: dict[str, Any] | None = None,
     name_format: str = "aggregate_smooth_{metric}",
-    draw_contours: tuple[float, ...] | None = (1.0,2.0),
+    draw_contours: tuple[float, ...] | None = (1.0, 2.0),
 ) -> dict[str, tuple]:
-    from scipy.ndimage import gaussian_filter
     from scipy.interpolate import CloughTocher2DInterpolator
-
 
     if not points:
         raise ValueError("No points to plot.")
@@ -275,7 +274,6 @@ def makeAggregateSmoothPlot(
 
     y_min, y_max = ys.min(), ys.max()
     x_min, x_max = xs.min(), xs.max()
-
 
     fig, ax = plt.subplots()
     actual_norm = None
@@ -292,11 +290,11 @@ def makeAggregateSmoothPlot(
 
     xls = np.linspace(x_min, x_max, num=200)
     yls = np.linspace(y_min, y_max, num=200)
-    
-    X,Y=np.meshgrid(xls,yls)
-    interp = CloughTocher2DInterpolator(list(zip(xs,ys)), vs)
+
+    X, Y = np.meshgrid(xls, yls)
+    interp = CloughTocher2DInterpolator(list(zip(xs, ys)), vs)
     Z = interp(X, Y)
-    
+
     plot_kwargs: dict[str, Any] = {
         "cmap": cmap,
         "norm": actual_norm,
@@ -317,13 +315,10 @@ def makeAggregateSmoothPlot(
     cb.set_label(metric_name)
     ax.set_xlabel(r"$m_{\tilde{t}}$ [GeV]")
     ax.set_ylabel(r"$m_{\tilde{\chi}^{\pm}}$ [GeV]")
-    #ax.set_title(title or f"Aggregate: {metric_name}")
-
 
     n = dotFormat(name_format, metric_name=metric_name, **params)
     n = n.replace(".", "p")
     return {n: (fig, ax)}
-
 
 
 def makeAggregateViolinPlot(
@@ -333,7 +328,7 @@ def makeAggregateViolinPlot(
     title: str | None = None,
     params: dict[str, Any] | None = None,
     name_format: str = "aggregate_violin_{metric_name}",
-    vlines: tuple[float,...] | None = (0.0,),
+    vlines: tuple[float, ...] | None = (0.0,),
 ) -> dict[str, tuple]:
     if not points:
         raise ValueError("No points to plot.")
@@ -343,7 +338,7 @@ def makeAggregateViolinPlot(
 
     if vlines is not None:
         for vline in vlines:
-            ax.axvline(vline, color="black", linestyle='--', linewidth=1)
+            ax.axvline(vline, color="black", linestyle="--", linewidth=1)
 
     sorted_points = sorted(points, key=lambda p: (p.mstop, p.mchi))
 
@@ -362,11 +357,22 @@ def makeAggregateViolinPlot(
     ax.set_xlabel(metric_name)
     ax.set_ylabel(r"$(m_{\tilde{t}}, m_{\tilde{\chi}^{\pm}})$ [GeV]")
     ax.set_title(title or f"Aggregate Violin: {metric_name}")
-    ax.grid(axis='x', linestyle='--', alpha=0.7)
+    ax.grid(axis="x", linestyle="--", alpha=0.7)
 
     n = dotFormat(name_format, metric_name=metric_name, **params)
     n = n.replace(".", "p")
     return {n: (fig, ax)}
+
+
+PVALUE_BOUNDARIES = [0, 0.05, 0.16, 0.84, 0.95, 1]
+PVALUE_COLORS = ["red", "yellow", "green", "yellow", "red"]
+
+
+def addPValBands(ax, alpha=0.2):
+    for i in range(len(PVALUE_BOUNDARIES) - 1):
+        low, high = PVALUE_BOUNDARIES[i], PVALUE_BOUNDARIES[i + 1]
+        color = PVALUE_COLORS[i]
+        ax.axvspan(low, high, color=color, alpha=alpha)
 
 
 def makeAggregateScatterPlot(
@@ -376,7 +382,9 @@ def makeAggregateScatterPlot(
     title: str | None = None,
     params: dict[str, Any] | None = None,
     name_format: str = "aggregate_scatter_{metric_name}",
-    vlines: tuple[float,...] | None = (0.0,),
+    vlines: tuple[float, ...] | None = (0.0,),
+    xlim: tuple[float, float] | None = None,
+    pval_bands: bool = False,
 ) -> dict[str, tuple]:
     if not points:
         raise ValueError("No points to plot.")
@@ -384,19 +392,19 @@ def makeAggregateScatterPlot(
     params = params or {}
     n_points = len(points)
     sorted_points = sorted(points, key=lambda p: (p.mstop, p.mchi))
-    
+
     fig, ax = plt.subplots(figsize=(12, max(8, n_points * 0.6)))
 
     if vlines is not None:
         for vline in vlines:
-            ax.axvline(vline, color='red', linestyle='--', linewidth=1, zorder=0)
+            ax.axvline(vline, color="red", linestyle="--", linewidth=1, zorder=0)
 
     rng = np.random.default_rng(42)
-    
+
     labels = []
     for i, p in enumerate(sorted_points):
         y_center = n_points - i
-        
+
         vals = p.value[0]
         mstop_str = f"{p.mstop:.0f}" if p.mstop == int(p.mstop) else f"{p.mstop:.1f}"
         mchi_str = f"{p.mchi:.0f}" if p.mchi == int(p.mchi) else f"{p.mchi:.1f}"
@@ -404,32 +412,57 @@ def makeAggregateScatterPlot(
 
         if not vals:
             continue
-            
+
         if isinstance(vals[0], (tuple, list, np.ndarray)):
             x = np.array([v[0] for v in vals])
         else:
             x = np.array(vals)
 
         y_jitter = y_center + rng.uniform(-0.3, 0.3, size=len(x))
-        plot_color = 'black'
+        plot_color = "black"
+
+        median = np.median(x)
+        mean = np.mean(x)
+        ax.vlines(
+            [median], y_center - 0.5, y_center + 0.5, color="blue", lw=0.5, ls="--"
+        )
+        ax.vlines(
+            [mean], y_center - 0.5, y_center + 0.5, color="green", lw=0.5, ls="--"
+        )
 
         if isinstance(vals[0], (tuple, list, np.ndarray)) and len(vals[0]) >= 2:
             xerr = np.stack([v[1] for v in vals], axis=1)
-            ax.errorbar(x, y_jitter, xerr=xerr, fmt='o', alpha=0.4, markersize=3, elinewidth=1, color=plot_color)
+
+            ax.errorbar(
+                x,
+                y_jitter,
+                xerr=xerr,
+                fmt="o",
+                alpha=0.4,
+                markersize=3,
+                elinewidth=1,
+                color=plot_color,
+            )
         else:
             ax.scatter(x, y_jitter, alpha=0.4, s=10, color=plot_color)
-        
-        bg_color = '#fdfdfd' if i % 2 == 0 else '#f5f5f5'
+
+        bg_color = "#fdfdfd" if i % 2 == 0 else "#f5f5f5"
         ax.axhspan(y_center - 0.5, y_center + 0.5, color=bg_color, zorder=-2)
+
+    if pval_bands:
+        addPValBands(ax)
 
     ax.set_yticks(np.arange(1, n_points + 1))
     ax.set_yticklabels(reversed(labels))
-    ax.tick_params(axis='y', which='both', length=0)
+    ax.tick_params(axis="y", which="both", length=0)
     ax.set_ylabel("")
-    
+
     ax.set_xlabel(metric_name)
     ax.set_ylim(0.5, n_points + 1.2)
-    ax.grid(axis='x', linestyle='--', alpha=0.3)
+    ax.grid(axis="x", linestyle="--", alpha=0.3)
+
+    if xlim is not None:
+        ax.set_xlim(xlim)
 
     n = dotFormat(name_format, metric_name=metric_name, **params)
     n = n.replace(".", "p")

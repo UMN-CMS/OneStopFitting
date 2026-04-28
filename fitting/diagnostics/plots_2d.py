@@ -3,7 +3,6 @@ from __future__ import annotations
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
-import matplotlib.colors as colors
 
 import itertools as it
 from ..core.data import BinnedData
@@ -263,39 +262,39 @@ def makeDiagnosticPlots2D(
     ret["stat_pulls_hist"] = _plotSinglePullHist(pulls, "Stat", "Statistical Pull")
     ret["total_pulls_hist"] = _plotSinglePullHist(total_pulls, "Total", "Total Pull")
 
-    # if transform is not None:
-    #     norm_data = transform.applyToBinnedData(test_data)
-    #     norm_pred_mean = transform.applyY(pred_mean)
-    #     norm_pred_var = transform.applyVariance(pred_mean, pred_var)
-    #     norm_edges = norm_data.edges
-    #     norm_X = norm_data.X
+    if transform is not None:
+        norm_data = transform.applyToBinnedData(test_data)
+        norm_pred_mean = transform.applyY(pred_mean)
+        norm_pred_var = transform.applyVariance(pred_mean, pred_var)
+        norm_edges = norm_data.edges
+        norm_X = norm_data.X
 
-    #     fig, ax = plt.subplots()
-    #     plotRaw(ax, norm_edges, norm_X, norm_data.Y, cbar_title="Transformed Events")
-    #     ax.set_title("Observed (Transformed Space)")
-    #     if test_data.axis_names and len(test_data.axis_names) >= 2:
-    #         ax.set_xlabel(f"Transformed {test_data.axis_names[0]}")
-    #         ax.set_ylabel(f"Transformed {test_data.axis_names[1]}")
-    #     plotBlinding2D(ax, norm_edges, norm_X, blind_mask)
-    #     ret["transformed_observed"] = (fig, ax)
+        fig, ax = plt.subplots()
+        plotRaw(ax, norm_edges, norm_X, norm_data.Y, cbar_title="Transformed Events")
+        ax.set_title("Observed (Transformed Space)")
+        if test_data.axis_names and len(test_data.axis_names) >= 2:
+            ax.set_xlabel(f"Transformed {test_data.axis_names[0]}")
+            ax.set_ylabel(f"Transformed {test_data.axis_names[1]}")
+        plotBlinding2D(ax, norm_edges, norm_X, blind_mask)
+        ret["transformed_observed"] = (fig, ax)
 
-    #     fig, ax = plt.subplots()
-    #     plotRaw(ax, norm_edges, norm_X, norm_pred_mean, cbar_title="Transformed Events")
-    #     ax.set_title("GP Mean Prediction (Transformed Space)")
-    #     if test_data.axis_names and len(test_data.axis_names) >= 2:
-    #         ax.set_xlabel(f"Transformed {test_data.axis_names[0]}")
-    #         ax.set_ylabel(f"Transformed {test_data.axis_names[1]}")
-    #     plotBlinding2D(ax, norm_edges, norm_X, blind_mask)
-    #     ret["transformed_gpr_mean"] = (fig, ax)
+        fig, ax = plt.subplots()
+        plotRaw(ax, norm_edges, norm_X, norm_pred_mean, cbar_title="Transformed Events")
+        ax.set_title("GP Mean Prediction (Transformed Space)")
+        if test_data.axis_names and len(test_data.axis_names) >= 2:
+            ax.set_xlabel(f"Transformed {test_data.axis_names[0]}")
+            ax.set_ylabel(f"Transformed {test_data.axis_names[1]}")
+        plotBlinding2D(ax, norm_edges, norm_X, blind_mask)
+        ret["transformed_gpr_mean"] = (fig, ax)
 
-    #     fig, ax = plt.subplots()
-    #     plotRaw(ax, norm_edges, norm_X, norm_data.V, cbar_title="Transformed Variances")
-    #     ax.set_title("Observed Variances (Transformed Space)")
-    #     if test_data.axis_names and len(test_data.axis_names) >= 2:
-    #         ax.set_xlabel(f"Transformed {test_data.axis_names[0]}")
-    #         ax.set_ylabel(f"Transformed {test_data.axis_names[1]}")
-    #     plotBlinding2D(ax, norm_edges, norm_X, blind_mask)
-    #     ret["transformed_variances"] = (fig, ax)
+        fig, ax = plt.subplots()
+        plotRaw(ax, norm_edges, norm_X, norm_data.V, cbar_title="Transformed Variances")
+        ax.set_title("Observed Variances (Transformed Space)")
+        if test_data.axis_names and len(test_data.axis_names) >= 2:
+            ax.set_xlabel(f"Transformed {test_data.axis_names[0]}")
+            ax.set_ylabel(f"Transformed {test_data.axis_names[1]}")
+        plotBlinding2D(ax, norm_edges, norm_X, blind_mask)
+        ret["transformed_variances"] = (fig, ax)
 
     return ret
 
