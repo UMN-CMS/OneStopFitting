@@ -42,9 +42,18 @@ def formatLines(elems: list[list[str]], separator: str = "  ") -> list[str]:
 
 
 @attrs.define
+class RateParam:
+    channel: str
+    process: str
+    init_value: float
+    bounds: list[float]
+
+
+@attrs.define
 class DataCard:
     channels: list[Channel]
     systematics: list[Systematic] = attrs.Factory(list)
+    rate_params: list[RateParam] = attrs.Factory(list)
 
     def render(self) -> str:
         lines = []
@@ -103,6 +112,10 @@ class DataCard:
         if syst_rows:
             lines.extend(formatLines(syst_rows))
             lines.append("-" * 60)
+
+        for rp in self.rate_params:
+            bounds_str = f"[{rp.bounds[0]:.4f}, {rp.bounds[1]:.4f}]"
+            lines.append(f"{rp.channel} rateParam {rp.process} {rp.init_value:.4f} {bounds_str}")
 
         for ch in self.channels:
             if ch.use_auto_mc_stats:

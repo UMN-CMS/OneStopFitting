@@ -11,7 +11,7 @@ from jinja2 import Environment, FileSystemLoader
 
 from ..core.data import AnalysisState
 from ..combine.histograms import exportCombineData, normalizeVarName
-from ..combine.datacard import Process, Channel, Systematic, DataCard
+from ..combine.datacard import Process, Channel, Systematic, DataCard, RateParam
 from ..diagnostics.plot_utils import savePlots
 from ..data.loading import variationNames
 from ..diagnostics.combine import (
@@ -104,7 +104,39 @@ def prepareCombine(state: AnalysisState, rng_key: jax.Array) -> None:
         )
     )
 
-    card = DataCard(channels=channels, systematics=systematics)
+    rate_params = []
+    bg_rate_unc = state.config.combine.bg_rate_uncertainty
+    if bg_rate_unc != "none" and state.pred_cov is not None:
+        blind_mask = state.blind_mask
+        pred_cov_masked = state.pred_cov[blind_mask, :][:, blind_mask]
+        rate_unc = float(jnp.sqrt(jnp.trace(pred_cov_masked)) / jnp.maximum(bg_rate, 1.0))
+        logger.info(
+            f"Background rate uncertainty: {rate_unc:.4f} "
+            f"(mode={bg_rate_unc}, bg_rate={bg_rate:.2f})"
+        )
+
+        if bg_rate_unc == "lnN":
+            lnN_val = 1.0 + rate_unc
+            systematics.append(
+                Systematic(
+                    name="bg_norm",
+                    distribution="lnN",
+                    values={"background": f"{lnN_val:.4f}"},
+                )
+            )
+        elif bg_rate_unc == "rateParam":
+            lo = max(1.0 - rate_unc, 0.01)
+            hi = 1.0 + rate_unc
+            rate_params.append(
+                RateParam(
+                    channel=ch_name,
+                    process="background",
+                    init_value=1.0,
+                    bounds=[lo, hi],
+                )
+            )
+
+    card = DataCard(channels=channels, systematics=systematics, rate_params=rate_params)
     card.write(datacard_path)
 
     # Combine Diagnostics

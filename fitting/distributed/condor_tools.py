@@ -159,9 +159,11 @@ def compressNeededFiles(
 ):
     condor_temp_loc.mkdir(exist_ok=True, parents=True)
     extra_files = extra_files or []
+    time_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+
     compressed_env = condor_temp_loc / "environment.tar.gz"
-    compressed_extra = condor_temp_loc / "extras.tar.gz"
-    compressed_program = condor_temp_loc / "program.tar.gz"
+    compressed_extra = condor_temp_loc / f"extras_{time_str}.tar.gz"
+    compressed_program = condor_temp_loc / f"program_{time_str}.tar.gz"
 
     program_path = Path(fitting.__file__).parent
 
