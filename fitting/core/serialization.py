@@ -10,9 +10,8 @@ import lz4.frame
 import cattrs
 import jax.numpy as jnp
 import numpy as np
-import cattrs
 from cattrs.strategies import configure_tagged_union, include_subclasses
-from cattrs.gen import make_dict_unstructure_fn, override
+from cattrs.gen import make_dict_unstructure_fn
 from numpyro.distributions.transforms import AffineTransform
 
 from .data import AnalysisState
@@ -37,11 +36,8 @@ def _makeConverter() -> cattrs.Converter:
     converter.register_unstructure_hook(Path, str)
     converter.register_structure_hook(Path, lambda v, _: Path(v))
 
-    # --- AffineTransform hooks via tree_flatten / tree_unflatten ---
     def _unstructure_affine(t: AffineTransform) -> dict:
         children, aux = t.tree_flatten()
-        # children = (loc, scale, domain); aux = ()
-        # Serialize only loc and scale (domain is reconstructed)
         loc, scale, _domain = children
         return {
             "loc": np.asarray(loc).tolist() if hasattr(loc, "tolist") else loc,
@@ -58,7 +54,6 @@ def _makeConverter() -> cattrs.Converter:
     converter.register_unstructure_hook(AffineTransform, _unstructure_affine)
     converter.register_structure_hook(AffineTransform, _structure_affine)
 
-    # --- Polymorphic hierarchies via include_subclasses ---
     _tagged_union = partial(configure_tagged_union, tag_name="_type")
 
     include_subclasses(TransformConfig, converter, union_strategy=_tagged_union)
@@ -110,9 +105,7 @@ def limitedSummary(state: AnalysisState):
 
     converter = cattrs.Converter()
     hook = make_dict_unstructure_fn(
-        type(state.config), 
-        converter, 
-        _cattrs_omit_if_default=True
+        type(state.config), converter, _cattrs_omit_if_default=True
     )
     converter.register_unstructure_hook(type(state.config), hook)
 

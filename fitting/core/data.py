@@ -80,7 +80,7 @@ class BinnedData:
         """Convert back to a UHI-compatible plottable histogram."""
         return _pointsToPlottable(self.X, self.Y, self.edges, self.V)
 
-    def __add__(self, other):
+    def __add__(self, other: BinnedData) -> BinnedData:
         edges_ok = len(self.edges) == len(other.edges) and all(
             jnp.allclose(self.edges[i], other.edges[i]) for i in range(len(self.edges))
         )
@@ -93,6 +93,18 @@ class BinnedData:
             edges=self.edges,
             axis_names=self.axis_names,
         )
+
+    def __mul__(self, other: float | int) -> BinnedData:
+        return BinnedData(
+            X=self.X,
+            Y=self.Y * other,
+            V=self.V * (other**2),
+            edges=self.edges,
+            axis_names=self.axis_names,
+        )
+
+    def __rmul__(self, other: float | int) -> BinnedData:
+        return self * other
 
 
 def _pointsToPlottable(
@@ -182,5 +194,3 @@ class AnalysisState:
         replace_floats = {k: floatToStr(v) for k, v in dictToDot(self.metadata)}
 
         return Path(dotFormat(self.config.output_dir_format, **replace_floats))
-
-                

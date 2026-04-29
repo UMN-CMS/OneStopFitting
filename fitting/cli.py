@@ -987,7 +987,12 @@ def resolveOutput(
     nargs=-1,
     type=click.Path(exists=True, path_type=Path),
 )
-def harvest(summaries: tuple[Path, ...]) -> None:
+@click.option(
+    "--diagnose",
+    is_flag=True,
+    help="Generate 2D slice plots and save histograms to pickle.",
+)
+def harvest(summaries: tuple[Path, ...], diagnose: bool) -> None:
     from .combine.extract import extractCombineResults
     import json
     from .diagnostics.plot_utils import savePlots
@@ -1011,10 +1016,58 @@ def harvest(summaries: tuple[Path, ...]) -> None:
             logger.debug(f"No Combine results extracted for {summary_path}.")
             continue
 
+        json_extracted = {k: v for k, v in extracted.items() if k != "histograms"}
+
         with open(summary_path, "r") as f:
             summary_data = json.load(f)
 
-        summary_data["combine"] = extracted
+        summary_data["combine"] = json_extracted
+
+        if diagnose and "histograms" in extracted:
+            from .core.serialization import load
+            from .diagnostics.plots_2d_slices import makePostCombineSlice
+            import pickle
+            import lz4.frame
+
+            state_path = summary_path.parent / "state.pklz4"
+            if state_path.exists():
+                logger.info(f"Loading state from {state_path} for diagnostics")
+                state = load(state_path)
+
+                diag_dir = summary_path.parent / "diagnostics" / "combine_slices"
+                diag_dir.mkdir(parents=True, exist_ok=True)
+
+                hist_out = diag_dir / "combine_histograms.pklz4"
+                with lz4.frame.open(hist_out, "wb") as f_out:
+                    pickle.dump(extracted["histograms"], f_out)
+                diag_plots = {}
+                import jax.numpy as jnp
+
+                pred_var = (
+                    jnp.diag(state.pred_cov)
+                    if state.pred_cov is not None
+                    else jnp.zeros_like(state.pred_mean)
+                )
+                sig = state.injection_rate * state.signal
+                for channel, ch_hists in extracted["histograms"].items():
+                    diag_plots.update(
+                        makePostCombineSlice(
+                            pred_mean=state.pred_mean,
+                            pred_var=pred_var,
+                            test_data=state.test_data,
+                            blind_mask=state.blind_mask,
+                            signal_data=sig,
+                            post_fit_signal=ch_hists["fit_s_total_signal"],
+                            post_fit_background=ch_hists["fit_s_total_background"],
+                            injected_signal=state.injection_rate,
+                            extracted_signal=extracted["tree_fit_sb"]["r"],
+                        )
+                    )
+                plots.update(diag_plots)
+            else:
+                logger.warning(
+                    f"Analysis state not found at {state_path}, skipping slice plots."
+                )
 
         savePlots(plots, plot_dir, [summary_data["metadata"]])
         with open(summary_path, "w") as f:
@@ -1094,7 +1147,7 @@ def windowFit(
             continue
         blind_mask = window(signal.X)
 
-        fig, ax = plt.subplots(layout="tight")
+        fig, ax = plt.subplots(layout="constrained")
         plotBinnedData(ax, signal)
         ax.set_title("Injected Signal")
         if signal.axis_names and len(signal.axis_names) >= 2:

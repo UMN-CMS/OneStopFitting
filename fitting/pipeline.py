@@ -46,7 +46,8 @@ class CombineConfig:
             "gof-saturated",
         ]
     )
-    eigenvar_threshold: float = 0.01
+    eigenvar_threshold: float = 0.001
+    bg_rate_uncertainty: str = "none"
     combine_container: str = "/cvmfs/unpacked.cern.ch/gitlab-registry.cern.ch/cms-analysis/general/combine-container:latest"
 
 

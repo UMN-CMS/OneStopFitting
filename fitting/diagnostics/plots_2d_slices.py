@@ -135,6 +135,8 @@ def _makeSliceSummaryPlot(
     slice_title: str,
     *,
     minimap_context: dict | None = None,
+    extra_draw_funcs=None,
+    injected_signal_rate: float | None = None,
 ) -> tuple:
     X = np.asarray(slice_data.X).ravel()
     obs_V = np.asarray(slice_data.V)
@@ -150,14 +152,9 @@ def _makeSliceSummaryPlot(
         2, 1, sharex=True, layout="constrained", gridspec_kw=grid_spec
     )
 
-    plotBinnedData(ax, slice_data, histtype="errorbar", color="black", label="Observed")
+    plotBinnedData(ax, slice_data, histtype="errorbar", color="black", label="Obs.")
 
-    if slice_signal_data is not None:
-        plotBinnedData(
-            ax, slice_signal_data, histtype="step", color="red", label="Injected Signal"
-        )
-
-    ax.plot(X, pred_Y, color="orange", label="GP Prediction")
+    ax.plot(X, pred_Y, color="orange", label="GPR")
     ax.fill_between(
         X,
         pred_Y + pred_std,
@@ -168,6 +165,19 @@ def _makeSliceSummaryPlot(
     )
 
     bin_width = (X[-1] - X[0]) / len(X)
+
+    if extra_draw_funcs is not None:
+        for draw_func in extra_draw_funcs:
+            draw_func(ax, ratio_ax)
+
+    if slice_signal_data is not None:
+        plotBinnedData(
+            ax,
+            slice_signal_data,
+            histtype="step",
+            color="red",
+            label=f"Sig. ({injected_signal_rate:.2f})",
+        )
 
     if slice_blind_mask is not None and np.any(slice_blind_mask):
         w_min = X[slice_blind_mask].min()
@@ -200,7 +210,14 @@ def _makeSliceSummaryPlot(
         ratio_ax.set_xlabel(slice_data.axis_names[0])
 
     ax.set_ylabel("Events")
-    leg = ax.legend(loc="upper right")
+    leg = ax.legend(
+        loc="upper right",
+        ncol=2,
+        fontsize=18,
+        columnspacing=0.5,
+        labelspacing=0.3,
+        borderpad=0.1,
+    )
 
     fig.canvas.draw()
     leg_bb = leg.get_window_extent().transformed(ax.transAxes.inverted())
@@ -233,7 +250,79 @@ def _makeSliceSummaryPlot(
             background_Y=minimap_context.get("background_Y"),
         )
 
-    return (fig, ax)
+    return (fig, ax, ratio_ax)
+
+
+def fixAxisKey(name: str) -> str:
+    return (
+        name.replace(" ", "_")
+        .replace(r"tilde{t}", "stop")
+        .replace(r"tilde{\chi}", "chi")
+        .replace(r"tilde{\chi^{\pm}}", "chi")
+        .replace("/", "")
+        .replace("\\", "")
+        .replace("$", "")
+        .replace("{", "")
+        .replace("}", "")
+    )
+
+
+def _makeOneSlice(
+    pred_mean: jnp.ndarray,
+    pred_var: jnp.ndarray,
+    test_data: BinnedData,
+    blind_mask: jnp.ndarray,
+    slice_axis: int,
+    val: float,
+    axis_name: str,
+    signal_data: BinnedData | None = None,
+    show_minimap: bool = True,
+    minimap_context: dict | None = None,
+    minimap_background: bool = True,
+    extra_draw_funcs=None,
+    injected_signal_rate: float | None = None,
+) -> tuple:
+    X = np.asarray(test_data.X)
+    perp = _perpendicularAxis(slice_axis)
+    mask = _sliceMask(X, slice_axis, val)
+    slice_data = _buildSliceBinnedData(test_data, mask, perp)
+    order = np.argsort(X[mask, perp])
+    slice_pred_mean = pred_mean[mask][order]
+    slice_pred_var = pred_var[mask][order]
+    slice_blind = blind_mask[mask][order]
+
+    slice_sig = None
+    if signal_data is not None:
+        sig_X = np.asarray(signal_data.X)
+        sig_mask = _sliceMask(sig_X, slice_axis, val)
+        if np.any(sig_mask):
+            slice_sig = _buildSliceBinnedData(signal_data, sig_mask, perp)
+
+    label = _sliceLabel(axis_name, val)
+
+    minimap_ctx = None
+    if show_minimap:
+        minimap_ctx = {
+            "edges": test_data.edges,
+            "X": X,
+            "blind_mask": blind_mask,
+            "slice_axis": slice_axis,
+            "slice_value": val,
+            "axis_names": test_data.axis_names,
+            "background_Y": np.asarray(test_data.Y) if minimap_background else None,
+        }
+
+    return _makeSliceSummaryPlot(
+        slice_data=slice_data,
+        slice_pred_mean=slice_pred_mean,
+        slice_pred_var=slice_pred_var,
+        slice_blind_mask=slice_blind,
+        slice_signal_data=slice_sig,
+        slice_title=f"Slice: {label}",
+        minimap_context=minimap_ctx,
+        extra_draw_funcs=extra_draw_funcs,
+        injected_signal_rate=injected_signal_rate,
+    )
 
 
 def makeSlicePlots2D(
@@ -242,7 +331,6 @@ def makeSlicePlots2D(
     test_data: BinnedData,
     blind_mask: jnp.ndarray | None = None,
     signal_data: BinnedData | None = None,
-    signal_template: BinnedData | None = None,
     *,
     show_minimap: bool = True,
     minimap_background: bool = True,
@@ -256,73 +344,139 @@ def makeSlicePlots2D(
         return {}
 
     ret: dict[str, tuple] = {}
-    X_np = np.asarray(test_data.X)
-    pred_mean_np = np.asarray(pred_mean)
-    pred_var_np = np.asarray(pred_var)
-    blind_mask_np = np.asarray(blind_mask)
-    window_X = X_np[blind_mask_np]
+    X = np.asarray(test_data.X)
 
     for slice_axis in (0, 1):
-        perp = _perpendicularAxis(slice_axis)
+        window_X = X[blind_mask]
         window_vals = _uniqueAxisValues(window_X, slice_axis)
         axis_name = (
             test_data.axis_names[slice_axis]
             if test_data.axis_names and len(test_data.axis_names) > slice_axis
             else f"axis{slice_axis}"
         )
-        axis_key = (
-            axis_name.replace(" ", "_")
-            .replace(r"tilde{t}", "stop")
-            .replace(r"tilde{\chi}", "chi")
-            .replace(r"tilde{\chi^{\pm}}", "chi")
-            .replace("/", "")
-            .replace("\\", "")
-            .replace("$", "")
-            .replace("{", "")
-            .replace("}", "")
-        )
-
+        axis_key = fixAxisKey(axis_name)
         for val in window_vals:
-            mask = _sliceMask(X_np, slice_axis, val)
-            slice_data = _buildSliceBinnedData(test_data, mask, perp)
-            order = np.argsort(X_np[mask, perp])
-            slice_pred_mean = pred_mean_np[mask][order]
-            slice_pred_var = pred_var_np[mask][order]
-            slice_blind = blind_mask_np[mask][order]
-
-            slice_sig = None
-            if signal_data is not None:
-                sig_X = np.asarray(signal_data.X)
-                sig_mask = _sliceMask(sig_X, slice_axis, val)
-                if np.any(sig_mask):
-                    slice_sig = _buildSliceBinnedData(signal_data, sig_mask, perp)
-
-            label = _sliceLabel(axis_name, val)
             val_key = f"{val:0.2g}".replace(".", "p").replace("-", "m")
             key = f"slice_{axis_key}_{val_key}"
+            ret["slice/" + key] = _makeOneSlice(
+                pred_mean=pred_mean,
+                pred_var=pred_var,
+                test_data=test_data,
+                blind_mask=blind_mask,
+                slice_axis=slice_axis,
+                val=val,
+                axis_name=axis_name,
+                signal_data=signal_data,
+                show_minimap=show_minimap,
+                minimap_background=minimap_background,
+            )[:2]
 
-            minimap_ctx = None
-            if show_minimap:
-                minimap_ctx = {
-                    "edges": test_data.edges,
-                    "X": X_np,
-                    "blind_mask": blind_mask_np,
-                    "slice_axis": slice_axis,
-                    "slice_value": val,
-                    "axis_names": test_data.axis_names,
-                    "background_Y": np.asarray(test_data.Y)
-                    if minimap_background
-                    else None,
-                }
+    return ret
 
-            ret["slice/" + key] = _makeSliceSummaryPlot(
-                slice_data=slice_data,
-                slice_pred_mean=slice_pred_mean,
-                slice_pred_var=slice_pred_var,
-                slice_blind_mask=slice_blind,
-                slice_signal_data=slice_sig,
-                slice_title=f"Slice: {label}",
-                minimap_context=minimap_ctx,
+
+def build2D(blind_mask: jnp.ndarray, test_data: BinnedData, blinded_data: BinnedData):
+    X = test_data.X
+    Y = np.full_like(test_data.Y, np.nan, dtype=float)
+    V = np.full_like(test_data.V, np.nan, dtype=float)
+
+    Y[blind_mask] = blinded_data.Y
+    V[blind_mask] = blinded_data.V
+
+    return BinnedData(
+        X=X,
+        Y=Y,
+        V=V,
+        axis_names=test_data.axis_names,
+        edges=test_data.edges,
+    )
+
+
+def makePostCombineSlice(
+    pred_mean: jnp.ndarray,
+    pred_var: jnp.ndarray,
+    test_data: BinnedData,
+    blind_mask: jnp.ndarray | None = None,
+    signal_data: BinnedData | None = None,
+    post_fit_signal: BinnedData | None = None,
+    post_fit_background: BinnedData | None = None,
+    injected_signal: float | None = None,
+    extracted_signal: float | None = None,
+    *,
+    show_minimap: bool = True,
+    minimap_background: bool = True,
+) -> dict[str, tuple]:
+    if test_data.ndim != 2:
+        logger.warning("makeSlicePlots2D called on non-2D data; returning empty dict")
+        return {}
+
+    if blind_mask is None or not np.any(np.asarray(blind_mask)):
+        logger.info("makeSlicePlots2D: no blind mask provided; skipping slice plots")
+        return {}
+
+    ret: dict[str, tuple] = {}
+    X = np.asarray(test_data.X)
+    post_fit_signal_full = build2D(blind_mask, test_data, post_fit_signal)
+    post_fit_background_full = build2D(blind_mask, test_data, post_fit_background)
+
+    for slice_axis in (0, 1):
+        window_X = X[blind_mask]
+        window_vals = _uniqueAxisValues(window_X, slice_axis)
+        axis_name = (
+            test_data.axis_names[slice_axis]
+            if test_data.axis_names and len(test_data.axis_names) > slice_axis
+            else f"axis{slice_axis}"
+        )
+        axis_key = fixAxisKey(axis_name)
+        for val in window_vals:
+            val_key = f"{val:0.2g}".replace(".", "p").replace("-", "m")
+            key = f"slice_{axis_key}_{val_key}"
+            perp = _perpendicularAxis(slice_axis)
+            mask = _sliceMask(X, slice_axis, val)
+            slice_post_fit_signal = _buildSliceBinnedData(
+                post_fit_signal_full, mask, perp
             )
+            slice_post_fit_background = _buildSliceBinnedData(
+                post_fit_background_full, mask, perp
+            )
+
+            def postFitDrawFunc(ax, ratio_ax):
+                plotBinnedData(
+                    ax,
+                    slice_post_fit_background.masked(
+                        ~np.isnan(slice_post_fit_background.Y)
+                    ),
+                    color="blue",
+                    label="Post Bkg.",
+                    ls="--",
+                )
+                summed = slice_post_fit_signal + slice_post_fit_background
+                plotBinnedData(
+                    ax,
+                    summed.masked(~np.isnan(summed.Y)),
+                    color="purple",
+                    label="Post S+B",
+                )
+                plotBinnedData(
+                    ax,
+                    slice_post_fit_signal.masked(~np.isnan(slice_post_fit_signal.Y)),
+                    color="green",
+                    label=f"Post Sig. ({extracted_signal:.2f})",
+                    ls="--",
+                )
+
+            ret["slice/" + key] = _makeOneSlice(
+                pred_mean=pred_mean,
+                pred_var=pred_var,
+                test_data=test_data,
+                blind_mask=blind_mask,
+                slice_axis=slice_axis,
+                val=val,
+                axis_name=axis_name,
+                signal_data=signal_data,
+                show_minimap=show_minimap,
+                minimap_background=minimap_background,
+                extra_draw_funcs=[postFitDrawFunc],
+                injected_signal_rate=injected_signal,
+            )[:2]
 
     return ret

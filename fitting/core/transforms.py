@@ -18,8 +18,6 @@ from numpyro.distributions.transforms import (
     Transform,
     AffineTransform,
     ComposeTransform,
-    PowerTransform,
-    ExpTransform,
 )
 from numpyro.distributions import constraints
 

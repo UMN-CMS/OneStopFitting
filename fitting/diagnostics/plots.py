@@ -116,7 +116,6 @@ def makeDiagnosticPlots(
                 test_data=test_data,
                 blind_mask=blind_mask,
                 signal_data=signal_data,
-                signal_template=signal_template,
             )
         )
 

@@ -2,18 +2,17 @@ from __future__ import annotations
 
 import logging
 import re
-import pickle
 import matplotlib.pyplot as plt
 from pathlib import Path
 from ..diagnostics.plot_utils import plotFitDiagnostic
 from typing import Callable
 import uproot
-import lz4.frame
 import numpy as np
 from ..core.data import BinnedData
 from ..data.loading import histToBinnedData
 from ..diagnostics.plot_utils import plotPPD
 from contextlib import ExitStack
+
 
 class OptionalPattern:
     def __init__(self, pattern: re.Pattern):
@@ -22,6 +21,7 @@ class OptionalPattern:
 
     def search(self, string: str):
         return self.pattern.search(string)
+
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +88,8 @@ def extractFitDiagnostics(root_file: uproot.ReadOnlyDirectory) -> tuple[dict, di
 
     fit_trees = ["tree_fit_sb", "tree_fit_b"]
     for fit_tree in fit_trees:
-        ret[fit_tree] = {}
+        if fit_tree not in root_file:
+            continue
         t = root_file[fit_tree]
         ret[fit_tree] = {
             "r": float(t["r"].array()[0]),
@@ -97,43 +98,60 @@ def extractFitDiagnostics(root_file: uproot.ReadOnlyDirectory) -> tuple[dict, di
 
     fit_types = ["shapes_prefit", "shapes_fit_b", "shapes_fit_s"]
     cat = ["data", "total_background", "total_signal"]
-    channels = ["ch1"]
 
+    # Dynamically find channels (directories in shapes_prefit)
+    channels = [
+        k.split(";")[0] for k in root_file["shapes_prefit"].keys() if "/" not in k
+    ]
+
+    ret["histograms"] = {}
     for channel in sorted(channels):
+        ret["histograms"][channel] = {}
         hists = {}
         for fit_type in fit_types:
             ft_short = fit_type.split("_", 1)[1]
-            hists[fit_type] = {}
             for c in cat:
-                hists[ft_short, c] = rootToBinnedData(root_file[fit_type][channel][c])
+                obj_path = f"{fit_type}/{channel}/{c}"
+                if obj_path in root_file:
+                    bd = rootToBinnedData(root_file[fit_type][channel][c])
+                    hists[ft_short, c] = bd
+                    ret["histograms"][channel][f"{ft_short}_{c}"] = bd
+
+        if ("prefit", "data") not in hists:
+            continue
 
         data_hist = hists["prefit", "data"]
-        prefit_background = hists["prefit", "total_background"]
-        b_background = hists["fit_b", "total_background"]
-        s_background = hists["fit_s", "total_background"]
-        s_signal = hists["fit_s", "total_signal"]
+        prefit_background = hists.get(("prefit", "total_background"))
+        b_background = hists.get(("fit_b", "total_background"))
+        s_background = hists.get(("fit_s", "total_background"))
+        s_signal = hists.get(("fit_s", "total_signal"))
 
-        fig, ax = plotFitDiagnostic(
-            data=data_hist,
-            prefit_b=prefit_background,
-            b_background=b_background,
-            s_background=s_background,
-            s_signal=s_signal,
-            signal_rate=ret["tree_fit_sb"]["r"],
-            title=f"{t} / {channel}",
-        )
-        plots[f"fit_diagnostic_{channel}_show_signal"] = (fig, ax)
-        fig, ax = plotFitDiagnostic(
-            data=data_hist,
-            prefit_b=prefit_background,
-            b_background=b_background,
-            s_background=s_background,
-            s_signal=s_signal,
-            signal_rate=ret["tree_fit_sb"]["r"],
-            show_signal=False,
-            title=f"{t} / {channel}",
-        )
-        plots[f"fit_diagnostic_{channel}"] = (fig, ax)
+        continue
+        if all(
+            x is not None
+            for x in [data_hist, prefit_background, b_background, s_background]
+        ):
+            fig, ax = plotFitDiagnostic(
+                data=data_hist,
+                prefit_b=prefit_background,
+                b_background=b_background,
+                s_background=s_background,
+                s_signal=s_signal,
+                signal_rate=ret.get("tree_fit_sb", {}).get("r", 1.0),
+                title=f"Fit Diagnostics / {channel}",
+            )
+            plots[f"fit_diagnostic_{channel}_show_signal"] = (fig, ax)
+            fig, ax = plotFitDiagnostic(
+                data=data_hist,
+                prefit_b=prefit_background,
+                b_background=b_background,
+                s_background=s_background,
+                s_signal=s_signal,
+                signal_rate=ret.get("tree_fit_sb", {}).get("r", 1.0),
+                show_signal=False,
+                title=f"Fit Diagnostics / {channel}",
+            )
+            plots[f"fit_diagnostic_{channel}"] = (fig, ax)
 
     return ret, plots
 
@@ -151,17 +169,17 @@ def extractLikelihoodScan(std_file, froz_file) -> tuple[dict, dict]:
 
     ret = {}
     plots = {}
-    
+
     def get_data(f):
         tree = f["limit"]
         limit_vals = tree["r"].array()
         limit_err_vals = tree["deltaNLL"].array()
         q = tree["quantileExpected"].array()
-        
+
         mask = q > -1.5
         r_vals = np.array(limit_vals[mask])
         dnll = np.array(limit_err_vals[mask]) * 2.0
-        
+
         idx = np.argsort(r_vals)
         r_vals = r_vals[idx]
         dnll = dnll[idx]
@@ -174,11 +192,10 @@ def extractLikelihoodScan(std_file, froz_file) -> tuple[dict, dict]:
         new_points = np.linspace(r_vals.min(), r_vals.max(), 1000)
         spl = make_interp_spline(r_vals, dnll, k=3)
         return new_points, spl(new_points)
-    
+
     def maskData(r_vals, dnll, max_val=6):
         mask = dnll <= max_val
         return r_vals[mask], dnll[mask]
-        
 
     fig, ax = plt.subplots()
 
@@ -189,20 +206,19 @@ def extractLikelihoodScan(std_file, froz_file) -> tuple[dict, dict]:
 
         bestfit_idx = np.argmin(std_dnll)
         ret["likelihood_scan_best_r"] = float(std_r[bestfit_idx])
-    
+
     if froz_file is not None:
         froz_r, froz_dnll = maskData(*makeSpline(*get_data(froz_file)))
         ax.plot(froz_r, froz_dnll, "b-", label="Frozen", linewidth=2)
-        
+
     ax.axhline(1.0, color="gray", linestyle="--")
     ax.axhline(4.0, color="gray", linestyle="--")
     ax.set_xlabel("r")
     ax.set_ylabel("-2 $\Delta ln L$")
     ax.set_ylim(0, 6.0)
-    
+
     ax.legend()
-    fig.tight_layout()
-    
+
     plots["likelihood_scan"] = (fig, ax)
     return ret, plots
 
@@ -302,7 +318,7 @@ def extractCombineResults(combine_dir: Path) -> dict:
                     f"Multiple files found for pattern {actual_pattern}: {matched_files}"
                 )
             matched.append(matched_files[0])
-            
+
         if skip or len(matched) != len(patterns):
             logger.debug(f"No extractor found for {patterns}, skipping.")
             continue
@@ -310,7 +326,10 @@ def extractCombineResults(combine_dir: Path) -> dict:
         logger.info(f"Extracting results from {matched} using {extractor.__name__}")
         try:
             with ExitStack() as stack:
-                f = [stack.enter_context(uproot.open(m)) if m is not None else None for m in matched]
+                f = [
+                    stack.enter_context(uproot.open(m)) if m is not None else None
+                    for m in matched
+                ]
                 extracted_data, extracted_plots = extractor(*f)
                 merged_results.update(extracted_data)
                 plots.update(extracted_plots)

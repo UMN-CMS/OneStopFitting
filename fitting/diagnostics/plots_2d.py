@@ -307,10 +307,10 @@ def makePosteriorPredictivePlots2D(
     prefix: str = "ppc",
 ) -> dict[str, tuple]:
     ret = {}
-    edges = test_data.edges
-    X = test_data.X
+    # edges = test_data.edges
+    # X = test_data.X
 
-    summary = ppc_results["summary"]
+    # summary = ppc_results["summary"]
     reps = ppc_results["test_reps"]
 
     # fig, ax = plt.subplots()
