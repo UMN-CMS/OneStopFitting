@@ -586,13 +586,14 @@ def aggregate(
             n = n.replace(".", "p")
             p = (output / n).with_suffix(".json")
             logger.info(f"Saving data to {p}")
+            p.parent.mkdir(exist_ok=True, parents=True)
             with open(p, "w") as f:
                 json.dump(cattrs.unstructure(d), f, indent=2)
-        n = dotFormat(
-            "ALL_" + name_format, metric_name="__".join(metric_dotpath), **dict(k)
-        )
+
+        n = dotFormat("ALL_" + "__".join(metric_dotpath))
         n = n.replace(".", "p")
         p = (output / n).with_suffix(".json")
+        p.parent.mkdir(exist_ok=True, parents=True)
         logger.info(f"Saving data to {p}")
         with open(p, "w") as f:
             json.dump(cattrs.unstructure(all_points), f, indent=2)
@@ -988,8 +989,9 @@ def resolveOutput(
     type=click.Path(exists=True, path_type=Path),
 )
 @click.option(
-    "--diagnose",
+    "--diagnose/--no-diagnose",
     is_flag=True,
+    default=True,
     help="Generate 2D slice plots and save histograms to pickle.",
 )
 def harvest(summaries: tuple[Path, ...], diagnose: bool) -> None:
