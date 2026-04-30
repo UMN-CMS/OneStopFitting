@@ -14,6 +14,7 @@ from ..core.data import AnalysisState, BinnedData
 from ..inference.prediction import predictInRealSpace
 from ..diagnostics.plots import makeSmoothingPlots
 
+
 def generateAsimovSmoothed(
     state: AnalysisState,
     rng_key: jax.Array,
@@ -27,8 +28,6 @@ def generateAsimovSmoothed(
 
     pred_key, sample_key = random.split(rng_key)
     test_data = state.test_data
-
-
 
     pred_mean, pred_cov = predictInRealSpace(
         posterior=state.training_result.posterior,
@@ -56,6 +55,7 @@ def generateAsimovSmoothed(
     shape = tuple(len(edges) - 1 for edges in state.test_data.edges)
     counts_grid = pred_mean.reshape(shape)
     counts_grid = np.round(counts_grid)
+    counts_grid = np.maximum(counts_grid, 0)
     h.view().value = counts_grid
     h.view().variance = counts_grid
     b_data = histToBinnedData(h, rebin=1, variation=None)
@@ -67,6 +67,7 @@ def generateAsimovSmoothed(
     )
 
     return h, plots
+
 
 def generateSmoothedBackground(
     state: AnalysisState,
