@@ -176,7 +176,9 @@ def _makeSliceSummaryPlot(
             slice_signal_data,
             histtype="step",
             color="red",
-            label=f"Sig. ({injected_signal_rate:.2f})",
+            label=f"Sig. ({injected_signal_rate:.2f})"
+            if injected_signal_rate is not None
+            else "Sig.",
         )
 
     if slice_blind_mask is not None and np.any(slice_blind_mask):
