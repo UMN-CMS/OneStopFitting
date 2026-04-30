@@ -87,7 +87,7 @@ def _selectPlotNames(
 
     if ndim == 2:
         plot_names = {
-            "signal": "injected_signal",
+            "signal": "signal_template",
             "observed": "observed_outputs",
             "gpr": "gpr_mean",
             "predvar": "predicted_variances",
@@ -103,7 +103,7 @@ def _selectPlotNames(
 
 
 def gatherPointContext(
-    *, point_dir: Path, image_format: str, version="_private_work"
+    *, point_dir: Path, image_format: str, version=""
 ) -> dict[str, Any]:
     point_dir = Path(point_dir)
     summary_path = point_dir / "summary.json"
