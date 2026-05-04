@@ -809,6 +809,13 @@ def makecondor(
     help="Comma-separated injection rates (e.g., '0.0,1.0,10.0')",
 )
 @click.option("--num-toys", type=int, default=None, help="Number of toys to run over")
+@click.option(
+    "--param",
+    "extra_params",
+    multiple=True,
+    type=str,
+    help="Arbitrary dot-path parameter sweep: key=csv_values (e.g., 'model.likelihood.variance_floor_quantile=0.01,0.05,0.1')",
+)
 def makebatch(
     signal: tuple[str, ...],
     background: str,
@@ -825,9 +832,21 @@ def makebatch(
     injection_rates: str | None,
     min_counts: str | None,
     num_toys: int | None,
+    extra_params: tuple[str, ...],
 ) -> None:
     """Generate HTCondor submit files for a batch of jobs with parameter sweeps."""
     from .distributed.batch_tools import generateBatchSubmit
+
+    parsed_extra = {}
+    for p in extra_params:
+        key, vals = p.split("=", 1)
+        try:
+            parsed_extra[key] = [int(x.strip()) for x in vals.split(",")]
+        except ValueError:
+            try:
+                parsed_extra[key] = [float(x.strip()) for x in vals.split(",")]
+            except ValueError:
+                parsed_extra[key] = [x.strip() for x in vals.split(",")]
 
     generateBatchSubmit(
         signal_pattern=signal,
@@ -845,6 +864,7 @@ def makebatch(
         min_counts=parse_csv_float(min_counts) if min_counts else None,
         injection_rates=parse_csv_float(injection_rates) if injection_rates else None,
         num_toys=num_toys,
+        extra_params=parsed_extra if parsed_extra else None,
     )
 
 

@@ -114,7 +114,7 @@ class DataCard:
             lines.append("-" * 60)
 
         for rp in self.rate_params:
-            bounds_str = f"[{rp.bounds[0]:.4f}, {rp.bounds[1]:.4f}]"
+            bounds_str = f"[{rp.bounds[0]:.4f},{rp.bounds[1]:.4f}]"
             lines.append(f"{rp.channel} rateParam {rp.process} {rp.init_value:.4f} {bounds_str}")
 
         for ch in self.channels:

@@ -26,7 +26,7 @@ def writeConfigFile(config: dict[str, Any], output_path: Path) -> None:
 
 
 def generateBatchSubmit(
-    signal_pattern: tuple[str,...],
+    signal_pattern: tuple[str, ...],
     background_pattern: str,
     years: list[str],
     pipelines: list[str],
@@ -41,6 +41,7 @@ def generateBatchSubmit(
     min_counts: list[float] | None,
     injection_rates: list[float] | None,
     num_toys: int | None,
+    extra_params: dict[str, list] | None = None,
 ) -> None:
     from .condor_tools import (
         getJobs,
@@ -65,6 +66,8 @@ def generateBatchSubmit(
         param_grids["min_counts"] = min_counts
     if injection_rates:
         param_grids["injection_rate"] = injection_rates
+    if extra_params:
+        param_grids.update(extra_params)
 
     if not param_grids:
         logger.warning("No batch parameters specified. Generating single submit file.")

@@ -6,10 +6,6 @@ window:
   core_threshold_fraction: 0.5
   dilation_margin: 0.15
 
-transform:
-  _type: StandardizationConfig
-
-
 optimization:
   mode: optimization
   objective: mll
@@ -26,18 +22,3 @@ model:
     variance_floor_quantile: 0.01
   mean_function:
     _type: ConstantMeanConfig
-
-# model: 
-#   _type: ExactGPConfig
-# 
-#   kernel: 
-#     _type: SumKernelConfig
-#     kernels:
-#       - _type: NNKernelConfig
-#         hidden_shapes: [20,20]
-#       - _type: HeteroscedasticWhiteConfig
-#   likelihood:
-#     _type: FixedGaussianNoiseConfig
-#     variance_floor_quantile: 0.01
-#   mean_function:
-#     _type: ConstantMeanConfig

@@ -10,8 +10,6 @@ window:
 transform:
   _type: StandardizationConfig
 
-
-
 optimization:
   mode: optimization
   objective: mll

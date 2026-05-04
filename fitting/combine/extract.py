@@ -126,7 +126,6 @@ def extractFitDiagnostics(root_file: uproot.ReadOnlyDirectory) -> tuple[dict, di
         s_background = hists.get(("fit_s", "total_background"))
         s_signal = hists.get(("fit_s", "total_signal"))
 
-        continue
         if all(
             x is not None
             for x in [data_hist, prefit_background, b_background, s_background]
@@ -334,7 +333,6 @@ def extractCombineResults(combine_dir: Path) -> dict:
                 merged_results.update(extracted_data)
                 plots.update(extracted_plots)
         except Exception as e:
-            raise e
             logger.error(f"Failed to extract from {matched}: {e}")
 
     return merged_results, plots
