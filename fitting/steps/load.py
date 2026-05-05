@@ -28,7 +28,6 @@ def loadData(config: PipelineConfig) -> AnalysisState:
     bkg_hist = extractHistogram(bkg_raw)
     background = histToBinnedData(bkg_hist, rebin=config.rebin, variation="central")
 
-    # Extract and merge file-level metadata
     file_metadata = extractMetadata(bkg_raw)
     combined_metadata = {
         **config.metadata,
