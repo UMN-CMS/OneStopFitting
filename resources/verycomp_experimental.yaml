@@ -1,10 +1,11 @@
 injection_rate: 0.0
-min_counts: 0.0
+min_counts: -1
 
 window:
   _type: CoreDilatedWindowConfig
   core_threshold_fraction: 0.5
   dilation_margin: 0.15
+
 
 optimization:
   mode: optimization
@@ -12,14 +13,21 @@ optimization:
   num_iters: 250
   lr: 0.01
 
-model: 
+model:
   _type: ExactGPConfig
-  kernel: 
-    _type: NNKernelConfig
-    hidden_shapes: [20,20]
+  kernel:
+    _type: SumKernelConfig
+    kernels:
+    - _type: NNKernelConfig
+      base_kernel_config:
+        _type: RBFConfig
+        ard: true
+      hidden_shapes: [20,20]
+    # - _type: WhiteConfig
+    #   variance: 0.005
   likelihood:
     _type: FixedGaussianNoiseConfig
-    variance_floor_quantile: 0.01
+    variance_floor_quantile: 0.05
     pad_variance_quantile: 0.25
   mean_function:
     _type: ConstantMeanConfig

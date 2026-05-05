@@ -22,5 +22,6 @@ model:
   likelihood:
     _type: FixedGaussianNoiseConfig
     variance_floor_quantile: 0.01
+    pad_variance_quantile: 0.25
   mean_function:
     _type: ConstantMeanConfig
