@@ -57,6 +57,34 @@ class CutWindow(Window):
 
 
 @attrs.define
+class FunctionSliceWindow(Window):
+    expression: str
+
+    def __call__(self, X: jnp.ndarray) -> jnp.ndarray:
+        env = {"jnp": jnp, "np": np, "X": X}
+        ndim = X.shape[-1] if X.ndim > 1 else 1
+
+        if ndim >= 1:
+            env["x"] = X[..., 0]
+            env["x0"] = X[..., 0]
+        if ndim >= 2:
+            env["y"] = X[..., 1]
+            env["x1"] = X[..., 1]
+        if ndim >= 3:
+            env["z"] = X[..., 2]
+            env["x2"] = X[..., 2]
+
+        try:
+            mask = eval(self.expression, {"__builtins__": {}}, env)
+            return jnp.asarray(mask, dtype=bool)
+        except Exception as e:
+            logger.error(
+                f"Failed to evaluate FunctionSliceWindow expression '{self.expression}': {e}"
+            )
+            raise
+
+
+@attrs.define
 class GaussianWindow(Window):
     amplitude: jnp.ndarray = attrs.field(factory=lambda: jnp.array(1.0))
     center: jnp.ndarray = attrs.field(factory=lambda: jnp.array(0.0))
@@ -422,6 +450,46 @@ class CutWindowConfig(WindowConfig):
 
 
 @attrs.define
+class FunctionSliceWindowConfig(WindowConfig):
+    expression: str = "True"
+
+    def buildWindow(self, signal_data: BinnedData | None = None) -> FunctionSliceWindow:
+        logger.info(
+            f"Building FunctionSliceWindow with expression: '{self.expression}'"
+        )
+        return FunctionSliceWindow(expression=self.expression)
+
+
+@attrs.define
+class AndWindowConfig(WindowConfig):
+    windows: list[WindowConfig] = attrs.Factory(list)
+
+    def buildWindow(self, signal_data: BinnedData | None = None) -> AndWindow:
+        logger.info(f"Building AndWindow with {len(self.windows)} sub-windows")
+        built_windows = [w.buildWindow(signal_data) for w in self.windows]
+        return AndWindow(windows=built_windows)
+
+
+@attrs.define
+class OrWindowConfig(WindowConfig):
+    windows: list[WindowConfig] = attrs.Factory(list)
+
+    def buildWindow(self, signal_data: BinnedData | None = None) -> OrWindow:
+        logger.info(f"Building OrWindow with {len(self.windows)} sub-windows")
+        built_windows = [w.buildWindow(signal_data) for w in self.windows]
+        return OrWindow(windows=built_windows)
+
+
+@attrs.define
+class NotWindowConfig(WindowConfig):
+    window: WindowConfig
+
+    def buildWindow(self, signal_data: BinnedData | None = None) -> NotWindow:
+        logger.info("Building NotWindow")
+        return NotWindow(window=self.window.buildWindow(signal_data))
+
+
+@attrs.define
 class BlindingStrategy(ABC):
     @abstractmethod
     def buildWindow(
@@ -437,6 +505,7 @@ class UnionBlinding(BlindingStrategy):
 
     def buildWindow(self, window_config, signals):
         windows = [window_config.buildWindow(sig) for sig in signals.values()]
+        logger.info(f"UnionBlinding: {len(windows)} windows. ")
         if len(windows) == 1:
             return windows[0]
         return OrWindow(windows=windows)

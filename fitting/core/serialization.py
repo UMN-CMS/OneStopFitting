@@ -36,6 +36,16 @@ def _makeConverter() -> cattrs.Converter:
     converter.register_unstructure_hook(Path, str)
     converter.register_structure_hook(Path, lambda v, _: Path(v))
 
+    # Handle the specific Union[Path, list[Path], None] for signal_path
+    def _structurePathUnion(obj, _):
+        if obj is None:
+            return None
+        if isinstance(obj, list):
+            return [Path(p) for p in obj]
+        return Path(obj)
+
+    converter.register_structure_hook(Path | list[Path] | None, _structurePathUnion)
+
     def _unstructure_affine(t: AffineTransform) -> dict:
         children, aux = t.tree_flatten()
         loc, scale, _domain = children

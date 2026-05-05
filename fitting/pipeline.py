@@ -18,7 +18,6 @@ from .core.transforms import (
     TransformConfig,
 )
 from .data.windowing import (
-    Window,
     WindowConfig,
     GaussianWindowConfig,
     BlindingStrategy,
@@ -81,7 +80,7 @@ class PipelineConfig:
     rebin: int = 1
     min_counts: float = 0.0
     rng_seed: int = 0xBEEFBEEF
-    domain_window: Window | None = None
+    domain_window: WindowConfig | None = None
     window: WindowConfig | None = attrs.Factory(GaussianWindowConfig)
     blinding_strategy: BlindingStrategy = attrs.Factory(UnionBlinding)
     transform: TransformConfig = attrs.Factory(StandardizationConfig)

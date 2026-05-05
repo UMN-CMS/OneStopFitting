@@ -5,7 +5,7 @@ import logging
 import jax.numpy as jnp
 
 from ..core.data import AnalysisState, BinnedData
-from .windowing import Window
+from .windowing import Window, WindowConfig
 import attrs
 
 logger = logging.getLogger(__name__)
@@ -54,6 +54,9 @@ def preprocess(
 
     # Determine the window
     domain_window = state.config.domain_window
+    if isinstance(domain_window, WindowConfig):
+        logger.info(f"Building domain window from {type(domain_window).__name__}")
+        domain_window = domain_window.buildWindow(state.background)
 
     window = state.window
     if window is None and state.signals and state.config.window is not None:
