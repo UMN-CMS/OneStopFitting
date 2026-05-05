@@ -16,9 +16,6 @@ from ..core.transforms import computeNormalization
 from ..inference.optimization import train, setAtPath
 from ..diagnostics.parameters import logKernelParameters, logLikelihoodParameters
 
-if TYPE_CHECKING:
-    from ..pipeline import PipelineConfig
-
 logger = logging.getLogger(__name__)
 
 
@@ -28,27 +25,9 @@ def _buildStage1Mean(
     test_data,
     ndim: int,
 ):
-    """Build a Stage 1 fixed-lengthscale GP on the full (unblinded) data.
-
-    Constructs an RBF GP with frozen hyperparameters, computes the
-    posterior, and delegates to the mean config's ``buildStage1Mean()``
-    to create the appropriate frozen mean function (InterpolatedMean
-    or LookupTableMean).
-
-    Args:
-        mean_cfg: The mean function config (InterpolatedMeanConfig or
-            LookupTableMeanConfig) carrying Stage 1 hyperparameters.
-        transform: DataTransformation for normalizing the full dataset.
-        test_data: Full (unblinded) BinnedData.
-        ndim: Input dimensionality.
-
-    Returns:
-        A frozen gpjax mean function backed by the Stage 1 posterior.
-    """
     import gpjax.kernels as gpk
     import gpjax.likelihoods as gpl
 
-    # Normalize the full dataset
     norm_full = transform.applyToBinnedData(test_data)
     full_dataset = gpjax.Dataset(
         X=norm_full.X,
@@ -105,6 +84,22 @@ def _buildStage1Mean(
     return mean_cfg.buildStage1Mean(stage1_posterior, full_dataset)
 
 
+def _buildScoringFn(restart_cfg, dataset, test_data, transform, rng_key):
+
+    ctx = {
+        "dataset": dataset,
+        "test_data": test_data,
+        "transform": transform,
+        "rng_key": rng_key,
+    }
+    selection = restart_cfg.selection
+
+    def scoring_fn(result):
+        return selection.score(result, ctx)
+
+    return scoring_fn
+
+
 def trainModel(state: AnalysisState, rng_key: jax.Array) -> AnalysisState:
     if state.background is None:
         raise ValueError("Background data not found in state. Cannot train model.")
@@ -116,7 +111,6 @@ def trainModel(state: AnalysisState, rng_key: jax.Array) -> AnalysisState:
     state = attrs.evolve(state, transform=transform)
     mean_cfg = state.config.model.mean_function
     pre_fit_mean = None
-
 
     if hasattr(mean_cfg, "needsPreFit") and mean_cfg.needsPreFit():
         logger.info("=== Stage 1: Background GP Mean Estimation ===")
@@ -133,7 +127,8 @@ def trainModel(state: AnalysisState, rng_key: jax.Array) -> AnalysisState:
     )
 
     build_key, train_key = random.split(rng_key)
-    posterior, likelihood, prior = state.config.model.buildModel(
+
+    build_kwargs = dict(
         dataset=dataset,
         ndim=state.background.ndim,
         obs_variance=norm_train.V.reshape(-1, 1) if norm_train.V is not None else None,
@@ -146,8 +141,39 @@ def trainModel(state: AnalysisState, rng_key: jax.Array) -> AnalysisState:
         transform=transform,
     )
 
+    posterior, likelihood, prior = state.config.model.buildModel(**build_kwargs)
+
+    def _make_model_factory():
+        _counter = 0
+
+        def factory():
+            nonlocal _counter
+            _counter += 1
+            fresh_key = jax.random.fold_in(build_key, _counter)
+            p, l, _ = state.config.model.buildModel(
+                **{**build_kwargs, "rngs": nnx.Rngs(fresh_key)}
+            )
+            return p, l
+
+        return factory
+
     logger.info(f"  Training on {dataset.n} data points")
     logger.info(f"  posterior_type={type(posterior).__name__}")
+
+    has_restarts = (
+        state.config.optimization.restart is not None
+        and state.config.optimization.restart.num_restarts > 1
+    )
+
+    scoring_fn = None
+    if has_restarts:
+        scoring_fn = _buildScoringFn(
+            state.config.optimization.restart,
+            dataset,
+            state.test_data,
+            transform,
+            train_key,
+        )
 
     training_result = train(
         posterior=posterior,
@@ -155,6 +181,8 @@ def trainModel(state: AnalysisState, rng_key: jax.Array) -> AnalysisState:
         dataset=dataset,
         config=state.config.optimization,
         rng_key=train_key,
+        model_factory=_make_model_factory() if has_restarts else None,
+        scoring_fn=scoring_fn,
     )
 
     state = attrs.evolve(state, training_result=training_result, dataset=dataset)

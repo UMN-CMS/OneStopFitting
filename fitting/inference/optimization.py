@@ -2,13 +2,16 @@ from __future__ import annotations
 
 import enum
 import logging
+from abc import ABC, abstractmethod
 from typing import Any, Callable
-
+from ..inference.prediction import predictInRealSpace, fixCovarianceMatrix
+from ..diagnostics.posterior import posteriorPredictiveCheck
 from flax import nnx
 import attrs
 import gpjax
 import jax
 import jax.numpy as jnp
+import copy
 import optax
 import numpyro
 from ..core.data import TrainingResult
@@ -59,6 +62,183 @@ class TwoStageConfig:
 
 
 @attrs.define
+class RestartStrategy(ABC):
+    @abstractmethod
+    def prepareRun(
+        self,
+        posterior: Any,
+        likelihood: Any,
+        run_index: int,
+        rng_key: jax.Array,
+        model_factory: Callable[[], tuple[Any, Any]] | None = None,
+    ) -> tuple[Any, Any]: ...
+
+
+@attrs.define
+class ReseedConfig(RestartStrategy):
+    def prepareRun(
+        self,
+        posterior: Any,
+        likelihood: Any,
+        run_index: int,
+        rng_key: jax.Array,
+        model_factory: Callable[[], tuple[Any, Any]] | None = None,
+    ) -> tuple[Any, Any]:
+        return posterior, likelihood
+
+
+@attrs.define
+class ResampleConfig(RestartStrategy):
+    def prepareRun(
+        self,
+        posterior: Any,
+        likelihood: Any,
+        run_index: int,
+        rng_key: jax.Array,
+        model_factory: Callable[[], tuple[Any, Any]] | None = None,
+    ) -> tuple[Any, Any]:
+        if run_index == 0:
+            return posterior, likelihood
+        if model_factory is None:
+            raise ValueError("ResampleConfig requires a model_factory for restarts > 0")
+        new_posterior, new_likelihood = model_factory()
+        logger.info(f"  Restart {run_index}: rebuilt model with fresh RNG")
+        return new_posterior, new_likelihood
+
+
+@attrs.define
+class PerturbationConfig(RestartStrategy):
+    scale: float = 0.1
+
+    def prepareRun(
+        self,
+        posterior: Any,
+        likelihood: Any,
+        run_index: int,
+        rng_key: jax.Array,
+        model_factory: Callable[[], tuple[Any, Any]] | None = None,
+    ) -> tuple[Any, Any]:
+        if run_index == 0:
+            return posterior, likelihood
+        perturb_key, _ = jax.random.split(rng_key)
+        perturbed = _perturbParameters(posterior, perturb_key, self.scale)
+        logger.info(f"  Restart {run_index}: perturbed params with scale={self.scale}")
+        return perturbed, likelihood
+
+
+@attrs.define
+class RestartCriterion(ABC):
+    @abstractmethod
+    def shouldContinue(self, run_result: TrainingResult) -> bool: ...
+
+
+@attrs.define
+class AlwaysContinueConfig(RestartCriterion):
+    def shouldContinue(self, run_result: TrainingResult) -> bool:
+        return True
+
+
+@attrs.define
+class LossThresholdConfig(RestartCriterion):
+    max_loss: float = float("inf")
+
+    def shouldContinue(self, run_result: TrainingResult) -> bool:
+        return run_result.final_loss < self.max_loss
+
+
+@attrs.define
+class SelectionStrategy(ABC):
+    @abstractmethod
+    def score(
+        self, result: TrainingResult, context: dict[str, Any] | None = None
+    ) -> float: ...
+
+
+@attrs.define
+class BestLossConfig(SelectionStrategy):
+    def score(
+        self, result: TrainingResult, context: dict[str, Any] | None = None
+    ) -> float:
+        return result.final_loss
+
+
+@attrs.define
+class BestConvergenceConfig(SelectionStrategy):
+    k: int = 20
+
+    def score(
+        self, result: TrainingResult, context: dict[str, Any] | None = None
+    ) -> float:
+        h = result.loss_history
+        if len(h) < 2:
+            return float("inf")
+        tail = h[-min(self.k, len(h)) :]
+        return abs(tail[-1] - tail[0]) / max(abs(tail[0]), 1e-10)
+
+
+@attrs.define
+class PredictedChi2Config(SelectionStrategy):
+    def score(
+        self, result: TrainingResult, context: dict[str, Any] | None = None
+    ) -> float:
+        if context is None or "dataset" not in context:
+            return result.final_loss
+        from ..inference.prediction import computePrediction
+        from ..diagnostics.metrics import chi2PerBin
+
+        dataset = context["dataset"]
+        mean, cov = computePrediction(result.posterior, dataset, dataset.X)
+        var = jnp.diag(cov)
+        return chi2PerBin(dataset.y.ravel(), mean, var)
+
+
+@attrs.define
+class BestPPCConfig(SelectionStrategy):
+    num_samples: int = 200
+
+    def score(
+        self, result: TrainingResult, context: dict[str, Any] | None = None
+    ) -> float:
+        if context is None or "dataset" not in context:
+            return result.final_loss
+
+        dataset = context["dataset"]
+        test_data = context.get("test_data")
+        transform = context.get("transform")
+        rng_key = context.get("rng_key")
+        if test_data is None or transform is None:
+            return result.final_loss
+        if rng_key is None:
+            rng_key = jax.random.key(0)
+        pred_mean, pred_cov = predictInRealSpace(
+            result.posterior,
+            dataset,
+            test_data,
+            transform,
+            rng_key=rng_key,
+        )
+        pred_cov = fixCovarianceMatrix(pred_cov)
+        ppc = posteriorPredictiveCheck(
+            pred_mean,
+            pred_cov,
+            test_data,
+            num_samples=self.num_samples,
+            rng_key=rng_key,
+        )
+        pvalue = ppc["test_stats"]["chi2"]["all"]["pvalue"]
+        logger.info(f"  PPC p-value: {pvalue:.3f}")
+        return abs(pvalue - 0.5)
+
+
+@attrs.define
+class RestartConfig:
+    num_restarts: int = 3
+    strategy: RestartStrategy = attrs.Factory(ResampleConfig)
+    criterion: RestartCriterion = attrs.Factory(AlwaysContinueConfig)
+    selection: SelectionStrategy = attrs.Factory(BestLossConfig)
+
+
+@attrs.define
 class OptimizationConfig:
     mode: InferenceMode = InferenceMode.OPTIMIZATION
     lr: float = 0.1
@@ -74,8 +254,7 @@ class OptimizationConfig:
 
     lr_schedule_gamma: float | None = None
     lr_schedule_step: int | None = None
-    # l2_regularization_strength: float = 0.0
-    # use_l2_regularization: bool = False
+    restart: RestartConfig | None = None
 
 
 def _buildOptimizer(config: OptimizationConfig) -> optax.GradientTransformation:
@@ -118,6 +297,8 @@ def train(
     config: OptimizationConfig,
     rng_key: jax.Array,
     metric_fns: dict[str, Callable] | None = None,
+    model_factory: Callable[[], tuple[Any, Any]] | None = None,
+    scoring_fn: Callable[[TrainingResult], float] | None = None,
 ) -> TrainingResult:
     if config.mode == InferenceMode.SAMPLING:
         return runMCMC(
@@ -144,13 +325,15 @@ def train(
             rng_key=rng_key,
         )
     else:
-        return runMLE(
+        return runWithRestarts(
             posterior,
             likelihood,
             dataset,
-            rng_key=rng_key,
-            config=config,
+            config,
+            rng_key,
             metric_fns=metric_fns,
+            model_factory=model_factory,
+            scoring_fn=scoring_fn,
         )
 
 
@@ -249,6 +432,77 @@ def runMLE(
         final_loss=final_loss,
         metric_histories=metric_histories,
     )
+
+
+def _perturbParameters(
+    module: nnx.Module, rng_key: jax.Array, scale: float
+) -> nnx.Module:
+    perturbed = copy.deepcopy(module)
+    key_idx = 0
+    keys = jax.random.split(rng_key, 10000)
+    for path, node in nnx.graph.iter_graph(perturbed):
+        if isinstance(node, (gpjax.parameters.Parameter, nnx.Param)):
+            noise = jax.random.normal(keys[key_idx], shape=node.value.shape) * scale
+            node.value = node.value + noise * jnp.abs(node.value)
+            key_idx += 1
+    return perturbed
+
+
+def runWithRestarts(
+    posterior: Any,
+    likelihood: Any,
+    dataset: gpjax.Dataset,
+    config: OptimizationConfig,
+    rng_key: jax.Array,
+    metric_fns: dict[str, Callable] | None = None,
+    model_factory: Callable[[], tuple[Any, Any]] | None = None,
+    scoring_fn: Callable[[TrainingResult], float] | None = None,
+) -> TrainingResult:
+    restart_cfg = config.restart
+    num_restarts = restart_cfg.num_restarts if restart_cfg else 1
+
+    if num_restarts <= 1 and (
+        restart_cfg is None or isinstance(restart_cfg.strategy, ReseedConfig)
+    ):
+        return runMLE(posterior, likelihood, dataset, config, rng_key, metric_fns)
+
+    if scoring_fn is None:
+        selection = restart_cfg.selection
+        scoring_fn = lambda r: selection.score(r, {"dataset": dataset})
+
+    all_results: list[TrainingResult] = []
+
+    for i in range(num_restarts):
+        run_key, rng_key = jax.random.split(rng_key)
+
+        if i == 0:
+            run_posterior, run_likelihood = posterior, likelihood
+        else:
+            run_posterior, run_likelihood = restart_cfg.strategy.prepareRun(
+                posterior, likelihood, i, run_key, model_factory
+            )
+
+        logger.info(f"=== Restart {i}/{num_restarts - 1} ===")
+        result = runMLE(
+            run_posterior, run_likelihood, dataset, config, run_key, metric_fns
+        )
+        all_results.append(result)
+
+        if i < num_restarts - 1 and not restart_cfg.criterion.shouldContinue(result):
+            logger.info(f"  Restart criterion met after run {i}, stopping early")
+            break
+
+    best_idx = min(range(len(all_results)), key=lambda i: scoring_fn(all_results[i]))
+    best = all_results[best_idx]
+    logger.info(
+        f"Restarts complete: best run {best_idx}/{len(all_results) - 1}, "
+        f"loss={best.final_loss:.4f}"
+    )
+
+    all_histories = [r.loss_history for r in all_results]
+    best.loss_histories = all_histories
+    best.best_restart = best_idx
+    return best
 
 
 def modelFunc(
@@ -449,7 +703,6 @@ def runHomoscedasticTwoStageFit(
     for path, node in nnx.graph.iter_graph(learned_mean):
         if isinstance(node, parameter_filter):
             if path and path[-1] == "amplitude":
-                # Do not freeze amplitude
                 continue
             original_mean_params[path] = node
             setAtPath(learned_mean, path, nnx.Variable(node.value))
@@ -500,15 +753,10 @@ def fitHyperpriorsFromMC(
     rng_key: jax.Array | None = None,
     ndim: int = 2,
 ) -> dict[str, NormalPriorConfig]:
-    """
-    Fit a zero-mean GP to QCD MC to learn hyperparameter distributions.
+    from .models import ExactGPConfig
+    from .means import ZeroMeanConfig
+    from .likelihoods import UniformGaussianNoiseConfig
 
-    These learned distributions can be used as priors in the actual data fit.
-    This provides a 'data-driven with physics-informed priors' approach, where
-    the MC informs the smoothness structure but does not anchor the mean shape.
-
-    Returns a dictionary of paths mapped to NormalPriorConfig instances.
-    """
     if rng_key is None:
         rng_key = jax.random.key(0)
 
@@ -526,12 +774,6 @@ def fitHyperpriorsFromMC(
 
     dataset = gpjax.Dataset(X=masked_data.X, y=masked_data.Y.reshape(-1, 1))
 
-    # Fit GP to MC with zero mean — we want the kernel to learn
-    # the background shape, not a parametric mean
-    from .models import ExactGPConfig
-    from .means import ZeroMeanConfig
-    from .likelihoods import UniformGaussianNoiseConfig
-
     model_config = ExactGPConfig(
         kernel=kernel_config,
         likelihood=UniformGaussianNoiseConfig(),
@@ -542,17 +784,12 @@ def fitHyperpriorsFromMC(
         dataset, ndim=ndim, rngs=nnx.Rngs(rng_key)
     )
 
-    # Run MLE
     result = runMLE(posterior, likelihood, dataset, config=opt_config, rng_key=rng_key)
-
-    # Extract learned hyperparameters mapping path -> float value
     learned_params = {}
     for path, node in nnx.graph.iter_graph(result.posterior):
         if isinstance(node, gpjax.parameters.Parameter):
             learned_params[path] = float(node.value)
 
-    # Build Gaussian priors centred on MC-learned values
-    # Wider prior = more data-driven, narrower = more MC-dependent
     hyperpriors = {
         path: NormalPriorConfig(
             loc=val,
