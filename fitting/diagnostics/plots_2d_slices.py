@@ -131,7 +131,7 @@ def _makeSliceSummaryPlot(
     slice_pred_mean: np.ndarray,
     slice_pred_var: np.ndarray,
     slice_blind_mask: np.ndarray | None,
-    slice_signal_data: BinnedData | None,
+    slice_signal_data: BinnedData | dict[str, BinnedData] | None,
     slice_title: str,
     *,
     minimap_context: dict | None = None,
@@ -171,15 +171,26 @@ def _makeSliceSummaryPlot(
             draw_func(ax, ratio_ax)
 
     if slice_signal_data is not None:
-        plotBinnedData(
-            ax,
-            slice_signal_data,
-            histtype="step",
-            color="red",
-            label=f"Sig. ({injected_signal_rate:.2f})"
-            if injected_signal_rate is not None
-            else "Sig.",
+        sigs = (
+            slice_signal_data
+            if isinstance(slice_signal_data, dict)
+            else {"sig": slice_signal_data}
         )
+        import matplotlib.cm as cm
+
+        colors = cm.get_cmap("Reds")(np.linspace(0.4, 1.0, len(sigs)))
+        for (lbl, sig), color in zip(sigs.items(), colors):
+            label = f"Sig. {lbl}" if lbl != "sig" else "Sig."
+            if injected_signal_rate is not None:
+                label += f" ({injected_signal_rate:.2f})"
+
+            plotBinnedData(
+                ax,
+                sig,
+                histtype="step",
+                color=color,
+                label=label,
+            )
 
     if slice_blind_mask is not None and np.any(slice_blind_mask):
         w_min = X[slice_blind_mask].min()
@@ -277,7 +288,7 @@ def _makeOneSlice(
     slice_axis: int,
     val: float,
     axis_name: str,
-    signal_data: BinnedData | None = None,
+    signal_data: BinnedData | dict[str, BinnedData] | None = None,
     show_minimap: bool = True,
     minimap_context: dict | None = None,
     minimap_background: bool = True,
@@ -293,12 +304,20 @@ def _makeOneSlice(
     slice_pred_var = pred_var[mask][order]
     slice_blind = blind_mask[mask][order]
 
-    slice_sig = None
+    slice_sigs = None
     if signal_data is not None:
-        sig_X = np.asarray(signal_data.X)
-        sig_mask = _sliceMask(sig_X, slice_axis, val)
-        if np.any(sig_mask):
-            slice_sig = _buildSliceBinnedData(signal_data, sig_mask, perp)
+        if isinstance(signal_data, dict):
+            slice_sigs = {}
+            for lbl, sig in signal_data.items():
+                sig_X = np.asarray(sig.X)
+                sig_mask = _sliceMask(sig_X, slice_axis, val)
+                if np.any(sig_mask):
+                    slice_sigs[lbl] = _buildSliceBinnedData(sig, sig_mask, perp)
+        else:
+            sig_X = np.asarray(signal_data.X)
+            sig_mask = _sliceMask(sig_X, slice_axis, val)
+            if np.any(sig_mask):
+                slice_sigs = _buildSliceBinnedData(signal_data, sig_mask, perp)
 
     label = _sliceLabel(axis_name, val)
 
@@ -319,7 +338,7 @@ def _makeOneSlice(
         slice_pred_mean=slice_pred_mean,
         slice_pred_var=slice_pred_var,
         slice_blind_mask=slice_blind,
-        slice_signal_data=slice_sig,
+        slice_signal_data=slice_sigs,
         slice_title=f"Slice: {label}",
         minimap_context=minimap_ctx,
         extra_draw_funcs=extra_draw_funcs,
@@ -332,7 +351,7 @@ def makeSlicePlots2D(
     pred_var: jnp.ndarray,
     test_data: BinnedData,
     blind_mask: jnp.ndarray | None = None,
-    signal_data: BinnedData | None = None,
+    signal_data: BinnedData | dict[str, BinnedData] | None = None,
     *,
     show_minimap: bool = True,
     minimap_background: bool = True,
@@ -398,7 +417,7 @@ def makePostCombineSlice(
     pred_var: jnp.ndarray,
     test_data: BinnedData,
     blind_mask: jnp.ndarray | None = None,
-    signal_data: BinnedData | None = None,
+    signal_data: BinnedData | dict[str, BinnedData] | None = None,
     post_fit_signal: BinnedData | None = None,
     post_fit_background: BinnedData | None = None,
     injected_signal: float | None = None,

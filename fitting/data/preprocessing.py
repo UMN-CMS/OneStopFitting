@@ -56,10 +56,14 @@ def preprocess(
     domain_window = state.config.domain_window
 
     window = state.window
-    if window is None and state.signal is not None and state.config.window is not None:
+    if window is None and state.signals and state.config.window is not None:
         window_config = state.config.window
-        logger.info(f"Building window from config: {type(window_config).__name__}")
-        window = window_config.buildWindow(state.signal)
+        strategy = state.config.blinding_strategy
+        logger.info(
+            f"Building window from {type(window_config).__name__} "
+            f"with {type(strategy).__name__} over {len(state.signals)} signal(s)"
+        )
+        window = strategy.buildWindow(window_config, state.signals)
 
     to_estimate = state.background
     if state.signal is not None and state.injection_rate != 0.0:

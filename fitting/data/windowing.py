@@ -56,9 +56,6 @@ class CutWindow(Window):
         return (X[:, self.axis] >= self.lower) & (X[:, self.axis] <= self.upper)
 
 
-
-
-
 @attrs.define
 class GaussianWindow(Window):
     amplitude: jnp.ndarray = attrs.field(factory=lambda: jnp.array(1.0))
@@ -136,23 +133,21 @@ class EllipseWindow(Window):
         return jnp.sum(rel, axis=-1) <= 1.0
 
 
-
-
- 
 @attrs.define
 class ConvexHullWindow(Window):
     hull_vertices: np.ndarray = attrs.field()
     ndim: int = attrs.field()
- 
+
     def __call__(self, X: jnp.ndarray) -> jnp.ndarray:
         X_np = np.asarray(X)
- 
+
         if self.ndim == 1:
             lo = self.hull_vertices[:, 0].min()
             hi = self.hull_vertices[:, 0].max()
             return jnp.array((X_np[:, 0] >= lo) & (X_np[:, 0] <= hi))
         elif self.ndim == 2:
             from scipy.spatial import ConvexHull, Delaunay
+
             hull = ConvexHull(self.hull_vertices)
             tri = Delaunay(self.hull_vertices[hull.vertices])
             inside = tri.find_simplex(X_np) >= 0
@@ -161,15 +156,6 @@ class ConvexHullWindow(Window):
             lo = self.hull_vertices.min(axis=0)
             hi = self.hull_vertices.max(axis=0)
             return jnp.array(np.all((X_np >= lo) & (X_np <= hi), axis=-1))
- 
-
-
-
-
-
-
-
-
 
 
 def _numpyGaussian1D(X, amplitude, xo, sigma_x):
@@ -222,24 +208,21 @@ def fitGaussianWindow(signal_data: BinnedData, spread: float = 1.3) -> GaussianW
         raise NotImplementedError(f"Gaussian window fitting for {ndim}D not supported")
 
 
-
 def _smoothedGrid2D(
     X_np: np.ndarray, Y_np: np.ndarray, smooth_sigma: float
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     x0_vals = np.unique(X_np[:, 0])
     x1_vals = np.unique(X_np[:, 1])
- 
+
     x0_idx = np.searchsorted(x0_vals, X_np[:, 0])
     x1_idx = np.searchsorted(x1_vals, X_np[:, 1])
- 
+
     grid = np.zeros((len(x0_vals), len(x1_vals)))
     for i, (i0, i1) in enumerate(zip(x0_idx, x1_idx)):
         grid[i0, i1] = Y_np[i]
- 
+
     Y_smooth = scipy.ndimage.gaussian_filter(grid.astype(float), smooth_sigma)
     return x0_vals, x1_vals, Y_smooth
- 
-
 
 
 def _dilateHull(vertices: np.ndarray, margin: float) -> np.ndarray:
@@ -250,9 +233,8 @@ def _dilateHull(vertices: np.ndarray, margin: float) -> np.ndarray:
     unit_dirs = directions / safe_radii
     mean_radius = radii.mean()
     return vertices + unit_dirs * (margin * mean_radius)
- 
- 
- 
+
+
 def fitCoreDilatedWindow(
     signal_data: BinnedData,
     core_threshold_fraction: float = 0.08,
@@ -262,87 +244,91 @@ def fitCoreDilatedWindow(
     X_np = np.asarray(signal_data.X)
     Y_np = np.asarray(signal_data.Y)
     ndim = signal_data.ndim
- 
+
     # Normalise each axis to [0, 1]
     x_min = X_np.min(axis=0)
     x_max = X_np.max(axis=0)
     x_range = np.where(x_max > x_min, x_max - x_min, 1.0)
     X_norm = (X_np - x_min) / x_range
- 
+
     if ndim == 1:
         order = np.argsort(X_norm[:, 0])
         X_sorted = X_norm[order]
         Y_sorted = Y_np[order]
- 
+
         Y_smooth = scipy.ndimage.gaussian_filter1d(Y_sorted.astype(float), smooth_sigma)
         peak = Y_smooth.max()
         if peak <= 0:
             raise ValueError("Signal has non-positive peak after smoothing.")
- 
+
         mask = Y_smooth >= core_threshold_fraction * peak
         selected = X_sorted[mask]
         if len(selected) == 0:
             raise ValueError(
                 f"No bins survive core_threshold_fraction={core_threshold_fraction}."
             )
- 
+
         lo = selected[:, 0].min()
         hi = selected[:, 0].max()
         center = (lo + hi) / 2.0
         half = (hi - lo) / 2.0 * (1.0 + dilation_margin)
         hull_norm = np.array([[center - half], [center + half]])
- 
+
         logger.info(
             f"CoreDilatedWindow 1D: core [{lo:.3f}, {hi:.3f}] → "
             f"dilated [{center - half:.3f}, {center + half:.3f}] (normalised), "
             f"{mask.sum()}/{len(mask)} core bins"
         )
- 
+
     elif ndim == 2:
         from scipy.spatial import ConvexHull
- 
+
         x0_vals_raw, x1_vals_raw, _ = _smoothedGrid2D(X_np, Y_np, smooth_sigma)
         x0_vals = (x0_vals_raw - x_min[0]) / x_range[0]
         x1_vals = (x1_vals_raw - x_min[1]) / x_range[1]
         _, _, Y_smooth = _smoothedGrid2D(X_norm, Y_np, smooth_sigma)
- 
+
         peak = Y_smooth.max()
         if peak <= 0:
             raise ValueError("Signal has non-positive peak after smoothing.")
- 
+
         mask_grid = Y_smooth >= core_threshold_fraction * peak
         n_core = mask_grid.sum()
         if n_core == 0:
             raise ValueError(
                 f"No bins survive core_threshold_fraction={core_threshold_fraction}."
             )
- 
+
         i0s, i1s = np.where(mask_grid)
         core_pts = np.stack([x0_vals[i0s], x1_vals[i1s]], axis=-1)
- 
+
         if len(core_pts) < 3:
             lo = core_pts.min(axis=0)
             hi = core_pts.max(axis=0)
             center = (lo + hi) / 2.0
             half = (hi - lo) / 2.0 * (1.0 + dilation_margin)
-            hull_norm = np.array([
-                center + np.array([ half[0],  half[1]]),
-                center + np.array([-half[0],  half[1]]),
-                center + np.array([-half[0], -half[1]]),
-                center + np.array([ half[0], -half[1]]),
-            ])
+            hull_norm = np.array(
+                [
+                    center + np.array([half[0], half[1]]),
+                    center + np.array([-half[0], half[1]]),
+                    center + np.array([-half[0], -half[1]]),
+                    center + np.array([half[0], -half[1]]),
+                ]
+            )
         else:
             hull = ConvexHull(core_pts)
             core_verts = core_pts[hull.vertices]
             hull_norm = _dilateHull(core_verts, dilation_margin)
- 
+
         logger.info(
             f"CoreDilatedWindow 2D: {n_core}/{mask_grid.size} core bins, "
             f"hull {len(hull_norm)} vertices, dilation={dilation_margin:.2f}"
         )
- 
+
     else:
-        raise NotImplementedError(f"fitCoreDilatedWindow not implemented for ndim={ndim}")
+        raise NotImplementedError(
+            f"fitCoreDilatedWindow not implemented for ndim={ndim}"
+        )
     hull_vertices = hull_norm * x_range + x_min
     return ConvexHullWindow(hull_vertices=hull_vertices, ndim=ndim)
 
@@ -375,7 +361,6 @@ class WindowConfig(ABC):
 
 @attrs.define
 class GaussianWindowConfig(WindowConfig):
-
     spread: float = 1.3
 
     def buildWindow(self, signal_data: BinnedData | None = None) -> GaussianWindow:
@@ -387,7 +372,6 @@ class GaussianWindowConfig(WindowConfig):
 
 @attrs.define
 class CoreDilatedWindowConfig(WindowConfig):
-
     core_threshold_fraction: float = 0.08
     smooth_sigma: float = 1.5
     dilation_margin: float = 0.25
@@ -410,12 +394,13 @@ class CoreDilatedWindowConfig(WindowConfig):
 
 @attrs.define
 class RectangularWindowConfig(WindowConfig):
-
     lower: list[float] = attrs.Factory(lambda: [0.0])
     upper: list[float] = attrs.Factory(lambda: [1.0])
 
     def buildWindow(self, signal_data: BinnedData | None = None) -> RectangularWindow:
-        logger.info(f"Building RectangularWindow: lower={self.lower}, upper={self.upper}")
+        logger.info(
+            f"Building RectangularWindow: lower={self.lower}, upper={self.upper}"
+        )
         return RectangularWindow(
             lower=jnp.array(self.lower),
             upper=jnp.array(self.upper),
@@ -424,7 +409,6 @@ class RectangularWindowConfig(WindowConfig):
 
 @attrs.define
 class CutWindowConfig(WindowConfig):
-
     axis: int = 0
     lower: float = float("-inf")
     upper: float = float("inf")
@@ -435,3 +419,36 @@ class CutWindowConfig(WindowConfig):
             f"lower={self.lower}, upper={self.upper}"
         )
         return CutWindow(axis=self.axis, lower=self.lower, upper=self.upper)
+
+
+@attrs.define
+class BlindingStrategy(ABC):
+    @abstractmethod
+    def buildWindow(
+        self,
+        window_config: WindowConfig,
+        signals: dict[str, BinnedData],
+    ) -> Window: ...
+
+
+@attrs.define
+class UnionBlinding(BlindingStrategy):
+    """Blind mask = union of per-signal windows."""
+
+    def buildWindow(self, window_config, signals):
+        windows = [window_config.buildWindow(sig) for sig in signals.values()]
+        if len(windows) == 1:
+            return windows[0]
+        return OrWindow(windows=windows)
+
+
+@attrs.define
+class SummedBlinding(BlindingStrategy):
+    """Build a single window from the summed signal shape."""
+
+    def buildWindow(self, window_config, signals):
+        sigs = list(signals.values())
+        combined = sigs[0]
+        for s in sigs[1:]:
+            combined = combined + s
+        return window_config.buildWindow(combined)

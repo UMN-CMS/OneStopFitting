@@ -19,6 +19,44 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _deriveSignalLabel(metadata: dict, path) -> str:
+    for key in ("name", "dataset_name"):
+        if key in metadata:
+            return metadata[key]
+    from pathlib import Path
+
+    return Path(path).stem
+
+
+def _loadSignals(config):
+    signals = {}
+    signal_hists = {}
+    signal_metadata = {}
+    first_signal = None
+    first_signal_hist = None
+    first_sig_metadata = None
+
+    for path in config.signalPaths:
+        logger.info(f"Loading signal from {path}")
+        loader = FileLoader.forPath(path)
+        raw = loader.load(path)
+        sig_hist = extractHistogram(raw)
+        sig_binned = histToBinnedData(sig_hist, rebin=config.rebin, variation="central")
+        sig_meta = extractMetadata(raw)
+        label = _deriveSignalLabel(sig_meta, path)
+
+        signals[label] = sig_binned
+        signal_hists[label] = sig_hist
+        signal_metadata[label] = sig_meta
+
+        if first_signal is None:
+            first_signal = sig_binned
+            first_signal_hist = sig_hist
+            first_sig_metadata = sig_meta
+
+    return signals, signal_hists, signal_metadata, first_signal, first_signal_hist, first_sig_metadata
+
+
 def loadData(config: PipelineConfig) -> AnalysisState:
     """Load background and optional signal data."""
 
@@ -38,35 +76,28 @@ def loadData(config: PipelineConfig) -> AnalysisState:
         "min_counts": config.min_counts,
     }
 
-    signal = None
-    signal_hist = None
-    if config.signal_path is not None:
-        logger.info(f"Loading signal from {config.signal_path}")
-        sig_loader = FileLoader.forPath(config.signal_path)
-        sig_raw = sig_loader.load(config.signal_path)
-        sig_hist_full = extractHistogram(sig_raw)
-        signal = histToBinnedData(
-            sig_hist_full, rebin=config.rebin, variation="central"
-        )
-        signal_hist = sig_hist_full  # keep all variations for downstream
+    signals, signal_hists, signal_metadata, first_signal, first_signal_hist, first_sig_metadata = (
+        _loadSignals(config)
+    )
 
-        # Merge signal metadata (overrides background metadata on conflict)
-
-        sig_metadata = extractMetadata(sig_raw)
-        reco_category = getRecoCategory(sig_metadata["name"])
+    if first_sig_metadata is not None:
+        reco_category = getRecoCategory(first_sig_metadata["name"])
         combined_metadata = {
             **combined_metadata,
-            **sig_metadata,
+            **first_sig_metadata,
             "reco_category": reco_category,
         }
 
     return AnalysisState(
         config=config,
         background=background,
-        signal=signal,
+        signal=first_signal,
         injection_rate=config.injection_rate,
         background_hist=bkg_hist,
-        signal_hist=signal_hist,
+        signal_hist=first_signal_hist,
+        signals=signals,
+        signal_hists=signal_hists,
+        signal_metadata=signal_metadata,
         metadata=combined_metadata,
         background_metadata=file_metadata,
     )

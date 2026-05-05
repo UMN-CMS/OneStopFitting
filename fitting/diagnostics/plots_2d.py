@@ -87,27 +87,37 @@ def makeDiagnosticPlots2D(
 
     # --- Signal (if provided) ---
     if signal_data is not None:
-        fig, ax = plt.subplots()
-        plotBinnedData(ax, signal_data, cbar_title="Events")
-        ax.set_title("Injected Signal")
-        if test_data.axis_names and len(test_data.axis_names) >= 2:
-            ax.set_xlabel(test_data.axis_names[0])
-            ax.set_ylabel(test_data.axis_names[1])
-        plotBlinding2D(ax, edges, X, blind_mask)
-        ret["injected_signal"] = (fig, ax)
+        sigs = signal_data if isinstance(signal_data, dict) else {"injected": signal_data}
+        for lbl, sig in sigs.items():
+            fig, ax = plt.subplots()
+            plotBinnedData(ax, sig, cbar_title="Events")
+            ax.set_title(f"Injected Signal: {lbl}")
+            if test_data.axis_names and len(test_data.axis_names) >= 2:
+                ax.set_xlabel(test_data.axis_names[0])
+                ax.set_ylabel(test_data.axis_names[1])
+            plotBlinding2D(ax, edges, X, blind_mask)
+            key = "injected_signal" if lbl == "injected" else f"injected_signal_{lbl}"
+            ret[key] = (fig, ax)
 
     # --- Signal Template (unscaled) ---
     if signal_template is not None:
-        fig, ax = plt.subplots()
-        plotBinnedData(
-            ax, signal_template, cbar_title=r"Events ($\lambda_{31j}''=0.1$)"
+        sigs = (
+            signal_template
+            if isinstance(signal_template, dict)
+            else {"template": signal_template}
         )
-        ax.set_title("Signal Template")
-        if test_data.axis_names and len(test_data.axis_names) >= 2:
-            ax.set_xlabel(test_data.axis_names[0])
-            ax.set_ylabel(test_data.axis_names[1])
-        plotBlinding2D(ax, edges, X, blind_mask)
-        ret["signal_template"] = (fig, ax)
+        for lbl, sig in sigs.items():
+            fig, ax = plt.subplots()
+            plotBinnedData(ax, sig, cbar_title=r"Events (norm=0.1)")
+            ax.set_title(f"Signal Template: {lbl}")
+            if test_data.axis_names and len(test_data.axis_names) >= 2:
+                ax.set_xlabel(test_data.axis_names[0])
+                ax.set_ylabel(test_data.axis_names[1])
+            plotBlinding2D(ax, edges, X, blind_mask)
+            key = (
+                "signal_template" if lbl == "template" else f"signal_template_{lbl}"
+            )
+            ret[key] = (fig, ax)
 
     # --- Observed variances ---
     fig, ax = plt.subplots()

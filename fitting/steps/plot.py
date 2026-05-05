@@ -12,7 +12,7 @@ from ..diagnostics.plot_utils import savePlots
 from ..diagnostics.plots import makeDiagnosticPlots, makePosteriorPredictivePlots
 from ..inference.prediction import getPriorMeanInRealSpace
 from gpjax.variational_families import VariationalGaussian
-from ..core.serialization import getSummary, limitedSummary
+from ..core.serialization import limitedSummary
 
 logger = logging.getLogger(__name__)
 
@@ -27,21 +27,22 @@ def generatePlots(state: AnalysisState, rng_key: jax.Array) -> None:
     ):
         raise ValueError("Cannot generate plots without prediction results.")
 
-    # Prepare signal for overlay if injected
-    signal_plot_data = None
-    signal_template = None
-    if state.signal is not None:
+    # Prepare signals for overlay if injected
+    signals_plot_data = {}
+    signals_template = {}
+    for lbl, sig in state.signals.items():
         # Match test_data domain by applying same mask
-        signal_template = state.signal.masked(state.domain_mask)
+        sig_template = sig.masked(state.domain_mask)
+        signals_template[lbl] = sig_template
 
         if state.injection_rate > 0:
             # Scale by injection rate for the "Injected Signal" plot/overlay
-            signal_plot_data = BinnedData(
-                X=signal_template.X,
-                Y=signal_template.Y * state.injection_rate,
-                V=signal_template.V * (state.injection_rate**2),
-                edges=signal_template.edges,
-                axis_names=signal_template.axis_names,
+            signals_plot_data[lbl] = BinnedData(
+                X=sig_template.X,
+                Y=sig_template.Y * state.injection_rate,
+                V=sig_template.V * (state.injection_rate**2),
+                edges=sig_template.edges,
+                axis_names=sig_template.axis_names,
             )
 
     prior_key, diag_key = random.split(rng_key)
@@ -65,8 +66,8 @@ def generatePlots(state: AnalysisState, rng_key: jax.Array) -> None:
         test_data=state.test_data,
         train_data=state.train_data,
         blind_mask=state.blind_mask,
-        signal_data=signal_plot_data,
-        signal_template=signal_template,
+        signal_data=signals_plot_data if signals_plot_data else None,
+        signal_template=signals_template if signals_template else None,
         prior_mean=prior_mean,
         kernel=posterior.prior.kernel,
         transform=state.transform,

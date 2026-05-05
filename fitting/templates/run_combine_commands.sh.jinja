@@ -17,13 +17,6 @@ function run_combine {
     echo ""
 }
 
-echo "Converting datacard to workspace"
-run_combine "text2workspace.py datacard.txt -m 125"
-
-{% if num_prebuilt_toys %}
-run_combine "combine -M GenerateOnly --saveToys -n prebuilt_toys -t {{ num_prebuilt_toys }}"
-{% endif %}
-
 {% for i, cmd in enumerate(commands, 1) %}
 echo "Command {{ i }}/{{ commands|length }}"
 run_combine "{{ cmd }}"

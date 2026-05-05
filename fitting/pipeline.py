@@ -12,11 +12,18 @@ import mplhep
 
 from .core.data import AnalysisState
 from .core.serialization import save
+from .combine.systematics import SystematicNameMap, RateSystematic
 from .core.transforms import (
     StandardizationConfig,
     TransformConfig,
 )
-from .data.windowing import Window, WindowConfig, GaussianWindowConfig
+from .data.windowing import (
+    Window,
+    WindowConfig,
+    GaussianWindowConfig,
+    BlindingStrategy,
+    UnionBlinding,
+)
 from .inference.models import ExactGPConfig, GPModelConfig
 from .inference.optimization import OptimizationConfig
 
@@ -37,7 +44,7 @@ mplhep.style.use("CMS")
 class CombineConfig:
     """Configuration for combine command execution."""
 
-    combine_commands: list[str] = attrs.Factory(
+    combine_commands: list = attrs.Factory(
         lambda: [
             "limits",
             "fit-diagnostics",
@@ -49,18 +56,34 @@ class CombineConfig:
     eigenvar_threshold: float = 0.01
     bg_rate_uncertainty: str = "none"
     combine_container: str = "/cvmfs/unpacked.cern.ch/gitlab-registry.cern.ch/cms-analysis/general/combine-container:latest"
+    name_map: SystematicNameMap | None = None
+    rate_systematics: list[RateSystematic] = attrs.Factory(list)
+
+    def resolvedCommands(self):
+        from .combine.commands import CombineCommand, resolveCommand
+
+        resolved = []
+        for cmd in self.combine_commands:
+            if isinstance(cmd, str):
+                resolved.append(resolveCommand(cmd))
+            elif isinstance(cmd, CombineCommand):
+                resolved.append(cmd)
+            else:
+                resolved.append(resolveCommand(str(cmd)))
+        return resolved
 
 
 @attrs.define
 class PipelineConfig:
     background_path: Path
-    signal_path: Path | None = None
+    signal_path: Path | list[Path] | None = None
     injection_rate: float = 0.0
     rebin: int = 1
     min_counts: float = 0.0
     rng_seed: int = 0xBEEFBEEF
     domain_window: Window | None = None
     window: WindowConfig | None = attrs.Factory(GaussianWindowConfig)
+    blinding_strategy: BlindingStrategy = attrs.Factory(UnionBlinding)
     transform: TransformConfig = attrs.Factory(StandardizationConfig)
     model: GPModelConfig = attrs.Factory(ExactGPConfig)
     optimization: OptimizationConfig = attrs.Factory(OptimizationConfig)
@@ -68,6 +91,14 @@ class PipelineConfig:
     output_dir_format: str = "output"
     image_formats: list[str] = attrs.Factory(lambda: ["png"])
     metadata: dict[str, Any] = attrs.Factory(dict)
+
+    @property
+    def signalPaths(self) -> list[Path]:
+        if self.signal_path is None:
+            return []
+        if isinstance(self.signal_path, list):
+            return self.signal_path
+        return [self.signal_path]
 
 
 class PipelineStep(IntEnum):

@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 from fitting.utils import evolveCombos
 import functools as ft
+from .condor_tools import groupJobsByMassPoint
 
 import yaml
 
@@ -42,6 +43,7 @@ def generateBatchSubmit(
     injection_rates: list[float] | None,
     num_toys: int | None,
     extra_params: dict[str, list] | None = None,
+    multi_signal: bool = False,
 ) -> None:
     from .condor_tools import (
         getJobs,
@@ -85,6 +87,7 @@ def generateBatchSubmit(
             container=container,
             combine_cmds=combine_cmds,
             num_toys=num_toys,
+            multi_signal=multi_signal,
         )
         return
 
@@ -118,6 +121,10 @@ def generateBatchSubmit(
     if not base_jobs:
         logger.error("No base jobs found from signal/background patterns!")
         return
+
+    if multi_signal:
+        base_jobs = groupJobsByMassPoint(base_jobs)
+        logger.info(f"Grouped into {len(base_jobs)} multi-signal base jobs")
 
     batch_config_dir = output_dir / "batch_configs"
     batch_config_dir.mkdir(parents=True, exist_ok=True)

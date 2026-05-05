@@ -7,7 +7,7 @@ import re
 import jax.numpy as jnp
 import numpy as np
 
-from ..core.data import AnalysisState, BinnedData
+from ..core.data import AnalysisState
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +43,7 @@ def exportCombineData(
     output_path: Path,
     use_window_mask: bool = True,
     eigenvar_threshold=0.01,
+    hist_renames: dict[str, dict[str, str]] | None = None,
 ) -> int:
     import uproot
     import hist
@@ -94,32 +95,36 @@ def exportCombineData(
         histograms[f"background_gpr_eigen{idx}Up"] = (up, linear_edges)
         histograms[f"background_gpr_eigen{idx}Down"] = (down, linear_edges)
 
-    if state.signal_hist is not None:
-        sig_name = "signal"
-        if hasVariationAxis(state.signal_hist):
-            for var_name in variationNames(state.signal_hist):
+    for lbl, sig_hist_entry in state.signal_hists.items():
+        rename_map = hist_renames.get(lbl, {}) if hist_renames else {}
+
+        if hasVariationAxis(sig_hist_entry):
+            for var_name in variationNames(sig_hist_entry):
                 sig_binned = histToBinnedData(
-                    state.signal_hist, rebin=state.config.rebin, variation=var_name
+                    sig_hist_entry, rebin=state.config.rebin, variation=var_name
                 )
                 full_sig = doMask(sig_binned.Y)[blind_mask]
                 if var_name == "central":
-                    histograms[sig_name] = (np.asarray(full_sig), linear_edges)
+                    histograms[lbl] = (np.asarray(full_sig), linear_edges)
                 elif var_name.endswith("_disabled"):
                     continue
-                else:
-                    base, direction = normalizeVarName(var_name)
-                    name = (
-                        f"{sig_name}_{base}{direction}"
-                        if direction
-                        else f"{sig_name}_{base}"
-                    )
-                    histograms[name] = (
+                elif var_name in rename_map:
+                    histograms[f"{lbl}_{rename_map[var_name]}"] = (
                         np.asarray(full_sig),
                         linear_edges,
                     )
+                else:
+                    base, direction = normalizeVarName(var_name)
+                    name = (
+                        f"{lbl}_{base}{direction}"
+                        if direction
+                        else f"{lbl}_{base}"
+                    )
+                    histograms[name] = (np.asarray(full_sig), linear_edges)
         else:
-            histograms[sig_name] = (
-                np.asarray(state.signal.Y[blind_mask]),
+            sig_binned = state.signals[lbl]
+            histograms[lbl] = (
+                np.asarray(doMask(sig_binned.Y)[blind_mask]),
                 linear_edges,
             )
 
@@ -132,3 +137,4 @@ def exportCombineData(
     logger.info(f"Exported {len(histograms)} histograms to {output_path}")
 
     return len(variations)
+

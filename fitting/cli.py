@@ -119,9 +119,9 @@ def main(verbose: bool) -> None:
 @click.option(
     "--signal",
     "-s",
+    multiple=True,
     type=click.Path(exists=True, path_type=Path),
-    default=None,
-    help="Signal histogram file.",
+    help="Signal histogram file(s). Can be specified multiple times.",
 )
 @click.option(
     "--injection-rate", "-r", type=float, default=None, help="Signal injection rate."
@@ -207,7 +207,7 @@ def main(verbose: bool) -> None:
 def run(
     config: Path | None,
     background: Path | None,
-    signal: Path | None,
+    signal: tuple[Path, ...],
     injection_rate: float,
     output: str,
     rebin: int,
@@ -242,14 +242,22 @@ def run(
 
     start_from_step = start_from or PipelineStep.LOAD
 
+    # Normalize signal paths
+    signal_path_val = None
+    if signal:
+        signal_path_val = list(signal) if len(signal) > 1 else signal[0]
+
     if config is not None:
         with open(config, "r") as f:
             raw = yaml.safe_load(f)
 
         if background is not None:
             raw["background_path"] = str(background)
-        if signal is not None:
-            raw["signal_path"] = str(signal)
+        if signal_path_val is not None:
+            if isinstance(signal_path_val, list):
+                raw["signal_path"] = [str(p) for p in signal_path_val]
+            else:
+                raw["signal_path"] = str(signal_path_val)
         if rebin is not None:
             raw["rebin"] = rebin
         if output is not None:
@@ -284,7 +292,7 @@ def run(
     elif background is not None:
         pipeline_config = PipelineConfig(
             background_path=background,
-            signal_path=signal,
+            signal_path=signal_path_val,
             injection_rate=injection_rate,
             output_dir_format=output,
             rebin=rebin,
@@ -715,6 +723,12 @@ def aggregate(
     multiple=True,
     help="Combine commands to run after the fit",
 )
+@click.option(
+    "--multi-signal",
+    is_flag=True,
+    default=False,
+    help="Group signals by mass point into multi-signal jobs.",
+)
 def makecondor(
     signal: tuple[str, ...],
     background: str,
@@ -727,6 +741,7 @@ def makecondor(
     container: str | None,
     num_toys: int | None,
     combine_cmds: tuple[str, ...],
+    multi_signal: bool,
 ) -> None:
     """Generate HTCondor submit files for distributed processing."""
     from .distributed.condor_tools import generateCondorSubmit
@@ -743,6 +758,7 @@ def makecondor(
         container=container,
         combine_cmds=list(combine_cmds),
         num_toys=num_toys,
+        multi_signal=multi_signal,
     )
 
 
@@ -816,6 +832,12 @@ def makecondor(
     type=str,
     help="Arbitrary dot-path parameter sweep: key=csv_values (e.g., 'model.likelihood.variance_floor_quantile=0.01,0.05,0.1')",
 )
+@click.option(
+    "--multi-signal",
+    is_flag=True,
+    default=False,
+    help="Group signals by mass point into multi-signal jobs.",
+)
 def makebatch(
     signal: tuple[str, ...],
     background: str,
@@ -833,6 +855,7 @@ def makebatch(
     min_counts: str | None,
     num_toys: int | None,
     extra_params: tuple[str, ...],
+    multi_signal: bool,
 ) -> None:
     """Generate HTCondor submit files for a batch of jobs with parameter sweeps."""
     from .distributed.batch_tools import generateBatchSubmit
@@ -865,6 +888,7 @@ def makebatch(
         injection_rates=parse_csv_float(injection_rates) if injection_rates else None,
         num_toys=num_toys,
         extra_params=parsed_extra if parsed_extra else None,
+        multi_signal=multi_signal,
     )
 
 
@@ -961,8 +985,9 @@ def report(
 @click.option(
     "--signal",
     "-s",
+    multiple=True,
     type=click.Path(exists=True, path_type=Path),
-    help="Signal histogram file (optional).",
+    help="Signal histogram file(s). Can be specified multiple times.",
 )
 @click.option(
     "--config",
@@ -980,7 +1005,7 @@ def report(
 )
 def resolveOutput(
     background: Path,
-    signal: Path | None,
+    signal: tuple[Path, ...],
     config: Path,
     output_format: str,
 ) -> None:
@@ -988,11 +1013,15 @@ def resolveOutput(
     import attrs
     import yaml
 
+    signal_path_val = None
+    if signal:
+        signal_path_val = list(signal) if len(signal) > 1 else signal[0]
+
     with open(config, "r") as f:
         config_data = yaml.safe_load(f)
     pipeline_config = PipelineConfig(
         background_path=background,
-        signal_path=signal,
+        signal_path=signal_path_val,
         output_dir_format=output_format,
     )
     pipeline_config = attrs.evolve(pipeline_config, **config_data)

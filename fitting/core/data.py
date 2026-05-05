@@ -152,6 +152,8 @@ class TrainingResult:
     final_loss: float
     metric_histories: dict[str, list[float]] = attrs.Factory(dict)
     samples: dict[str, jnp.ndarray] | None = None
+    loss_histories: list[list[float]] | None = None
+    best_restart: int | None = None
 
 
 def floatToStr(f):
@@ -170,6 +172,9 @@ class AnalysisState:
 
     background_hist: Any | None = None
     signal_hist: Any | None = None
+    signals: dict[str, BinnedData] = attrs.field(factory=dict)
+    signal_hists: dict[str, Any] = attrs.field(factory=dict)
+    signal_metadata: dict[str, dict] = attrs.field(factory=dict)
 
     train_data: BinnedData | None = None
     test_data: BinnedData | None = None

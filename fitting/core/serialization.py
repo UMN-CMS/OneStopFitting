@@ -87,12 +87,16 @@ def getSummary(state: AnalysisState):
         summary["metrics"] = converter.unstructure(state.diagnostic_metrics)
 
     if state.training_result is not None:
-        summary["training"] = {
+        training_summary = {
             "final_loss": float(state.training_result.final_loss),
             "metric_histories": converter.unstructure(
                 state.training_result.metric_histories
             ),
         }
+        if state.training_result.loss_histories is not None:
+            training_summary["loss_histories"] = state.training_result.loss_histories
+            training_summary["best_restart"] = state.training_result.best_restart
+        summary["training"] = training_summary
 
     if state.ppc_results is not None:
         summary["ppc"] = {

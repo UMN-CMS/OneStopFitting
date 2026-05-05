@@ -92,9 +92,17 @@ def makeDiagnosticPlots1D(
     plotBinnedData(ax, test_data, histtype="errorbar", color="black", label="Observed")
 
     if signal_data is not None:
-        plotBinnedData(
-            ax, signal_data, histtype="step", color="red", label="Injected Signal"
-        )
+        sigs = signal_data if isinstance(signal_data, dict) else {"injected": signal_data}
+        import matplotlib.cm as cm
+        colors = cm.get_cmap("Reds")(np.linspace(0.4, 1.0, len(sigs)))
+        for (lbl, sig), color in zip(sigs.items(), colors):
+            plotBinnedData(
+                ax,
+                sig,
+                histtype="step",
+                color=color,
+                label=f"Injected Signal: {lbl}" if lbl != "injected" else "Injected Signal",
+            )
 
     ax.plot(X, pred_Y, color="orange", label="GP Prediction")
     ax.fill_between(
