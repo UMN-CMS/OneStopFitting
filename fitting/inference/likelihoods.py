@@ -58,7 +58,8 @@ class UniformGaussianNoiseConfig(LikelihoodConfig):
 class FixedGaussianNoiseConfig(LikelihoodConfig):
     """Gaussian likelihood with fixed per-bin variance."""
 
-    variance_floor_quantile: float = 0.5
+    variance_floor_quantile: float = 0.05
+    pad_variance_quantile: float | None = None
 
     def buildLikelihood(self, **kwargs) -> gpl.AbstractLikelihood:
         if "obs_variance" not in kwargs or kwargs["obs_variance"] is None:
@@ -83,6 +84,14 @@ class FixedGaussianNoiseConfig(LikelihoodConfig):
 
         obs_var = jnp.clip(obs_var, a_min=floor)
         variances = jnp.atleast_1d(obs_var).reshape(-1)
+        if self.pad_variance_quantile is not None:
+            pad_val = jnp.percentile(positive_vars, self.pad_variance_quantile * 100)
+            variances += pad_val
+            logger.info(
+                f"Padding variance with {float(pad_val):.6f} "
+                f"(quantile={self.pad_variance_quantile})"
+            )
+
         likelihood = gpl.Gaussian(
             num_datapoints=kwargs["num_datapoints"],
             obs_stddev=jnp.sqrt(variances),

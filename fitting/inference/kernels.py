@@ -178,12 +178,13 @@ class PeriodicConfig(KernelConfig):
 class WhiteConfig(KernelConfig):
     """White noise kernel."""
 
+    variance: float = 1e-6
     variance_prior: PriorConfig | None = None
 
     def buildKernel(
         self, ndim: int, rngs: nnx.Rngs | None = None, **kwargs
     ) -> gpk.AbstractKernel:
-        variance = self._get_param("variance", 1e-6, self.variance_prior)
+        variance = self._get_param("variance", self.variance, self.variance_prior)
         return gpk.White(variance=variance)
 
 
