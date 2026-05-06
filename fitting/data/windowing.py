@@ -361,11 +361,6 @@ def fitCoreDilatedWindow(
     return ConvexHullWindow(hull_vertices=hull_vertices, ndim=ndim)
 
 
-# ---------------------------------------------------------------------------
-# WindowConfig hierarchy — declarative, YAML-serialisable window specs
-# ---------------------------------------------------------------------------
-
-
 @attrs.define
 class WindowConfig(ABC):
     """Base class for declarative window configuration.

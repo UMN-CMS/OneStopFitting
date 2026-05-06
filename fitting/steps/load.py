@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from typing import TYPE_CHECKING
+import jax.numpy as jnp
 
 from ..core.data import AnalysisState
 from ..utils import getSignal, getCategory, getRecoCategory
@@ -20,12 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 def _deriveSignalLabel(metadata: dict, path) -> str:
-    for key in ("name", "dataset_name"):
-        if key in metadata:
-            return metadata[key]
-    from pathlib import Path
-
-    return Path(path).stem
+    return metadata["dataset_name"]
 
 
 def _loadSignals(config):
@@ -37,13 +33,14 @@ def _loadSignals(config):
     first_sig_metadata = None
 
     for path in config.signalPaths:
-        logger.info(f"Loading signal from {path}")
         loader = FileLoader.forPath(path)
         raw = loader.load(path)
         sig_hist = extractHistogram(raw)
         sig_binned = histToBinnedData(sig_hist, rebin=config.rebin, variation="central")
         sig_meta = extractMetadata(raw)
         label = _deriveSignalLabel(sig_meta, path)
+
+        logger.info(f"Loaded signal from {path}. label: {label}")
 
         signals[label] = sig_binned
         signal_hists[label] = sig_hist
@@ -54,7 +51,14 @@ def _loadSignals(config):
             first_signal_hist = sig_hist
             first_sig_metadata = sig_meta
 
-    return signals, signal_hists, signal_metadata, first_signal, first_signal_hist, first_sig_metadata
+    return (
+        signals,
+        signal_hists,
+        signal_metadata,
+        first_signal,
+        first_signal_hist,
+        first_sig_metadata,
+    )
 
 
 def loadData(config: PipelineConfig) -> AnalysisState:
@@ -76,9 +80,18 @@ def loadData(config: PipelineConfig) -> AnalysisState:
         "min_counts": config.min_counts,
     }
 
-    signals, signal_hists, signal_metadata, first_signal, first_signal_hist, first_sig_metadata = (
-        _loadSignals(config)
-    )
+    (
+        signals,
+        signal_hists,
+        signal_metadata,
+        first_signal,
+        first_signal_hist,
+        first_sig_metadata,
+    ) = _loadSignals(config)
+
+    logger.info(f"Loaded {len(signals)} signals")
+    for signal in signals:
+        logger.info(f"  {signal}: {jnp.sum(signals[signal].Y)} events")
 
     if first_sig_metadata is not None:
         reco_category = getRecoCategory(first_sig_metadata["name"])

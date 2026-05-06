@@ -1226,3 +1226,114 @@ def windowFit(
 
 if __name__ == "__main__":
     main()
+
+
+@main.command("check-domain")
+@click.option(
+    "--background",
+    "-b",
+    type=click.Path(exists=True, path_type=Path),
+    required=True,
+    help="Background histogram file.",
+)
+@click.option(
+    "--config",
+    "-c",
+    type=click.Path(exists=True, path_type=Path),
+    default=None,
+    help="Pipeline configuration file.",
+)
+@click.option("--rebin", type=int, default=1, help="Rebin factor.")
+@click.option(
+    "--min-counts", type=float, default=1.0, help="Min bin count for fit domain."
+)
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(path_type=Path),
+    default=Path("domain_check.png"),
+    help="Output plot path.",
+)
+def checkDomain(
+    background: Path,
+    config: Path | None,
+    rebin: int,
+    min_counts: float,
+    output: Path,
+) -> None:
+    from .core.serialization import converter
+    from .pipeline import PipelineConfig
+    from .data.preprocessing import applyDomainMask
+    from .steps.load import loadData
+    import matplotlib.pyplot as plt
+    from .diagnostics.plot_utils import (
+        plotBinnedData,
+        plotBlinding2D,
+        addCMSBits,
+        savePlots,
+    )
+    import yaml
+    import numpy as np
+    from .data.windowing import WindowConfig
+
+    if config is not None:
+        with open(config, "r") as f:
+            raw = yaml.safe_load(f)
+        raw["background_path"] = str(background)
+        raw["rebin"] = rebin
+        raw["min_counts"] = min_counts
+        pipeline_config = converter.structure(raw, PipelineConfig)
+    else:
+        pipeline_config = PipelineConfig(
+            background_path=background,
+            rebin=rebin,
+            min_counts=min_counts,
+        )
+
+    state = loadData(pipeline_config)
+    bkg = state.background
+
+    domain_window = pipeline_config.domain_window
+    if isinstance(domain_window, WindowConfig):
+        logger.info(f"Building domain window from {type(domain_window).__name__}")
+        domain_window = domain_window.buildWindow(bkg)
+
+    _, domain_mask = applyDomainMask(bkg, min_counts=min_counts, window=domain_window)
+
+    fig, ax = plt.subplots(figsize=(10, 8))
+    plotBinnedData(ax, bkg, cbar_title="Events")
+
+    if bkg.ndim == 1:
+        x_vals = bkg.X.ravel()
+        y_vals = bkg.Y.ravel()
+        ax.fill_between(
+            x_vals,
+            0,
+            y_vals,
+            where=np.asarray(domain_mask),
+            alpha=0.3,
+            color="red",
+            step="mid",
+            label=f"Domain Mask (min_counts={min_counts})",
+        )
+        ax.legend()
+    elif bkg.ndim == 2:
+        plotBlinding2D(ax, bkg.edges, bkg.X, domain_mask, color="red", linewidth=3)
+        ax.set_title(f"Domain Mask (Red Boundary, min_counts={min_counts})")
+
+    if bkg.axis_names:
+        ax.set_xlabel(bkg.axis_names[0])
+        if bkg.ndim > 1:
+            ax.set_ylabel(bkg.axis_names[1])
+
+    addCMSBits(ax, [state.metadata])
+
+    savePlots(
+        {output.stem: (fig, ax)},
+        output.parent,
+        [state.metadata],
+        formats=(output.suffix,),
+    )
+    logger.info(
+        f"Domain check plot saved to {output.parent}/{output.stem}{output.suffix}"
+    )

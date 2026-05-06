@@ -12,6 +12,11 @@ from ..core.data import AnalysisState
 from ..combine.histograms import exportCombineData
 from ..combine.datacard import Process, Channel, Systematic, DataCard, RateParam
 from ..combine.commands import CombineContext, Text2Workspace
+from ..combine.systematics import (
+    collectShapeSystematics,
+    resolveRateSystematics,
+    DEFAULT_NAME_MAP,
+)
 from ..diagnostics.plot_utils import savePlots
 from ..diagnostics.combine import (
     plotCombineInputs,
@@ -37,11 +42,6 @@ def _buildProcesses(state, doMask):
 
 
 def _buildSystematics(state, processes, n_eigen, ch_name, bg_rate, hist_renames):
-    from ..combine.systematics import (
-        collectShapeSystematics,
-        resolveRateSystematics,
-        DEFAULT_NAME_MAP,
-    )
 
     systematics = []
 
@@ -207,8 +207,7 @@ def prepareCombine(state: AnalysisState, rng_key: jax.Array) -> None:
         from ..combine.commands import GoodnessOfFit, Impacts
 
         resolved_cmds = [
-            c for c in resolved_cmds
-            if not isinstance(c, (GoodnessOfFit, Impacts))
+            c for c in resolved_cmds if not isinstance(c, (GoodnessOfFit, Impacts))
         ]
 
     # text2workspace is always first
