@@ -273,9 +273,9 @@ def plotNNTransformation1D(
     transform: Any | None = None,
     blind_mask: jnp.ndarray | None = None,
 ) -> dict[str, tuple]:
-    from ..inference.kernels import DeepKernelFunction
+    from ..inference.kernels import DeepWarpingKernel, DeepTransformKernel
 
-    if not isinstance(kernel, DeepKernelFunction):
+    if not isinstance(kernel, (DeepWarpingKernel, DeepTransformKernel)):
         return {}
 
     X = np.asarray(test_data.X).ravel()
