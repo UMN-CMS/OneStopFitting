@@ -395,9 +395,9 @@ class GaussianWindowConfig(WindowConfig):
 
 @attrs.define
 class CoreDilatedWindowConfig(WindowConfig):
-    core_threshold_fraction: float = 0.08
+    core_threshold_fraction: float = 0.5
     smooth_sigma: float = 1.5
-    dilation_margin: float = 0.25
+    dilation_margin: float = 0.2
 
     def buildWindow(self, signal_data: BinnedData | None = None) -> ConvexHullWindow:
         if signal_data is None:
