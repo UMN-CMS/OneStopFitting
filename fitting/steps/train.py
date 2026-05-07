@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+
 
 import attrs
 import jax
@@ -84,13 +84,14 @@ def _buildStage1Mean(
     return mean_cfg.buildStage1Mean(stage1_posterior, full_dataset)
 
 
-def _buildScoringFn(restart_cfg, dataset, test_data, transform, rng_key):
+def _buildScoringFn(restart_cfg, dataset, test_data, transform, rng_key, blind_mask=None):
 
     ctx = {
         "dataset": dataset,
         "test_data": test_data,
         "transform": transform,
         "rng_key": rng_key,
+        "blind_mask": blind_mask,
     }
     selection = restart_cfg.selection
 
@@ -150,10 +151,10 @@ def trainModel(state: AnalysisState, rng_key: jax.Array) -> AnalysisState:
             nonlocal _counter
             _counter += 1
             fresh_key = jax.random.fold_in(build_key, _counter)
-            p, l, _ = state.config.model.buildModel(
+            p, likelihood, _ = state.config.model.buildModel(
                 **{**build_kwargs, "rngs": nnx.Rngs(fresh_key)}
             )
-            return p, l
+            return p, likelihood
 
         return factory
 
@@ -173,6 +174,7 @@ def trainModel(state: AnalysisState, rng_key: jax.Array) -> AnalysisState:
             state.test_data,
             transform,
             train_key,
+            state.blind_mask,
         )
 
     training_result = train(

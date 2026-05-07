@@ -102,7 +102,7 @@ class ResampleConfig(RestartStrategy):
         if model_factory is None:
             raise ValueError("ResampleConfig requires a model_factory for restarts > 0")
         new_posterior, new_likelihood = model_factory()
-        logger.info(f"  Restart {run_index}: rebuilt model with fresh RNG")
+        logger.info(f"Restart {run_index}: rebuilt model with fresh RNG")
         return new_posterior, new_likelihood
 
 
@@ -122,7 +122,7 @@ class PerturbationConfig(RestartStrategy):
             return posterior, likelihood
         perturb_key, _ = jax.random.split(rng_key)
         perturbed = _perturbParameters(posterior, perturb_key, self.scale)
-        logger.info(f"  Restart {run_index}: perturbed params with scale={self.scale}")
+        logger.info(f"Restart {run_index}: perturbed params with scale={self.scale}")
         return perturbed, likelihood
 
 
@@ -193,8 +193,89 @@ class PredictedChi2Config(SelectionStrategy):
 
 
 @attrs.define
-class BestPPCConfig(SelectionStrategy):
+class BlindedChi2Config(SelectionStrategy):
+    def score(
+        self, result: TrainingResult, context: dict[str, Any] | None = None
+    ) -> float:
+        if context is None or "dataset" not in context:
+            return result.final_loss
+        from ..inference.prediction import predictInRealSpace
+        from ..diagnostics.metrics import chi2PerBin
+
+        dataset = context["dataset"]
+        test_data = context.get("test_data")
+        transform = context.get("transform")
+        blind_mask = context.get("blind_mask")
+        rng_key = context.get("rng_key")
+
+        if test_data is None or transform is None:
+            return result.final_loss
+
+        if rng_key is None:
+            rng_key = jax.random.key(0)
+
+        pred_mean, pred_cov = predictInRealSpace(
+            result.posterior,
+            dataset,
+            test_data,
+            transform,
+            rng_key=rng_key,
+        )
+        
+        mask = None
+        if blind_mask is not None:
+            mask = ~blind_mask
+
+        return chi2PerBin(test_data.Y.ravel(), pred_mean.ravel(), test_data.V.ravel(), mask=mask)
+
+
+@attrs.define
+class PPCCriteria(RestartCriterion):
     num_samples: int = 200
+    min_val: float = float("-inf")
+    max_val: float = float("inf")
+    region: str = "all"
+
+    def shouldContinue(
+        self, result: TrainingResult, context: dict[str, Any] | None = None
+    ) -> bool:
+        if context is None or "dataset" not in context:
+            return True
+
+        dataset = context["dataset"]
+        test_data = context.get("test_data")
+        transform = context.get("transform")
+        rng_key = context.get("rng_key")
+        if test_data is None or transform is None:
+            return True
+
+        if rng_key is None:
+            rng_key = jax.random.key(0)
+        pred_mean, pred_cov = predictInRealSpace(
+            result.posterior,
+            dataset,
+            test_data,
+            transform,
+            rng_key=rng_key,
+        )
+        pred_cov = fixCovarianceMatrix(pred_cov)
+        ppc = posteriorPredictiveCheck(
+            pred_mean,
+            pred_cov,
+            test_data,
+            num_samples=self.num_samples,
+            rng_key=rng_key,
+        )
+        pvalue = ppc["test_stats"]["chi2"][self.region]["pvalue"]
+        logger.info(f"  PPC p-value: {pvalue:.3f}")
+        return not (self.min_val <= pvalue <= self.max_val)
+
+
+@attrs.define
+class TargetPPCConfig(SelectionStrategy):
+    num_samples: int = 200
+    target_val: float = 0.5
+    region: str = "all"
 
     def score(
         self, result: TrainingResult, context: dict[str, Any] | None = None
@@ -225,7 +306,7 @@ class BestPPCConfig(SelectionStrategy):
             num_samples=self.num_samples,
             rng_key=rng_key,
         )
-        pvalue = ppc["test_stats"]["chi2"]["all"]["pvalue"]
+        pvalue = ppc["test_stats"]["chi2"][self.region]["pvalue"]
         logger.info(f"  PPC p-value: {pvalue:.3f}")
         return abs(pvalue - 0.5)
 
