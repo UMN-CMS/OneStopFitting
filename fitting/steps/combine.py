@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 
 import jax
+from ..combine.systematics import collectShapeSystematics, DEFAULT_NAME_MAP
 import jax.numpy as jnp
 from jinja2 import Environment, FileSystemLoader
 
@@ -45,10 +46,13 @@ def _buildSystematics(state, processes, n_eigen, ch_name, bg_rate, hist_renames)
 
     systematics = []
 
+    year = state.background_metadata["era"]["name"]
+    postfix = f"_{year}" if year else ""
+
     for i in range(n_eigen):
         systematics.append(
             Systematic(
-                name=f"gpr_eigen{i}",
+                name=f"gpr_eigen{i}{postfix}",
                 distribution="shape",
                 values={"background": "1"},
             )
@@ -109,7 +113,7 @@ def _buildSystematics(state, processes, n_eigen, ch_name, bg_rate, hist_renames)
             lnN_val = 1.0 + rate_unc
             systematics.append(
                 Systematic(
-                    name="bg_norm",
+                    name=f"bg_norm{postfix}",
                     distribution="lnN",
                     values={"background": f"{lnN_val:.4f}"},
                 )
@@ -141,7 +145,6 @@ def prepareCombine(state: AnalysisState, rng_key: jax.Array) -> None:
     logger.info(f"Preparing Combine inputs in {out_dir}")
 
     # Collect systematics first to get hist_renames
-    from ..combine.systematics import collectShapeSystematics, DEFAULT_NAME_MAP
 
     name_map = getattr(state.config.combine, "name_map", None) or DEFAULT_NAME_MAP
     _, hist_renames = collectShapeSystematics(
