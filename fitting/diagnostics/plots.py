@@ -122,13 +122,13 @@ def makeDiagnosticPlots(
     if kernel is not None:
         from .plots_1d import plotNNTransformation1D
         from .plots_2d import plotNNTransformation2D
-        from ..inference.kernels import DeepKernelFunction
+        from ..inference.kernels import DeepWarpingKernel, DeepTransformKernel
         from flax import nnx
 
         nn_kernels = []
 
         def findNNKernels(k):
-            if isinstance(k, DeepKernelFunction):
+            if isinstance(k, (DeepWarpingKernel, DeepTransformKernel)):
                 nn_kernels.append(k)
             if hasattr(k, "kernels") and isinstance(k.kernels, (list, nnx.List)):
                 for sub_k in k.kernels:

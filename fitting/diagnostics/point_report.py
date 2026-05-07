@@ -87,7 +87,7 @@ def _selectPlotNames(
 
     if ndim == 2:
         plot_names = {
-            "signal": "signal_template",
+            "signal": "signal_template*",
             "observed": "observed_outputs",
             "gpr": "gpr_mean",
             "predvar": "predicted_variances",
@@ -121,7 +121,14 @@ def gatherPointContext(
 
     image_paths: dict[str, str] = {}
     for role, plot_name in plot_names.items():
-        img_path = (diagnostics_dir / f"{plot_name}.{image_format}").resolve()
+        if "*" in plot_name:
+            img_path = next(
+                diagnostics_dir.glob(
+                    str(Path(plot_name).with_suffix("." + image_format))
+                )
+            )
+        else:
+            img_path = (diagnostics_dir / f"{plot_name}.{image_format}").resolve()
         _requireFile(img_path)
         image_paths[role] = str(img_path)
 
