@@ -1,0 +1,64 @@
+# Standard CMS Systematic Configuration
+# Spliced into CombineConfig:
+# combine:
+#   <<: *standard_systematics
+
+name_map:
+  rules:
+    - raw_prefix: "bjetshapesf"
+      cms_prefix: "CMS_btag"
+      syst_class: "btag"
+
+    - raw_prefix: "jes"
+      cms_prefix: "CMS_scale_j"
+      strip_detail_prefix: "jesRegrouped_"
+      syst_class: "jet_energy_scale"
+
+    - raw_prefix: "jer"
+      cms_prefix: "CMS_res_j"
+      strip_detail_prefix: "JER"
+      syst_class: "jet_energy_resolution"
+
+    - raw_prefix: "pusf"
+      cms_prefix: "CMS_pileup"
+      syst_class: "pileup"
+
+    - raw_prefix: "l1prefiring"
+      cms_prefix: "CMS_L1Prefiring"
+      syst_class: "other_experimental"
+
+    - raw_prefix: "triggereff"
+      cms_prefix: "CMS_trigger"
+      syst_class: "other_experimental"
+
+    - raw_prefix: "puid"
+      cms_prefix: "CMS_puid"
+      syst_class: "jet_efficiency"
+
+rate_systematics:
+  # Luminosity - Run 2 Correlated
+  - name: "lumi_13TeV_correlated"
+    distribution: "lnN"
+    value: "1.006"
+    era_scope: ["2016_preVFP", "2016_postVFP", "2017", "2018"]
+  
+  # Luminosity - Year Specific (Uncorrelated)
+  - name: "lumi_13TeV_2016"
+    distribution: "lnN"
+    value: "1.010"
+    era_scope: ["2016_preVFP", "2016_postVFP"]
+    
+  - name: "lumi_13TeV_2017"
+    distribution: "lnN"
+    value: "1.020"
+    era_scope: ["2017"]
+    
+  - name: "lumi_13TeV_2018"
+    distribution: "lnN"
+    value: "1.015"
+    era_scope: ["2018"]
+
+  - name: "lumi_13TeV_1718"
+    distribution: "lnN"
+    value: "1.006"
+    era_scope: ["2017", "2018"]

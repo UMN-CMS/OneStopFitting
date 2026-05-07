@@ -1,17 +1,28 @@
 injection_rate: 0.0
-min_counts: 0.0
+min_counts: -1.0
 
 window:
   _type: CoreDilatedWindowConfig
   core_threshold_fraction: 0.5
   dilation_margin: 0.15
 
+# domain_window:
+#   _type: FunctionSliceWindowConfig
+#   expression: "y < (np.sqrt(0.003 * x / 2500) + 0.935)"
 
 optimization:
   mode: optimization
   objective: mll
   num_iters: 250
   lr: 0.01
+  restart:
+    num_restarts: 3
+    strategy:
+      _type: ResampleConfig
+    criterion:
+      _type: AlwaysContinueConfig
+    selection:
+      _type: BestLossConfig
 
 model: 
   _type: ExactGPConfig
@@ -20,8 +31,8 @@ model:
     hidden_shapes: [20,20]
   likelihood:
     _type: FixedGaussianNoiseConfig
-    variance_floor_quantile: 0.01
-    pad_variance_quantile: 0.25
+    variance_floor_quantile: 0.05
+    # pad_variance_quantile: 0.25
   mean_function:
     _type: ConstantMeanConfig
 

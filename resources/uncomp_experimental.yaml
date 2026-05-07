@@ -22,7 +22,7 @@ model:
   kernel:
     _type: SumKernelConfig
     kernels:
-    - _type: NNKernelConfig
+    - _type: NNWarpingKernelConfig
       base_kernel_config:
         _type: RBFConfig
         ard: true

@@ -15,7 +15,7 @@ optimization:
 model: 
   _type: ExactGPConfig
   kernel: 
-    _type: NNKernelConfig
+    _type: NNWarpingKernelConfig
     hidden_shapes: [20,20]
   likelihood:
     _type: FixedGaussianNoiseConfig

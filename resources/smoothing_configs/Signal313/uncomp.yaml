@@ -8,7 +8,7 @@ optimization:
 model: 
   _type: ExactGPConfig
   kernel: 
-    _type: NNKernelConfig
+    _type: NNWarpingKernelConfig
   likelihood:
     _type: FixedGaussianNoiseConfig
     variance_floor_quantile: 0.5

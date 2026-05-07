@@ -6,6 +6,10 @@ window:
   core_threshold_fraction: 0.5
   dilation_margin: 0.15
 
+# domain_window:
+#   _type: FunctionSliceWindowConfig
+#   expression: "y < (np.sqrt(0.003 * x / 2500) + 0.935)"
+
 
 optimization:
   mode: optimization
@@ -17,11 +21,11 @@ model:
   _type: ExactGPConfig
   kernel: 
     _type: NNWarpingKernelConfig
-    hidden_shapes: [20,20]
+    hidden_shapes: [100,100]
   likelihood:
     _type: FixedGaussianNoiseConfig
     variance_floor_quantile: 0.01
-    pad_variance_quantile: 0.25
+    # pad_variance_quantile: 0.25
   mean_function:
     _type: ConstantMeanConfig
 
