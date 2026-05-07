@@ -80,25 +80,20 @@ class DataCard:
             lines.extend(formatLines(shape_rows))
             lines.append("-" * 60)
 
-        obs_rows = [["bin"], ["observation"]]
+        obs_rows = [["bin", ""], ["observation", ""]]
         for ch in self.channels:
             obs_rows[0].append(ch.name)
             obs_rows[1].append(str(ch.observation))
         lines.extend(formatLines(obs_rows))
         lines.append("-" * 60)
 
-        proc_rows = [["bin"], ["process"], ["process"], ["rate"]]
-        all_procs = []
+        proc_rows = [["bin", ""], ["process", ""], ["process", ""], ["rate", ""]]
         for ch in self.channels:
             for proc in ch.processes:
                 proc_rows[0].append(ch.name)
                 proc_rows[1].append(proc.name)
                 proc_rows[2].append(str(proc.index))
                 proc_rows[3].append(f"{proc.rate:.6g}")
-                all_procs.append(proc.name)
-
-        lines.extend(formatLines(proc_rows))
-        lines.append("-" * 60)
 
         syst_rows = []
         for syst in self.systematics:
@@ -109,8 +104,12 @@ class DataCard:
                     row.append(str(val))
             syst_rows.append(row)
 
+        formatted_rows = formatLines(proc_rows + syst_rows)
+        lines.extend(formatted_rows[: len(proc_rows)])
+        lines.append("-" * 60)
+
         if syst_rows:
-            lines.extend(formatLines(syst_rows))
+            lines.extend(formatted_rows[len(proc_rows) :])
             lines.append("-" * 60)
 
         for rp in self.rate_params:
