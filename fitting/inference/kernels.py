@@ -1,10 +1,3 @@
-"""Kernel configuration hierarchy.
-
-Each KernelConfig subclass wraps a gpjax kernel type. The buildKernel
-method constructs the actual gpjax kernel instance. cattrs
-include_subclasses handles polymorphic serialization.
-"""
-
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -34,25 +27,10 @@ from ..data.loading import (
 
 @attrs.define
 class KernelConfig(ABC):
-    """Base kernel configuration.
-
-    Subclasses represent specific kernel types.
-    """
-
     @abstractmethod
     def buildKernel(
         self, ndim: int, rngs: nnx.Rngs | None = None, **kwargs
-    ) -> gpk.AbstractKernel:
-        """Construct the gpjax kernel.
-
-        Args:
-            ndim: Input dimensionality.
-            rngs: Flax NNX RNG container.
-
-        Returns:
-            A gpjax kernel instance.
-        """
-        ...
+    ) -> gpk.AbstractKernel: ...
 
     def _get_param(
         self,
@@ -284,6 +262,8 @@ class Network(nnx.Module):
         activation_name: str = "silu",
         weight_prior: PriorConfig | None = None,
         bias_prior: PriorConfig | None = None,
+        out_kernel_init=nnx.initializers.zeros,
+        out_bias_init=nnx.initializers.zeros,
     ) -> None:
         def wrap_layer(layer: nnx.Linear):
             if weight_prior:
@@ -318,26 +298,60 @@ class Network(nnx.Module):
             shape[-1],
             output_dim,
             rngs=rngs,
-            kernel_init=nnx.initializers.zeros,
-            bias_init=nnx.initializers.zeros,
+            kernel_init=out_kernel_init,
+            bias_init=out_bias_init,
         )
         wrap_layer(self.out_layer)
 
         self.activation_name = activation_name
         self.rngs = rngs
+        self.scale = gpp.PositiveReal(jnp.ones(input_dim))
 
     def __call__(self, x: jax.Array) -> jax.Array:
         activation = getattr(jax.nn, self.activation_name)
-        init = x
-        x = activation(self.in_layer(x))
+        z = activation(self.in_layer(x))
         for layer in self.layers:
-            x = activation(layer(x))
-        x = self.out_layer(x)
-        return x + init
+            z = activation(layer(z))
+        delta = self.out_layer(z)
+        return x + self.scale.value * delta  # per-dim gated residual
+
+
+class AxisDecoupledNetwork(nnx.Module):
+    def __init__(self, rngs, input_dim, output_dim, shape, activation_name="silu"):
+        self.axis_nets = nnx.List(
+            [nnx.Linear(1, shape[0] // input_dim, rngs=rngs) for _ in range(input_dim)]
+        )
+        joint_dim = shape[0]
+        self.layers = nnx.List(
+            [
+                nnx.Linear(joint_dim if i == 0 else shape[i], shape[i], rngs=rngs)
+                for i in range(len(shape))
+            ]
+        )
+        self.out_layer = nnx.Linear(
+            shape[-1],
+            output_dim,
+            rngs=rngs,
+            kernel_init=nnx.initializers.zeros,
+            bias_init=nnx.initializers.zeros,
+        )
+        self.scale = gpp.PositiveReal(jnp.ones(input_dim))
+        self.activation_name = activation_name
+
+    def __call__(self, x):
+        activation = getattr(jax.nn, self.activation_name)
+        axis_feats = [
+            activation(net(x[..., i : i + 1])) for i, net in enumerate(self.axis_nets)
+        ]
+        h = jnp.concatenate(axis_feats, axis=-1)
+        for layer in self.layers:
+            h = activation(layer(h))
+        delta = self.out_layer(h)
+        return x + self.scale.value * delta
 
 
 @attrs.define(slots=False)
-class DeepKernelFunction(AbstractKernel):
+class DeepWarpingKernel(AbstractKernel):
     base_kernel: AbstractKernel
     network: nnx.Module
     compute_engine: AbstractKernelComputation = attrs.field(
@@ -347,7 +361,22 @@ class DeepKernelFunction(AbstractKernel):
     def __call__(self, x, y):
         xt = self.network(x)
         yt = self.network(y)
-        ret =  self.base_kernel(xt, yt)
+        ret = self.base_kernel(xt, yt)
+        return ret
+
+
+@attrs.define(slots=False)
+class DeepTransformKernel(AbstractKernel):
+    base_kernel: AbstractKernel
+    network: nnx.Module
+    compute_engine: AbstractKernelComputation = attrs.field(
+        factory=DenseKernelComputation
+    )
+
+    def __call__(self, x, y):
+        xt = self.network(x)
+        yt = self.network(y)
+        ret = self.base_kernel(xt, yt)
         return ret
 
     def cross_covariance(self, x: jax.Array, y: jax.Array) -> jax.Array:
@@ -357,7 +386,7 @@ class DeepKernelFunction(AbstractKernel):
 
 
 @attrs.define
-class NNKernelConfig(KernelConfig):
+class NNWarpingKernelConfig(KernelConfig):
     base_kernel_config: KernelConfig = attrs.Factory(RBFConfig)
     input_dim: int = 2
     output_dim: int = 2
@@ -381,7 +410,48 @@ class NNKernelConfig(KernelConfig):
             weight_prior=self.weight_prior,
             bias_prior=self.bias_prior,
         )
-        return DeepKernelFunction(
+
+        forward_linear = AxisDecoupledNetwork(
+            rngs=rngs,
+            input_dim=self.input_dim,
+            output_dim=self.output_dim,
+            shape=self.hidden_shapes,
+            activation_name=self.activation,
+        )
+        nnx.display(forward_linear)
+        breakpoint()
+        return DeepWarpingKernel(
+            base_kernel=base_kernel,
+            network=forward_linear,
+        )
+
+
+@attrs.define
+class NNTransformKernelConfig(KernelConfig):
+    base_kernel_config: KernelConfig = attrs.Factory(RBFConfig)
+    input_dim: int = 2
+    output_dim: int = 2
+    hidden_shapes: list[int] = attrs.Factory(lambda: [20, 20])
+    activation: str = "silu"
+    weight_prior: PriorConfig | None = None
+    bias_prior: PriorConfig | None = None
+
+    def buildKernel(
+        self, ndim: int, rngs: nnx.Rngs | None = None, **kwargs
+    ) -> gpk.AbstractKernel:
+        if rngs is None:
+            raise ValueError("NNKernelConfig requires rngs for network initialization")
+        base_kernel = self.base_kernel_config.buildKernel(ndim, rngs=rngs, **kwargs)
+        forward_linear = Network(
+            rngs=rngs,
+            input_dim=self.input_dim,
+            output_dim=self.output_dim,
+            shape=self.hidden_shapes,
+            activation_name=self.activation,
+            weight_prior=self.weight_prior,
+            bias_prior=self.bias_prior,
+        )
+        return DeepTransformKernel(
             base_kernel=base_kernel,
             network=forward_linear,
         )
@@ -609,18 +679,16 @@ class HeteroscedasticWhiteKernel(AbstractKernel):
         else:
             self.offset = gpp.NonNegativeReal(offset)
 
-
     def __call__(self, x, y):
         dist = jnp.sum((x - y) ** 2)
         is_same = dist < 1e-10
-
 
         diffs = jnp.sum((self._ref_X - x[None, :]) ** 2, axis=-1)
         idx = jnp.argmin(diffs)
         var_x = self._ref_var[idx]
         noise = self.scale * var_x + self.offset
 
-        ret =  jnp.where(is_same, noise, 0.0)
+        ret = jnp.where(is_same, noise, 0.0)
         return ret
 
 
@@ -639,9 +707,84 @@ class HeteroscedasticWhiteConfig(KernelConfig):
         offset = self._get_param("offset", 1e-8, self.offset_prior)
         base = HeteroscedasticWhiteKernel(
             dataset.X,
-            dataset.y[:,0],
+            dataset.y[:, 0],
             scale=scale,
             offset=offset,
             scale_prior=self.scale_prior,
             offset_prior=self.offset_prior,
+        )
+
+
+class SpectralMixtureKernel(AbstractKernel):
+    """Spectral Mixture kernel (Wilson & Adams, 2013).
+
+    k(τ) = Σ_q w_q Π_d exp(-2π²τ_d²/ℓ_{q,d}²) cos(2πμ_{q,d}τ_d)
+
+    Parameters are stored with shapes weights (Q,), lengthscales (Q, D),
+    frequencies (Q, D).
+    """
+
+    compute_engine: AbstractKernelComputation = attrs.field(
+        factory=DenseKernelComputation
+    )
+
+    def __init__(self, weights, lengthscales, frequencies):
+        super().__init__()
+
+        def _wrap(val):
+            if isinstance(val, nnx.Variable):
+                return val
+            return gpp.PositiveReal(jnp.asarray(val, dtype=float))
+
+        self.weights = _wrap(weights)
+        self.lengthscales = _wrap(lengthscales)
+        self.frequencies = _wrap(frequencies)
+
+    def __call__(self, x, y):
+        tau = x - y
+        w = self.weights.value
+        ls = self.lengthscales.value
+        freq = self.frequencies.value
+
+        exp_term = jnp.exp(-2.0 * jnp.pi**2 * tau**2 / ls**2)
+        cos_term = jnp.cos(2.0 * jnp.pi * freq * tau)
+        per_component = jnp.prod(exp_term * cos_term, axis=-1)
+        return jnp.sum(w * per_component)
+
+
+@attrs.define
+class SpectralMixtureConfig(KernelConfig):
+    """Spectral Mixture kernel (Wilson & Adams, 2013)."""
+
+    n_components: int = 3
+    ard: bool = True
+    weight_prior: PriorConfig | None = None
+    lengthscale_prior: PriorConfig | None = None
+    frequency_prior: PriorConfig | None = None
+
+    def buildKernel(
+        self, ndim: int, rngs: nnx.Rngs | None = None, **kwargs
+    ) -> gpk.AbstractKernel:
+        Q = self.n_components
+
+        w_init = [1.0 / Q] * Q
+        weights = self._get_param("weights", w_init, self.weight_prior)
+
+        ls_base = 0.5
+        freq_values = [(q + 1.0) / Q for q in range(Q)]
+
+        if self.ard:
+            ls_init = [[ls_base] * ndim for _ in range(Q)]
+            freq_init = [[f] * ndim for f in freq_values]
+        else:
+            ls_init = [[ls_base] * ndim for _ in range(Q)]
+            freq_init = [[f] * ndim for f in freq_values]
+
+        lengthscales = self._get_param("lengthscales", ls_init, self.lengthscale_prior)
+        frequencies = self._get_param("frequencies", freq_init, self.frequency_prior)
+
+        return SpectralMixtureKernel(
+            weights=weights,
+            lengthscales=lengthscales,
+            frequencies=frequencies,
         )
