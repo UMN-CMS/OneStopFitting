@@ -4,6 +4,8 @@ import logging
 import re
 from collections import defaultdict
 from typing import Any
+from ..data.loading import variationNames
+from .histograms import normalizeVarName
 
 import attrs
 
@@ -78,17 +80,28 @@ class SystematicNameMap:
                 return rule.apply(detail), direction
 
         logger.warning(f"No rule for variation '{raw_variation}', using raw name")
-        from .histograms import normalizeVarName
 
         return normalizeVarName(raw_variation)
 
 
 DEFAULT_RULES = [
     SystematicNameRule("bjetshapesf", "CMS_btag", syst_class="btag"),
-    SystematicNameRule("jes", "CMS_scale_j", strip_detail_prefix="jesRegrouped_", syst_class="jet_energy_scale"),
-    SystematicNameRule("jer", "CMS_res_j", strip_detail_prefix="JER", syst_class="jet_energy_resolution"),
+    SystematicNameRule(
+        "jes",
+        "CMS_scale_j",
+        strip_detail_prefix="jesRegrouped_",
+        syst_class="jet_energy_scale",
+    ),
+    SystematicNameRule(
+        "jer",
+        "CMS_res_j",
+        strip_detail_prefix="JER",
+        syst_class="jet_energy_resolution",
+    ),
     SystematicNameRule("pusf", "CMS_pileup", syst_class="pileup"),
-    SystematicNameRule("l1prefiring", "CMS_L1Prefiring", syst_class="other_experimental"),
+    SystematicNameRule(
+        "l1prefiring", "CMS_L1Prefiring", syst_class="other_experimental"
+    ),
     SystematicNameRule("triggereff", "CMS_trigger", syst_class="other_experimental"),
     SystematicNameRule("puid", "CMS_puid", syst_class="jet_efficiency"),
 ]
@@ -108,7 +121,7 @@ class RateSystematic:
     def appliesTo(self, process_label: str, metadata: dict) -> bool:
         if self.era_scope is None:
             return True
-        era = metadata.get("era", "")
+        era = metadata["era"]["name"]
         return era in self.era_scope
 
 
@@ -125,7 +138,6 @@ def collectShapeSystematics(
         hist_renames: dict mapping (process_label -> {raw_variation -> cms_hist_suffix})
             Used by exportCombineData to name histograms correctly.
     """
-    from ..data.loading import variationNames
 
     nuisance_map: dict[str, dict[str, str]] = defaultdict(dict)
     hist_renames: dict[str, dict[str, str]] = defaultdict(dict)
@@ -161,7 +173,6 @@ def resolveRateSystematics(
     signal_labels: list[str],
     signal_metadata: dict[str, dict],
 ) -> list[dict]:
-    """Resolve rate systematics into Systematic-compatible dicts."""
     entries = []
     for rs in rate_systematics:
         values = {}

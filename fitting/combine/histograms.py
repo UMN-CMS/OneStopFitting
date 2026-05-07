@@ -84,6 +84,9 @@ def exportCombineData(
 
     histograms["background"] = background_hist
 
+    year = state.background_metadata["era"]["name"]
+    postfix = f"_{year}" if year else ""
+
     variations = computeEigenvariations(
         pred_mean_masked, pred_cov_masked, threshold_fraction=eigenvar_threshold
     )
@@ -92,8 +95,8 @@ def exportCombineData(
         idx = var["index"]
         up = np.asarray(var["up"])
         down = np.asarray(var["down"])
-        histograms[f"background_gpr_eigen{idx}Up"] = (up, linear_edges)
-        histograms[f"background_gpr_eigen{idx}Down"] = (down, linear_edges)
+        histograms[f"background_gpr_eigen{idx}{postfix}Up"] = (up, linear_edges)
+        histograms[f"background_gpr_eigen{idx}{postfix}Down"] = (down, linear_edges)
 
     for lbl, sig_hist_entry in state.signal_hists.items():
         rename_map = hist_renames.get(lbl, {}) if hist_renames else {}
@@ -115,11 +118,7 @@ def exportCombineData(
                     )
                 else:
                     base, direction = normalizeVarName(var_name)
-                    name = (
-                        f"{lbl}_{base}{direction}"
-                        if direction
-                        else f"{lbl}_{base}"
-                    )
+                    name = f"{lbl}_{base}{direction}" if direction else f"{lbl}_{base}"
                     histograms[name] = (np.asarray(full_sig), linear_edges)
         else:
             sig_binned = state.signals[lbl]
@@ -137,4 +136,3 @@ def exportCombineData(
     logger.info(f"Exported {len(histograms)} histograms to {output_path}")
 
     return len(variations)
-
