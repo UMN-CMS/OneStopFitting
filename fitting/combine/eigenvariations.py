@@ -24,11 +24,13 @@ def computeEigenvariations(
     variations = []
     for i in range(n_vars):
         variation_vec = scaled_vecs[:, i]
+        # max_disp = jnp.maximum(pred_mean, 0.0)
+        # clipped_var = jnp.clip(variation_vec, -max_disp, max_disp)
         variations.append(
             {
                 "nominal": pred_mean,
-                "up": jnp.maximum(pred_mean + variation_vec, 0.0),
-                "down": jnp.maximum(pred_mean - variation_vec, 0.0),
+                "up": pred_mean + variation_vec,
+                "down": pred_mean - variation_vec,
                 "eigenvalue": eigenvalues[i],
                 "index": i,
             }
