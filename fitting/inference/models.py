@@ -13,7 +13,7 @@ import gpjax.parameters as gpp
 
 from .kernels import (
     KernelConfig,
-    NNKernelConfig,
+    NNWarpingKernelConfig,
     MCEnsembleKernel,
     RBFConfig,
     Matern32Config,
@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 
 @attrs.define
 class GPModelConfig(ABC):
-    kernel: KernelConfig = attrs.Factory(NNKernelConfig)
+    kernel: KernelConfig = attrs.Factory(NNWarpingKernelConfig)
     likelihood: LikelihoodConfig = attrs.Factory(FixedGaussianNoiseConfig)
     mean_function: MeanFunctionConfig = attrs.Factory(ZeroMeanConfig)
 
@@ -272,7 +272,7 @@ class MultiFidelityGPConfig(GPModelConfig):
     mc_num_iters: int = 150
     mc_lr: float = 0.01
 
-    residual_kernel: KernelConfig = attrs.Factory(lambda: NNKernelConfig())
+    residual_kernel: KernelConfig = attrs.Factory(lambda: NNWarpingKernelConfig())
 
     learn_rho: bool = True
     learn_tilt: bool = False
