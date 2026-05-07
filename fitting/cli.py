@@ -12,6 +12,7 @@ from .inference.optimization import (
 )
 from typing import TYPE_CHECKING
 from .pipeline import PipelineStep
+import attrs
 
 if TYPE_CHECKING:
     from .data.windowing import WindowConfig
@@ -139,7 +140,7 @@ def main(verbose: bool) -> None:
 )
 @click.option("--num-iters", type=int, default=None, help="Training iterations.")
 @click.option("--lr", type=float, default=0.01, help="Learning rate.")
-@click.option("--seed", type=int, default=0xBEEFBEEF, help="RNG seed.")
+@click.option("--seed", type=int, default=None, help="RNG seed.")
 @click.option(
     "--window-type",
     type=str,
@@ -264,7 +265,8 @@ def run(
             raw["output_dir_format"] = str(output)
         if injection_rate is not None:
             raw["injection_rate"] = injection_rate
-
+        if seed is not None:
+            raw["rng_seed"] = seed
         if num_iters is not None:
             raw["optimization"]["num_iters"] = num_iters
         if lr is not None:
@@ -1010,7 +1012,7 @@ def resolveOutput(
     output_format: str,
 ) -> None:
     from .pipeline import PipelineConfig, loadData
-    import attrs
+    import attr
     import yaml
 
     signal_path_val = None
