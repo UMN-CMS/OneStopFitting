@@ -401,15 +401,15 @@ class NNWarpingKernelConfig(KernelConfig):
         if rngs is None:
             raise ValueError("NNKernelConfig requires rngs for network initialization")
         base_kernel = self.base_kernel_config.buildKernel(ndim, rngs=rngs, **kwargs)
-        forward_linear = Network(
-            rngs=rngs,
-            input_dim=self.input_dim,
-            output_dim=self.output_dim,
-            shape=self.hidden_shapes,
-            activation_name=self.activation,
-            weight_prior=self.weight_prior,
-            bias_prior=self.bias_prior,
-        )
+        # forward_linear = Network(
+        #     rngs=rngs,
+        #     input_dim=self.input_dim,
+        #     output_dim=self.output_dim,
+        #     shape=self.hidden_shapes,
+        #     activation_name=self.activation,
+        #     weight_prior=self.weight_prior,
+        #     bias_prior=self.bias_prior,
+        # )
 
         forward_linear = AxisDecoupledNetwork(
             rngs=rngs,
@@ -418,8 +418,6 @@ class NNWarpingKernelConfig(KernelConfig):
             shape=self.hidden_shapes,
             activation_name=self.activation,
         )
-        nnx.display(forward_linear)
-        breakpoint()
         return DeepWarpingKernel(
             base_kernel=base_kernel,
             network=forward_linear,
