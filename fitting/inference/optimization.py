@@ -46,6 +46,80 @@ class OptimizerType(enum.Enum):
 
 
 @attrs.define
+class ScheduleConfig(ABC):
+    @abstractmethod
+    def build(self, base_lr: float, num_iters: int) -> float | Callable: ...
+
+
+@attrs.define
+class ConstantScheduleConfig(ScheduleConfig):
+    def build(self, base_lr: float, num_iters: int) -> float | Callable:
+        return base_lr
+
+
+@attrs.define
+class ExponentialScheduleConfig(ScheduleConfig):
+    gamma: float = 0.9
+    step: int | None = None
+
+    def build(self, base_lr: float, num_iters: int) -> float | Callable:
+        return optax.exponential_decay(
+            init_value=base_lr,
+            transition_steps=self.step or num_iters,
+            decay_rate=self.gamma,
+        )
+
+
+@attrs.define
+class CosineScheduleConfig(ScheduleConfig):
+    step: int | None = None
+
+    def build(self, base_lr: float, num_iters: int) -> float | Callable:
+        return optax.cosine_decay_schedule(
+            init_value=base_lr,
+            decay_steps=self.step or num_iters,
+        )
+
+
+@attrs.define
+class WarmupCosineScheduleConfig(ScheduleConfig):
+    warmup_steps: int = 0
+    step: int | None = None
+
+    def build(self, base_lr: float, num_iters: int) -> float | Callable:
+        return optax.warmup_cosine_decay_schedule(
+            init_value=0.0,
+            peak_value=base_lr,
+            warmup_steps=self.warmup_steps,
+            decay_steps=self.step or num_iters,
+        )
+
+
+@attrs.define
+class SGDRScheduleConfig(ScheduleConfig):
+    init_period: int = 50
+    multiplier: int = 1
+    num_cycles: int = 3
+    warmup_steps: int = 50
+
+    def build(self, base_lr: float, num_iters: int) -> float | Callable:
+        cosine_kwargs = []
+        current_period = self.init_period
+        for _ in range(self.num_cycles):
+            print(current_period)
+            cosine_kwargs.append(
+                {
+                    "init_value": base_lr,
+                    "decay_steps": current_period,
+                    "peak_value": base_lr,
+                    "warmup_steps": self.warmup_steps,
+                }
+            )
+            current_period *= self.multiplier
+        return optax.sgdr_schedule(cosine_kwargs)
+
+
+@attrs.define
 class MCMCConfig:
     num_samples: int = 500
     num_warmup: int = 200
@@ -221,12 +295,14 @@ class BlindedChi2Config(SelectionStrategy):
             transform,
             rng_key=rng_key,
         )
-        
+
         mask = None
         if blind_mask is not None:
             mask = ~blind_mask
 
-        return chi2PerBin(test_data.Y.ravel(), pred_mean.ravel(), test_data.V.ravel(), mask=mask)
+        return chi2PerBin(
+            test_data.Y.ravel(), pred_mean.ravel(), test_data.V.ravel(), mask=mask
+        )
 
 
 @attrs.define
@@ -333,26 +409,19 @@ class OptimizationConfig:
     log_interval: int = 50
     weight_decay: float = 1e-4
 
-    lr_schedule_gamma: float | None = None
-    lr_schedule_step: int | None = None
+    schedule: ScheduleConfig = attrs.Factory(ConstantScheduleConfig)
     restart: RestartConfig | None = None
 
 
 def _buildOptimizer(config: OptimizationConfig) -> optax.GradientTransformation:
+    schedule = config.schedule.build(config.lr, config.num_iters)
+
+    logger.info(f"Learning rate schedule: {config.schedule}")
     base_opt = {
         OptimizerType.ADAM: optax.adam,
         OptimizerType.ADAMW: optax.adamw,
         OptimizerType.SGD: optax.sgd,
-    }[config.optimizer](learning_rate=config.lr)  # , weight_decay=config.weight_decay)
-
-    if config.lr_schedule_gamma is not None:
-        step = config.lr_schedule_step or config.num_iters
-        schedule = optax.exponential_decay(
-            init_value=config.lr,
-            transition_steps=step,
-            decay_rate=config.lr_schedule_gamma,
-        )
-        base_opt = optax.chain(optax.scale_by_schedule(schedule), base_opt)
+    }[config.optimizer](learning_rate=schedule)
 
     return base_opt
 
