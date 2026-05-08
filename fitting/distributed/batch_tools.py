@@ -36,7 +36,6 @@ def generateBatchSubmit(
     subdir_format: str,
     venv_path: str | None,
     container: str | None,
-    combine_cmds: list[str] | None,
     rates: list[float] | None,
     rebin: list[int] | None,
     min_counts: list[float] | None,
@@ -50,7 +49,6 @@ def generateBatchSubmit(
         compressNeededFiles,
         makeRunFitScript,
         makeSubmitScript,
-        getCombineCommand,
     )
 
     container = (
@@ -85,7 +83,6 @@ def generateBatchSubmit(
             subdir_format=subdir_format,
             venv_path=venv_path,
             container=container,
-            combine_cmds=combine_cmds,
             num_toys=num_toys,
             multi_signal=multi_signal,
         )
@@ -170,17 +167,11 @@ def generateBatchSubmit(
 
     venv_activate_path = Path(Path(venv_path).name) / "bin" / "activate"
 
-    expanded_cmds = []
-    if combine_cmds:
-        for cmd in combine_cmds:
-            expanded_cmds.append(getCombineCommand(cmd))
-
     run_fit_script = makeRunFitScript(
         venv_activate_path=str(venv_activate_path),
         output_dir=output_dir,
         files_to_unzip=transfer_files,
         container=container,
-        combine_cmds=expanded_cmds,
     )
 
     transfer_files.append(run_fit_script)
