@@ -476,7 +476,7 @@ def gather(inputs: tuple[str, ...], output: Path):
     "-f",
     "--formats",
     multiple=True,
-    default=("png",),
+    default=("pdf",),
     show_default=True,
     help="Image formats to write (repeatable), e.g. --formats png --formats pdf.",
 )

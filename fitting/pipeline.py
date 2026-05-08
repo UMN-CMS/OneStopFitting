@@ -88,7 +88,7 @@ class PipelineConfig:
     optimization: OptimizationConfig = attrs.Factory(OptimizationConfig)
     combine: CombineConfig = attrs.Factory(CombineConfig)
     output_dir_format: str = "output"
-    image_formats: list[str] = attrs.Factory(lambda: ["png"])
+    image_formats: list[str] = attrs.Factory(lambda: ["pdf"])
     metadata: dict[str, Any] = attrs.Factory(dict)
 
     @property

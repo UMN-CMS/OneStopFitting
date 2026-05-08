@@ -195,13 +195,32 @@ def buildPdfFromLatex(
     keep_build: bool,
     keep_tex: bool,
 ) -> None:
-    output_pdf = Path(output_pdf)
+    output_pdf = Path(output_pdf).resolve()
     output_pdf.parent.mkdir(parents=True, exist_ok=True)
-    build_dir = output_pdf.parent / "_latex_build"
+    build_dir = (output_pdf.parent / "_latex_build").resolve()
     build_dir.mkdir(parents=True, exist_ok=True)
 
     tex_path = build_dir / "point_report.tex"
     tex_path.write_text(latex_source)
+
+    if shutil.which(latex_engine) is None:
+        script_path = build_dir / "build_report.sh"
+        script_content = f"""#!/bin/bash
+set -e
+export TEXMFOUTPUT="{build_dir}"
+for i in {{1..2}}; do
+    {latex_engine} -interaction=nonstopmode -halt-on-error -output-directory "{build_dir}" "{tex_path}"
+done
+cp "{build_dir}/point_report.pdf" "{output_pdf}"
+echo "Built PDF: {output_pdf}"
+"""
+        script_path.write_text(script_content)
+        script_path.chmod(0o755)
+        logger.warning(
+            f"LaTeX engine '{latex_engine}' not found. Skipping PDF build. "
+            f"A bash script to build the PDF manually has been created at {script_path}"
+        )
+        return
 
     cmd = [
         latex_engine,
