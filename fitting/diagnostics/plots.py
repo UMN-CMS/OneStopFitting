@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 
-from typing import Any
+from typing import Any, Callable
 
 from ..core.data import BinnedData
 from .plots_1d import (
@@ -22,22 +22,25 @@ def makeSmoothingPlots(
     smoothed_data: BinnedData,
     original_data: BinnedData,
     pred_mean: jnp.ndarray,
+    plot_saver: Callable,
     pred_cov: jnp.ndarray | None = None,
-) -> dict[str, tuple]:
+) -> None:
     """Generate plots comparing smoothed background to original."""
     ndim = original_data.ndim
     if ndim == 1:
-        return makeSmoothingPlots1D(
+        makeSmoothingPlots1D(
             smoothed_data=smoothed_data,
             original_data=original_data,
             pred_mean=pred_mean,
+            plot_saver=plot_saver,
             pred_cov=pred_cov,
         )
     else:
-        return makeSmoothingPlots2D(
+        makeSmoothingPlots2D(
             smoothed_data=smoothed_data,
             original_data=original_data,
             pred_mean=pred_mean,
+            plot_saver=plot_saver,
             pred_cov=pred_cov,
         )
 
@@ -45,19 +48,22 @@ def makeSmoothingPlots(
 def makePosteriorPredictivePlots(
     ppc_results: dict[str, Any],
     test_data: BinnedData,
+    plot_saver: Callable,
     blind_mask: jnp.ndarray | None = None,
-) -> dict[str, tuple]:
+) -> None:
     ndim = test_data.ndim
     if ndim == 1:
-        return makePosteriorPredictivePlots1D(
+        makePosteriorPredictivePlots1D(
             ppc_results=ppc_results,
             test_data=test_data,
+            plot_saver=plot_saver,
             blind_mask=blind_mask,
         )
     else:
-        return makePosteriorPredictivePlots2D(
+        makePosteriorPredictivePlots2D(
             ppc_results=ppc_results,
             test_data=test_data,
+            plot_saver=plot_saver,
             blind_mask=blind_mask,
         )
 
@@ -66,6 +72,7 @@ def makeDiagnosticPlots(
     pred_mean: jnp.ndarray,
     pred_var: jnp.ndarray,
     test_data: BinnedData,
+    plot_saver: Callable,
     train_data: BinnedData | None = None,
     blind_mask: jnp.ndarray | None = None,
     signal_data: BinnedData | dict[str, BinnedData] | None = None,
@@ -74,14 +81,15 @@ def makeDiagnosticPlots(
     kernel: Any | None = None,
     transform: Any | None = None,
     pred_cov: jnp.ndarray | None = None,
-) -> dict[str, tuple]:
+) -> None:
     ndim = test_data.ndim
 
     if ndim == 1:
-        plots = makeDiagnosticPlots1D(
+        makeDiagnosticPlots1D(
             pred_mean=pred_mean,
             pred_var=pred_var,
             test_data=test_data,
+            plot_saver=plot_saver,
             blind_mask=blind_mask,
             signal_data=signal_data,
             prior_mean=prior_mean,
@@ -89,10 +97,11 @@ def makeDiagnosticPlots(
             transform=transform,
         )
     elif ndim == 2:
-        plots = makeDiagnosticPlots2D(
+        makeDiagnosticPlots2D(
             pred_mean=pred_mean,
             pred_var=pred_var,
             test_data=test_data,
+            plot_saver=plot_saver,
             train_data=train_data,
             blind_mask=blind_mask,
             signal_data=signal_data,
@@ -109,14 +118,13 @@ def makeDiagnosticPlots(
         )
 
     if ndim == 2:
-        plots.update(
-            makeSlicePlots2D(
-                pred_mean=pred_mean,
-                pred_var=pred_var,
-                test_data=test_data,
-                blind_mask=blind_mask,
-                signal_data=signal_data,
-            )
+        makeSlicePlots2D(
+            pred_mean=pred_mean,
+            pred_var=pred_var,
+            test_data=test_data,
+            plot_saver=plot_saver,
+            blind_mask=blind_mask,
+            signal_data=signal_data,
         )
 
     if kernel is not None:
@@ -141,17 +149,19 @@ def makeDiagnosticPlots(
         findNNKernels(kernel)
 
         for i, nnk in enumerate(nn_kernels):
-            suffix = f"_{i}" if len(nn_kernels) > 1 else ""
             if ndim == 1:
-                nk_plots = plotNNTransformation1D(
-                    nnk, test_data, transform=transform, blind_mask=blind_mask
+                plotNNTransformation1D(
+                    nnk,
+                    test_data,
+                    plot_saver=plot_saver,
+                    transform=transform,
+                    blind_mask=blind_mask,
                 )
             else:
-                nk_plots = plotNNTransformation2D(
-                    nnk, test_data, transform=transform, blind_mask=blind_mask
+                plotNNTransformation2D(
+                    nnk,
+                    test_data,
+                    plot_saver=plot_saver,
+                    transform=transform,
+                    blind_mask=blind_mask,
                 )
-
-            for name, fig_ax in nk_plots.items():
-                plots[f"{name}{suffix}"] = fig_ax
-
-    return plots

@@ -495,15 +495,28 @@ def saveFigVariants(
                 f"{base_path.stem}{text_suffix}"
             ).with_suffix(ext)
             fig.savefig(variant_path, **save_kwargs)
+            logger.info(f"Saved figure to {variant_path}")
+
+
+def getPlotSaver(save_dir, all_meta, formats=("pdf",), **save_kwargs):
+    save_dir = Path(save_dir)
+    save_dir.mkdir(parents=True, exist_ok=True)
+
+    def saver(name, fig, ax=None):
+        out = save_dir / name
+        if ax is None:
+            if fig.axes:
+                ax = fig.axes[0]
+        if isinstance(ax, (np.ndarray, list, tuple)):
+            ax = ax[0]
+        saveFigVariants(fig, ax, out, all_meta, formats=formats, **save_kwargs)
+        plt.close(fig)
+
+    return saver
 
 
 def savePlots(plots: dict[str, tuple], save_dir, all_meta, formats=("pdf",)):
-    save_dir = Path(save_dir)
-    save_dir.mkdir(parents=True, exist_ok=True)
+    saver = getPlotSaver(save_dir, all_meta, formats=formats)
     for name, (fig, ax) in plots.items():
-        out = save_dir / name
-        if isinstance(ax, (np.ndarray, list, tuple)):
-            ax = ax[0]
-        saveFigVariants(fig, ax, out, all_meta)
-        plt.close(fig)
+        saver(name, fig, ax)
     logger.info(f"Saved {len(plots)} to directory {save_dir}")

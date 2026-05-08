@@ -8,7 +8,7 @@ from jax import random
 import json
 
 from ..core.data import AnalysisState, BinnedData
-from ..diagnostics.plot_utils import savePlots
+from ..diagnostics.plot_utils import getPlotSaver
 from ..diagnostics.plots import makeDiagnosticPlots, makePosteriorPredictivePlots
 from ..inference.prediction import getPriorMeanInRealSpace
 from gpjax.variational_families import VariationalGaussian
@@ -60,7 +60,12 @@ def generatePlots(state: AnalysisState, rng_key: jax.Array) -> None:
     if isinstance(posterior, VariationalGaussian):
         posterior = posterior.posterior
 
-    plots = makeDiagnosticPlots(
+    plot_dir = state.getRealOutPath() / "diagnostics"
+    plot_saver = getPlotSaver(
+        plot_dir, [state.metadata], formats=state.config.image_formats
+    )
+
+    makeDiagnosticPlots(
         pred_mean=state.pred_mean,
         pred_var=pred_var,
         test_data=state.test_data,
@@ -72,18 +77,16 @@ def generatePlots(state: AnalysisState, rng_key: jax.Array) -> None:
         kernel=posterior.prior.kernel,
         transform=state.transform,
         pred_cov=state.pred_cov,
+        plot_saver=plot_saver,
     )
 
     if state.ppc_results is not None:
-        ppc_plots = makePosteriorPredictivePlots(
+        makePosteriorPredictivePlots(
             ppc_results=state.ppc_results,
             test_data=state.test_data,
             blind_mask=state.blind_mask,
+            plot_saver=plot_saver,
         )
-        plots.update(ppc_plots)
-
-    plot_dir = state.getRealOutPath() / "diagnostics"
-    savePlots(plots, plot_dir, [state.metadata], formats=state.config.image_formats)
     with open(plot_dir / "ALL.json", "w") as f:
         json.dump(limitedSummary(state), f)
     logger.info(f"Pipeline complete. Plots saved to {plot_dir}")

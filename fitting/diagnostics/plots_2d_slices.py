@@ -11,6 +11,8 @@ from matplotlib.patches import FancyBboxPatch
 from ..core.data import BinnedData
 from .metrics import pullDistribution
 from .plot_utils import plotBinnedData, plotBlinding2D
+from typing import Callable
+
 
 logger = logging.getLogger(__name__)
 
@@ -164,7 +166,7 @@ def _makeSliceSummaryPlot(
         label=r"$\pm\sigma_{pred}$",
     )
 
-    bin_width = (X[-1] - X[0]) / len(X)
+    bin_width = (X[-1] - X[0]) / len(X) if len(X) > 1 else 1.0
 
     if extra_draw_funcs is not None:
         for draw_func in extra_draw_funcs:
@@ -207,17 +209,18 @@ def _makeSliceSummaryPlot(
     ratio_ax.axhline(-1, ls="-.", color="gray", alpha=0.3)
     ratio_ax.set_ylabel("Pull")
 
-    if len(X) > 1:
-        ratio_ax.bar(
-            x=X,
-            bottom=np.nan_to_num(-pred_std / np.sqrt(obs_V), nan=0),
-            height=np.nan_to_num(2 * pred_std / np.sqrt(obs_V), nan=0),
-            width=X[1] - X[0],
-            color="orange",
-            alpha=0.3,
-            fill=True,
-            lw=0,
-        )
+    with np.errstate(divide="ignore", invalid="ignore"):
+        if len(X) > 1:
+            ratio_ax.bar(
+                x=X,
+                bottom=np.nan_to_num(-pred_std / np.sqrt(obs_V), nan=0),
+                height=np.nan_to_num(2 * pred_std / np.sqrt(obs_V), nan=0),
+                width=X[1] - X[0],
+                color="orange",
+                alpha=0.3,
+                fill=True,
+                lw=0,
+            )
 
     if slice_data.axis_names:
         ratio_ax.set_xlabel(slice_data.axis_names[0])
@@ -232,36 +235,39 @@ def _makeSliceSummaryPlot(
         borderpad=0.1,
     )
 
-    fig.canvas.draw()
-    leg_bb = leg.get_window_extent().transformed(ax.transAxes.inverted())
-    txt = ax.text(
-        leg_bb.x1,
-        leg_bb.y0 - 0.05,
-        slice_title,
-        transform=ax.transAxes,
-        fontsize="small",
-        fontstyle="italic",
-        ha="right",
-        va="top",
-        color="0.3",
-    )
+    with np.errstate(over="ignore"):
+        fig.canvas.draw()
+        leg_bb = leg.get_window_extent().transformed(ax.transAxes.inverted())
+
+        txt = ax.text(
+            leg_bb.x1,
+            leg_bb.y0 - 0.05,
+            slice_title,
+            transform=ax.transAxes,
+            fontsize="small",
+            fontstyle="italic",
+            ha="right",
+            va="top",
+            color="0.3",
+        )
 
     if minimap_context is not None:
-        fig.canvas.draw()
-        txt_bb = txt.get_window_extent().transformed(ax.transAxes.inverted())
-        anchor = (txt_bb.x1, txt_bb.y0 - 0.02)
-        _drawSliceMinimap(
-            ax,
-            fig,
-            edges_2d=minimap_context["edges"],
-            X_2d=minimap_context["X"],
-            blind_mask_2d=minimap_context["blind_mask"],
-            slice_axis=minimap_context["slice_axis"],
-            slice_value=minimap_context["slice_value"],
-            anchor_top_right=anchor,
-            axis_names=minimap_context.get("axis_names"),
-            background_Y=minimap_context.get("background_Y"),
-        )
+        with np.errstate(over="ignore"):
+            fig.canvas.draw()
+            txt_bb = txt.get_window_extent().transformed(ax.transAxes.inverted())
+            anchor = (txt_bb.x1, txt_bb.y0 - 0.02)
+            _drawSliceMinimap(
+                ax,
+                fig,
+                edges_2d=minimap_context["edges"],
+                X_2d=minimap_context["X"],
+                blind_mask_2d=minimap_context["blind_mask"],
+                slice_axis=minimap_context["slice_axis"],
+                slice_value=minimap_context["slice_value"],
+                anchor_top_right=anchor,
+                axis_names=minimap_context.get("axis_names"),
+                background_Y=minimap_context.get("background_Y"),
+            )
 
     return (fig, ax, ratio_ax)
 
@@ -288,13 +294,14 @@ def _makeOneSlice(
     slice_axis: int,
     val: float,
     axis_name: str,
+    plot_saver: Callable,
+    key: str,
     signal_data: BinnedData | dict[str, BinnedData] | None = None,
     show_minimap: bool = True,
-    minimap_context: dict | None = None,
     minimap_background: bool = True,
     extra_draw_funcs=None,
     injected_signal_rate: float | None = None,
-) -> tuple:
+) -> None:
     X = np.asarray(test_data.X)
     perp = _perpendicularAxis(slice_axis)
     mask = _sliceMask(X, slice_axis, val)
@@ -333,7 +340,7 @@ def _makeOneSlice(
             "background_Y": np.asarray(test_data.Y) if minimap_background else None,
         }
 
-    return _makeSliceSummaryPlot(
+    fig, ax, ratio_ax = _makeSliceSummaryPlot(
         slice_data=slice_data,
         slice_pred_mean=slice_pred_mean,
         slice_pred_var=slice_pred_var,
@@ -345,26 +352,29 @@ def _makeOneSlice(
         injected_signal_rate=injected_signal_rate,
     )
 
+    with np.errstate(over="ignore"):
+        plot_saver(key, fig, ax)
+
 
 def makeSlicePlots2D(
     pred_mean: jnp.ndarray,
     pred_var: jnp.ndarray,
     test_data: BinnedData,
+    plot_saver: Callable,
     blind_mask: jnp.ndarray | None = None,
     signal_data: BinnedData | dict[str, BinnedData] | None = None,
     *,
     show_minimap: bool = True,
     minimap_background: bool = True,
-) -> dict[str, tuple]:
+) -> None:
     if test_data.ndim != 2:
-        logger.warning("makeSlicePlots2D called on non-2D data; returning empty dict")
-        return {}
+        logger.warning("makeSlicePlots2D called on non-2D data; returning None")
+        return
 
     if blind_mask is None or not np.any(np.asarray(blind_mask)):
         logger.info("makeSlicePlots2D: no blind mask provided; skipping slice plots")
-        return {}
+        return
 
-    ret: dict[str, tuple] = {}
     X = np.asarray(test_data.X)
 
     for slice_axis in (0, 1):
@@ -378,8 +388,8 @@ def makeSlicePlots2D(
         axis_key = fixAxisKey(axis_name)
         for val in window_vals:
             val_key = f"{val:0.2g}".replace(".", "p").replace("-", "m")
-            key = f"slice_{axis_key}_{val_key}"
-            ret["slice/" + key] = _makeOneSlice(
+            key = f"slice/{fixAxisKey(axis_name)}_{val_key}"
+            _makeOneSlice(
                 pred_mean=pred_mean,
                 pred_var=pred_var,
                 test_data=test_data,
@@ -387,12 +397,12 @@ def makeSlicePlots2D(
                 slice_axis=slice_axis,
                 val=val,
                 axis_name=axis_name,
+                plot_saver=plot_saver,
+                key=key,
                 signal_data=signal_data,
                 show_minimap=show_minimap,
                 minimap_background=minimap_background,
-            )[:2]
-
-    return ret
+            )
 
 
 def build2D(blind_mask: jnp.ndarray, test_data: BinnedData, blinded_data: BinnedData):
@@ -416,6 +426,7 @@ def makePostCombineSlice(
     pred_mean: jnp.ndarray,
     pred_var: jnp.ndarray,
     test_data: BinnedData,
+    plot_saver: Callable,
     blind_mask: jnp.ndarray | None = None,
     signal_data: BinnedData | dict[str, BinnedData] | None = None,
     post_fit_signal: BinnedData | None = None,
@@ -425,16 +436,15 @@ def makePostCombineSlice(
     *,
     show_minimap: bool = True,
     minimap_background: bool = True,
-) -> dict[str, tuple]:
+) -> None:
     if test_data.ndim != 2:
-        logger.warning("makeSlicePlots2D called on non-2D data; returning empty dict")
-        return {}
+        logger.warning("makeSlicePlots2D called on non-2D data; returning None")
+        return
 
     if blind_mask is None or not np.any(np.asarray(blind_mask)):
         logger.info("makeSlicePlots2D: no blind mask provided; skipping slice plots")
-        return {}
+        return
 
-    ret: dict[str, tuple] = {}
     X = np.asarray(test_data.X)
     post_fit_signal_full = build2D(blind_mask, test_data, post_fit_signal)
     post_fit_background_full = build2D(blind_mask, test_data, post_fit_background)
@@ -450,7 +460,7 @@ def makePostCombineSlice(
         axis_key = fixAxisKey(axis_name)
         for val in window_vals:
             val_key = f"{val:0.2g}".replace(".", "p").replace("-", "m")
-            key = f"slice_{axis_key}_{val_key}"
+            key = f"slice/{fixAxisKey(axis_name)}_{val_key}"
             perp = _perpendicularAxis(slice_axis)
             mask = _sliceMask(X, slice_axis, val)
             slice_post_fit_signal = _buildSliceBinnedData(
@@ -485,7 +495,7 @@ def makePostCombineSlice(
                     ls="--",
                 )
 
-            ret["slice/" + key] = _makeOneSlice(
+            _makeOneSlice(
                 pred_mean=pred_mean,
                 pred_var=pred_var,
                 test_data=test_data,
@@ -493,11 +503,11 @@ def makePostCombineSlice(
                 slice_axis=slice_axis,
                 val=val,
                 axis_name=axis_name,
+                plot_saver=plot_saver,
+                key=key,
                 signal_data=signal_data,
                 show_minimap=show_minimap,
                 minimap_background=minimap_background,
                 extra_draw_funcs=[postFitDrawFunc],
                 injected_signal_rate=injected_signal,
-            )[:2]
-
-    return ret
+            )

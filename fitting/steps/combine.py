@@ -5,7 +5,6 @@ import os
 from pathlib import Path
 
 import jax
-from ..combine.systematics import collectShapeSystematics, DEFAULT_NAME_MAP
 import jax.numpy as jnp
 from jinja2 import Environment, FileSystemLoader
 
@@ -18,7 +17,7 @@ from ..combine.systematics import (
     resolveRateSystematics,
     DEFAULT_NAME_MAP,
 )
-from ..diagnostics.plot_utils import savePlots
+from ..diagnostics.plot_utils import getPlotSaver
 from ..diagnostics.combine import (
     plotCombineInputs,
     verifyEigenvariations,
@@ -182,16 +181,17 @@ def prepareCombine(state: AnalysisState, rng_key: jax.Array) -> None:
 
     # Combine Diagnostics
     diag_dir = state.getRealOutPath() / "diagnostics" / "combine"
-    plots = {}
     diag_dir.mkdir(parents=True, exist_ok=True)
-    plots.update(plotCombineInputs(state))
-    plots.update(
-        verifyEigenvariations(
-            state, eigenvar_threshold=state.config.combine.eigenvar_threshold
-        )
+    
+    plot_saver = getPlotSaver(diag_dir, [state.metadata])
+
+    plotCombineInputs(state, plot_saver=plot_saver)
+    verifyEigenvariations(
+        state, 
+        plot_saver=plot_saver,
+        eigenvar_threshold=state.config.combine.eigenvar_threshold
     )
-    plots.update(visualizeEigenvariations(state))
-    savePlots(plots, diag_dir, [state.metadata])
+    visualizeEigenvariations(state, plot_saver=plot_saver)
 
     logger.info(f"Combine preparation complete. Datacard: {datacard_path}")
 

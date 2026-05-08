@@ -55,13 +55,10 @@ class MultiFidelityResidualKernel(gpk.AbstractKernel):
 
     def _computeMcCovariance(self, x: jax.Array, y: jax.Array) -> jax.Array:
         """Compute frozen MC posterior covariance between x and y."""
-        # K_post(x, y) = K(x, y) - K(x, X) (L Lᵀ)⁻¹ K(X, y)
-        #             = K(x, y) - (L⁻¹ K(X, x))ᵀ (L⁻¹ K(X, y))
         K_xy = self.mc_kernel.cross_covariance(x, y)
         K_Xx = self.mc_kernel.cross_covariance(self._mc_dataset.X, x)
         K_Xy = self.mc_kernel.cross_covariance(self._mc_dataset.X, y)
 
-        # L is lower triangular Cholesky of (Kxx + σ²I)
         Lx = jax.scipy.linalg.solve_triangular(self._mc_L, K_Xx, lower=True)
         Ly = jax.scipy.linalg.solve_triangular(self._mc_L, K_Xy, lower=True)
 
@@ -72,7 +69,6 @@ class MultiFidelityResidualKernel(gpk.AbstractKernel):
         residual_val = self.residual_kernel(x, y)
         if self.rho is not None:
             rho = self.rho[...]
-            # Point-wise MC variance
             x_r = x.reshape(1, -1)
             y_r = y.reshape(1, -1)
             mc_cov = self._computeMcCovariance(x_r, y_r)

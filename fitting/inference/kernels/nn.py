@@ -33,7 +33,7 @@ class Network(nnx.Module):
         def wrap_layer(layer: nnx.Linear):
             if weight_prior:
                 prior = weight_prior.buildPrior()
-                val = layer.kernel.value
+                val = layer.kernel[...]
                 if val.ndim > 0 and val.size > 1:
                     if prior.batch_shape == () and prior.event_shape == ():
                         prior = prior.expand(val.shape).to_event(val.ndim)
@@ -41,7 +41,7 @@ class Network(nnx.Module):
 
             if bias_prior:
                 prior = bias_prior.buildPrior()
-                val = layer.bias.value
+                val = layer.bias[...]
                 if val.ndim > 0 and val.size > 1:
                     if prior.batch_shape == () and prior.event_shape == ():
                         prior = prior.expand(val.shape).to_event(val.ndim)
@@ -78,7 +78,7 @@ class Network(nnx.Module):
         for layer in self.layers:
             z = activation(layer(z))
         delta = self.out_layer(z)
-        return x + self.scale.value * delta  # per-dim gated residual
+        return x + self.scale[...] * delta  # per-dim gated residual
 
 
 class AxisDecoupledNetwork(nnx.Module):
@@ -112,7 +112,7 @@ class AxisDecoupledNetwork(nnx.Module):
         for layer in self.layers:
             h = activation(layer(h))
         delta = self.out_layer(h)
-        return x + self.scale.value * delta
+        return x + self.scale[...] * delta
 
 
 @attrs.define(slots=False)
@@ -166,6 +166,16 @@ class NNWarpingKernelConfig(KernelConfig):
         if rngs is None:
             raise ValueError("NNKernelConfig requires rngs for network initialization")
         base_kernel = self.base_kernel_config.buildKernel(ndim, rngs=rngs, **kwargs)
+
+        # forward_linear = Network(
+        #     rngs=rngs,
+        #     input_dim=self.input_dim,
+        #     output_dim=self.output_dim,
+        #     shape=self.hidden_shapes,
+        #     activation_name=self.activation,
+        #     weight_prior=self.weight_prior,
+        #     bias_prior=self.bias_prior,
+        # )
 
         forward_linear = AxisDecoupledNetwork(
             rngs=rngs,

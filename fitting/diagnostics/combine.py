@@ -10,13 +10,16 @@ from ..core.data import AnalysisState
 from .plot_utils import plotRaw
 from ..inference.prediction import computeScaledEigenvectors
 import jax
+from typing import Callable
 
 logger = logging.getLogger(__name__)
 
 
 def plotCombineInputs(
-    state: AnalysisState, use_window_mask: bool = True
-) -> dict[str, tuple]:
+    state: AnalysisState,
+    plot_saver: Callable,
+    use_window_mask: bool = True,
+) -> None:
 
     if use_window_mask:
         blind_mask = state.blind_mask
@@ -46,16 +49,16 @@ def plotCombineInputs(
     ax.set_ylabel("Counts")
     ax.legend()
 
-    plots = {"combine_inputs_1d": (fig, ax)}
-    return plots
+    plot_saver("combine_inputs_1d", fig, ax)
 
 
 def verifyEigenvariations(
     state: AnalysisState,
+    plot_saver: Callable,
     n_samples: int = 1000,
     use_window_mask: bool = True,
     eigenvar_threshold=0.001,
-) -> dict[str, tuple]:
+) -> None:
     """Verify that eigenvariations faithfully emulate the true MVN."""
 
     if use_window_mask:
@@ -89,7 +92,7 @@ def verifyEigenvariations(
         ax.set_xlabel("Bin Index")
         ax.set_ylabel("Bin Index")
 
-    plots = {"covariance_reconstruction": (fig, axes)}
+    plot_saver("covariance_reconstruction", fig, axes)
 
     rng = jax.random.PRNGKey(42)
 
@@ -114,7 +117,7 @@ def verifyEigenvariations(
     ax2.set_title(f"Variance across bins ($N={n_samples}$ samples)")
     ax2.legend()
 
-    plots["variance_comparison_sampled"] = (fig2, ax2)
+    plot_saver("variance_comparison_sampled", fig2, ax2)
 
     frob_norm_diff = np.linalg.norm(diff)
     frob_norm_true = np.linalg.norm(pred_cov)
@@ -123,13 +126,12 @@ def verifyEigenvariations(
     logger.info(f"Verified eigenvariations: Relative Frobenius Error = {rel_error:.4g}")
     logger.info(f"Number of eigenvariations kept: {scaled_vecs.shape[1]}")
 
-    return plots
-
 
 def visualizeEigenvariations(
     state: AnalysisState,
+    plot_saver: Callable,
     use_window_mask: bool = True,
-) -> dict[str, tuple]:
+) -> None:
     """Verify that eigenvariations faithfully emulate the true MVN."""
 
     if use_window_mask:
@@ -144,11 +146,8 @@ def visualizeEigenvariations(
     )
 
     base = state.test_data
-    plots = {}
     for i in range(scaled_vecs.shape[1]):
         ev = scaled_vecs[:, i]
         fig, ax = plt.subplots()
         plotRaw(ax, base.edges, base.X[blind_mask], ev)
-        plots[f"eigenvar_{i}"] = (fig, ax)
-
-    return plots
+        plot_saver(f"eigenvar_{i}", fig, ax)

@@ -4,7 +4,7 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
-from typing import Any
+from typing import Any, Callable
 
 from ..core.data import BinnedData
 from .metrics import pullDistribution, totalPullDistribution
@@ -14,11 +14,10 @@ from .plot_utils import addAxesToHist, plotBinnedData, plotPPD
 def makePosteriorPredictivePlots1D(
     ppc_results: dict[str, Any],
     test_data: BinnedData,
+    plot_saver: Callable,
     blind_mask: jnp.ndarray | None = None,
     prefix: str = "ppc",
-) -> dict[str, tuple]:
-    ret = {}
-
+) -> None:
     X = np.asarray(test_data.X).ravel()
 
     fig, ax = plt.subplots(layout="tight")
@@ -45,7 +44,7 @@ def makePosteriorPredictivePlots1D(
         ax.set_xlabel(test_data.axis_names[0])
     ax.set_ylabel("Counts")
     ax.legend()
-    ret["{prefix}_percentile_bands"] = (fig, ax)
+    plot_saver(f"{prefix}_percentile_bands", fig, ax)
 
     test_stats = ppc_results["test_stats"]
     for stat_name, regions in test_stats.items():
@@ -61,22 +60,20 @@ def makePosteriorPredictivePlots1D(
                 pvalue=pvalue,
             )
 
-            ret[f"{prefix}_dist_{stat_name}_{region_name}"] = (fig, ax)
-
-    return ret
+            plot_saver(f"{prefix}_dist_{stat_name}_{region_name}", fig, ax)
 
 
 def makeDiagnosticPlots1D(
     pred_mean: jnp.ndarray,
     pred_var: jnp.ndarray,
     test_data: BinnedData,
+    plot_saver: Callable,
     blind_mask: jnp.ndarray | None = None,
     signal_data: BinnedData | None = None,
     prior_mean: jnp.ndarray | None = None,
     pred_cov: jnp.ndarray | None = None,
     transform: Any | None = None,
-) -> dict[str, tuple]:
-    ret = {}
+) -> None:
     X = np.asarray(test_data.X).ravel()
     obs_V = np.asarray(test_data.V)
     pred_Y = np.asarray(pred_mean)
@@ -92,8 +89,11 @@ def makeDiagnosticPlots1D(
     plotBinnedData(ax, test_data, histtype="errorbar", color="black", label="Observed")
 
     if signal_data is not None:
-        sigs = signal_data if isinstance(signal_data, dict) else {"injected": signal_data}
+        sigs = (
+            signal_data if isinstance(signal_data, dict) else {"injected": signal_data}
+        )
         import matplotlib.cm as cm
+
         colors = cm.get_cmap("Reds")(np.linspace(0.4, 1.0, len(sigs)))
         for (lbl, sig), color in zip(sigs.items(), colors):
             plotBinnedData(
@@ -101,7 +101,9 @@ def makeDiagnosticPlots1D(
                 sig,
                 histtype="step",
                 color=color,
-                label=f"Injected Signal: {lbl}" if lbl != "injected" else "Injected Signal",
+                label=f"Injected Signal: {lbl}"
+                if lbl != "injected"
+                else "Injected Signal",
             )
 
     ax.plot(X, pred_Y, color="orange", label="GP Prediction")
@@ -146,7 +148,7 @@ def makeDiagnosticPlots1D(
         x=X,
         bottom=np.nan_to_num(-pred_std / np.sqrt(obs_V), nan=0),
         height=np.nan_to_num(2 * pred_std / np.sqrt(obs_V), nan=0),
-        width=X[1] - X[0],
+        width=X[1] - X[0] if len(X) > 1 else 1.0,
         color="orange",
         alpha=0.3,
         fill=True,
@@ -154,11 +156,12 @@ def makeDiagnosticPlots1D(
     )
 
     ax.legend()
+    plot_saver("summary_plot", fig, ax)
 
-    ret["summary_plot"] = (fig, ax)
-
-    ret.update(_plotPullHistograms(pulls, blind_mask, tag="stat"))
-    ret.update(_plotPullHistograms(total_pulls, blind_mask, tag="total"))
+    _plotPullHistograms(pulls, plot_saver=plot_saver, blind_mask=blind_mask, tag="stat")
+    _plotPullHistograms(
+        total_pulls, plot_saver=plot_saver, blind_mask=blind_mask, tag="total"
+    )
 
     if transform is not None:
         norm_data = transform.applyToBinnedData(test_data)
@@ -169,8 +172,14 @@ def makeDiagnosticPlots1D(
 
         fig_t, ax_t = plt.subplots(layout="tight")
         addAxesToHist(ax_t, size=1.5)
-        plotBinnedData(ax_t, norm_data, histtype="errorbar", color="black", label="Transformed Observed")
-        
+        plotBinnedData(
+            ax_t,
+            norm_data,
+            histtype="errorbar",
+            color="black",
+            label="Transformed Observed",
+        )
+
         ax_t.plot(norm_X, norm_pred_mean, color="orange", label="Transformed GP Mean")
         ax_t.fill_between(
             norm_X,
@@ -180,7 +189,7 @@ def makeDiagnosticPlots1D(
             alpha=0.3,
             label=r"$\pm\sigma_{pred}$",
         )
-        
+
         if blind_mask is not None and np.any(blind_mask):
             np_mask = np.asarray(blind_mask)
             w_min = norm_X[np_mask].min()
@@ -188,8 +197,10 @@ def makeDiagnosticPlots1D(
             for boundary in [w_min, w_max]:
                 ax_t.axvline(boundary, ls="--", color="gray", alpha=0.5)
                 ax_t.bottom_axes[0].axvline(boundary, ls="--", color="gray", alpha=0.5)
-        
-        norm_pulls = (np.asarray(norm_data.Y) - np.asarray(norm_pred_mean)) / np.sqrt(np.asarray(norm_data.V))
+
+        norm_pulls = (np.asarray(norm_data.Y) - np.asarray(norm_pred_mean)) / np.sqrt(
+            np.asarray(norm_data.V)
+        )
         ratio_ax_t = ax_t.bottom_axes[0]
         ratio_ax_t.set_ylim(-3, 3)
         ratio_ax_t.plot(norm_X, norm_pulls, "o", color="black", markersize=2)
@@ -200,39 +211,43 @@ def makeDiagnosticPlots1D(
         ratio_ax_t.set_ylabel("Pull")
         if test_data.axis_names:
             ratio_ax_t.set_xlabel(f"Transformed {test_data.axis_names[0]}")
-            
+
         ratio_ax_t.bar(
             x=norm_X,
-            bottom=np.nan_to_num(-norm_pred_std / np.sqrt(np.asarray(norm_data.V)), nan=0),
-            height=np.nan_to_num(2 * norm_pred_std / np.sqrt(np.asarray(norm_data.V)), nan=0),
-            width=norm_X[1] - norm_X[0] if len(norm_X)>1 else 1.0,
+            bottom=np.nan_to_num(
+                -norm_pred_std / np.sqrt(np.asarray(norm_data.V)), nan=0
+            ),
+            height=np.nan_to_num(
+                2 * norm_pred_std / np.sqrt(np.asarray(norm_data.V)), nan=0
+            ),
+            width=norm_X[1] - norm_X[0] if len(norm_X) > 1 else 1.0,
             color="orange",
             alpha=0.3,
             fill=True,
             lw=0,
         )
-        
+
         ax_t.legend()
-        ret["transformed_summary_plot"] = (fig_t, ax_t)
+        plot_saver("transformed_summary_plot", fig_t, ax_t)
 
         fig_v, ax_v = plt.subplots(layout="tight")
-        ax_v.plot(norm_X, np.asarray(norm_data.V), 'ko', label="Transformed Variances")
-        ax_v.plot(norm_X, norm_pred_var, color="orange", label="Transformed GP Variances")
+        ax_v.plot(norm_X, np.asarray(norm_data.V), "ko", label="Transformed Variances")
+        ax_v.plot(
+            norm_X, norm_pred_var, color="orange", label="Transformed GP Variances"
+        )
         ax_v.set_ylabel("Variance")
         if test_data.axis_names:
             ax_v.set_xlabel(f"Transformed {test_data.axis_names[0]}")
         ax_v.legend()
-        ret["transformed_variances"] = (fig_v, ax_v)
-
-    return ret
+        plot_saver("transformed_variances", fig_v, ax_v)
 
 
 def _plotPullHistograms(
     pulls: np.ndarray,
+    plot_saver: Callable,
     blind_mask: jnp.ndarray | None = None,
     tag: str = "stat",
-) -> dict[str, tuple]:
-    ret = {}
+) -> None:
     bins = np.linspace(-5.0, 5.0, 21)
     gauss_x = np.linspace(-5, 5, 100)
     gauss_y = np.exp(-(gauss_x**2) / 2) / np.sqrt(2 * np.pi)
@@ -248,7 +263,7 @@ def _plotPullHistograms(
     )
     ax.set_ylabel("Density")
     ax.legend()
-    ret[f"global_{tag}_pulls_hist"] = (fig, ax)
+    plot_saver(f"global_{tag}_pulls_hist", fig, ax)
 
     if blind_mask is not None and np.any(np.asarray(blind_mask)):
         np_mask = np.asarray(blind_mask)
@@ -262,21 +277,20 @@ def _plotPullHistograms(
         )
         ax.set_ylabel("Density")
         ax.legend()
-        ret[f"window_{tag}_pulls_hist"] = (fig, ax)
-
-    return ret
+        plot_saver(f"window_{tag}_pulls_hist", fig, ax)
 
 
 def plotNNTransformation1D(
     kernel: Any,
     test_data: BinnedData,
+    plot_saver: Callable,
     transform: Any | None = None,
     blind_mask: jnp.ndarray | None = None,
-) -> dict[str, tuple]:
+) -> None:
     from ..inference.kernels import DeepWarpingKernel, DeepTransformKernel
 
     if not isinstance(kernel, (DeepWarpingKernel, DeepTransformKernel)):
-        return {}
+        return
 
     X = np.asarray(test_data.X).ravel()
 
@@ -305,16 +319,16 @@ def plotNNTransformation1D(
     if blind_mask is not None:
         ax.legend()
 
-    return {"nn_transform_1d": (fig, ax)}
+    plot_saver("nn_transform_1d", fig, ax)
 
 
 def makeSmoothingPlots1D(
     smoothed_data: BinnedData,
     original_data: BinnedData,
     pred_mean: jnp.ndarray,
+    plot_saver: Callable,
     pred_cov: jnp.ndarray | None = None,
-) -> dict[str, tuple]:
-    ret = {}
+) -> None:
     X = np.asarray(original_data.X).ravel()
     pred_Y = np.asarray(pred_mean)
 
@@ -368,7 +382,7 @@ def makeSmoothingPlots1D(
     if original_data.axis_names:
         ratio_ax.set_xlabel(original_data.axis_names[0])
 
-    ret["smoothing_summary_1d"] = (fig, ax)
+    plot_saver("smoothing_summary_1d", fig, ax)
 
     # 2. GPR Uncertainties
     if pred_cov is not None:
@@ -383,7 +397,7 @@ def makeSmoothingPlots1D(
         if original_data.axis_names:
             ax.set_xlabel(original_data.axis_names[0])
         ax.set_ylabel(r"$\sigma$")
-        ret["smoothing_sigma_1d"] = (fig, ax)
+        plot_saver("smoothing_sigma_1d", fig, ax)
 
         # Relative Uncertainty (Sigma/Mu)
         fig, ax = plt.subplots(layout="tight")
@@ -393,6 +407,4 @@ def makeSmoothingPlots1D(
         if original_data.axis_names:
             ax.set_xlabel(original_data.axis_names[0])
         ax.set_ylabel(r"$\sigma / \mu$")
-        ret["smoothing_rel_unc_1d"] = (fig, ax)
-
-    return ret
+        plot_saver("smoothing_rel_unc_1d", fig, ax)

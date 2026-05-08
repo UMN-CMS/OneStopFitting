@@ -6,7 +6,12 @@ from .likelihoods import LikelihoodConfig
 from .priors import PriorConfig
 from .means import MeanFunctionConfig
 from .models import GPModelConfig
-from .optimization import RestartStrategy, RestartCriterion, SelectionStrategy
+from .optimization import (
+    RestartStrategy,
+    RestartCriterion,
+    SelectionStrategy,
+    ScheduleConfig,
+)
 
 # Register all inference hierarchies for polymorphic serialization
 # ORDER MATTERS: leaf configs (kernel, likelihood, mean) must register
@@ -19,3 +24,4 @@ registerHierarchy(GPModelConfig)
 registerHierarchy(RestartStrategy)
 registerHierarchy(RestartCriterion)
 registerHierarchy(SelectionStrategy)
+registerHierarchy(ScheduleConfig)
