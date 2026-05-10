@@ -49,6 +49,7 @@ def generateBatchSubmit(
         compressNeededFiles,
         makeRunFitScript,
         makeSubmitScript,
+        makeLocalTestScript,
     )
 
     container = (
@@ -183,6 +184,14 @@ def generateBatchSubmit(
         executable=run_fit_script,
         container=container,
     )
+
+    if all_jobs:
+        makeLocalTestScript(
+            all_jobs[0],
+            transfer_files,
+            run_fit_script,
+            output_dir,
+        )
 
     logger.info(
         f"Batch generation complete. Single submit file at {submit_file_path} "

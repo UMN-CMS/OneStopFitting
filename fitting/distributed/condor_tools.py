@@ -116,6 +116,41 @@ queue transfer_signals, signals, background, output_dir_format, config from (
 )
 """
 
+LOCAL_TEST_TEMPLATE = """#!/usr/bin/env bash
+# GENERATED AUTOMATICALLY on {{ timestamp }}
+# This script simulates a single HTCondor job execution locally.
+
+TEST_DIR=$(mktemp -d -t condor_test_XXXXXX)
+echo "Setting up local test in $TEST_DIR"
+
+echo "Copying transfer files..."
+{% for tf in transfer_files %}
+if [[ "{{ tf }}" == "{{ executable }}" ]]; then
+    cp "{{ tf }}" "$TEST_DIR/"
+else
+    cp --parents -r "{{ tf }}" "$TEST_DIR/"
+fi
+{% endfor %}
+
+echo "Copying job-specific files..."
+{% for f in job_files %}
+cp --parents -r "{{ f }}" "$TEST_DIR/"
+{% endfor %}
+
+cd "$TEST_DIR"
+
+export _CONDOR_SCRATCH_DIR="$PWD"
+export CONFIG="{{ job.config }}"
+export SIGNALS="{{ job.signals }}"
+export BACKGROUND="{{ job.background }}"
+export OUTPUT_DIR_FORMAT="{{ job.output_dir }}"
+
+echo "Running run_fit.sh..."
+./run_fit.sh
+
+echo "Test complete! Check $TEST_DIR for outputs."
+"""
+
 
 def compressNeededFiles(
     venv_path,
@@ -293,6 +328,39 @@ def makeSubmitScript(
     return submit_path
 
 
+def makeLocalTestScript(
+    job: dict,
+    transfer_files: list[str],
+    executable: str,
+    output_dir: Path,
+):
+    env = Environment()
+    template = env.from_string(LOCAL_TEST_TEMPLATE)
+
+    job_files = []
+    if "transfer_signals" in job:
+        job_files.extend([s.strip() for s in job["transfer_signals"].split(",")])
+    if "background" in job:
+        job_files.append(job["background"])
+
+    test_content = template.render(
+        transfer_files=transfer_files,
+        job_files=job_files,
+        job=job,
+        executable=executable,
+        timestamp=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    )
+
+    test_path = output_dir / "local_test.sh"
+    with open(test_path, "w") as f:
+        f.write(test_content)
+    os.chmod(test_path, 0o755)
+
+    logger.info(f"Local test script generated at {test_path}")
+
+    return test_path
+
+
 def generateCondorSubmit(
     signal_pattern: tuple[str, ...],
     background_pattern: str,
@@ -371,6 +439,14 @@ def generateCondorSubmit(
         run_fit_script,
         container=container,
     )
+
+    if jobs:
+        makeLocalTestScript(
+            jobs[0],
+            transfer_files,
+            run_fit_script,
+            output_dir,
+        )
 
     logger.info(
         f"Condor submit file generated at {submit_file_path} with {len(jobs)} jobs."
