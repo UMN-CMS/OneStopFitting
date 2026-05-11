@@ -438,8 +438,10 @@ def gather(inputs: tuple[str, ...], output: Path):
         readSummary,
     )
 
+    logger.info(f"Gathering summaries from {inputs} into {output}")
     summary_files = iterSummaryFiles(inputs)
     to_save = [readSummary(x) for x in summary_files]
+    logger.info(f"Total summaries: {len(to_save)}")
     output.parent.mkdir(exist_ok=True, parents=True)
     with open(output, "w") as f:
         json.dump(to_save, f, indent=2)
@@ -860,18 +862,13 @@ def makebatch(
     multi_signal: bool,
 ) -> None:
     """Generate HTCondor submit files for a batch of jobs with parameter sweeps."""
+    import yaml
     from .distributed.batch_tools import generateBatchSubmit
 
     parsed_extra = {}
     for p in extra_params:
         key, vals = p.split("=", 1)
-        try:
-            parsed_extra[key] = [int(x.strip()) for x in vals.split(",")]
-        except ValueError:
-            try:
-                parsed_extra[key] = [float(x.strip()) for x in vals.split(",")]
-            except ValueError:
-                parsed_extra[key] = [x.strip() for x in vals.split(",")]
+        parsed_extra[key] = yaml.safe_load("[" + vals + "]")
 
     generateBatchSubmit(
         signal_pattern=signal,
@@ -883,7 +880,6 @@ def makebatch(
         subdir_format=subdir_format,
         venv_path=venv,
         container=container,
-        combine_cmds=list(combine_cmds),
         rates=parse_csv_float(rates) if rates else None,
         rebin=parse_csv_int(rebin) if rebin else None,
         min_counts=parse_csv_float(min_counts) if min_counts else None,
@@ -1012,7 +1008,6 @@ def resolveOutput(
     output_format: str,
 ) -> None:
     from .pipeline import PipelineConfig, loadData
-    import attr
     import yaml
 
     signal_path_val = None
@@ -1048,7 +1043,8 @@ def resolveOutput(
 def harvest(summaries: tuple[Path, ...], diagnose: bool) -> None:
     from .combine.extract import extractCombineResults
     import json
-    from .diagnostics.plot_utils import savePlots
+    from .diagnostics.plot_utils import getPlotSaver
+    import jax.numpy as jnp
 
     if not summaries:
         logger.warning("No summary files provided to harvest.")
@@ -1075,6 +1071,9 @@ def harvest(summaries: tuple[Path, ...], diagnose: bool) -> None:
             summary_data = json.load(f)
 
         summary_data["combine"] = json_extracted
+        saver = getPlotSaver(plot_dir, [summary_data["metadata"]])
+        for k, v in plots.items():
+            saver(k, *v)
 
         if diagnose and "histograms" in extracted:
             from .core.serialization import load
@@ -1093,8 +1092,6 @@ def harvest(summaries: tuple[Path, ...], diagnose: bool) -> None:
                 hist_out = diag_dir / "combine_histograms.pklz4"
                 with lz4.frame.open(hist_out, "wb") as f_out:
                     pickle.dump(extracted["histograms"], f_out)
-                diag_plots = {}
-                import jax.numpy as jnp
 
                 pred_var = (
                     jnp.diag(state.pred_cov)
@@ -1103,26 +1100,22 @@ def harvest(summaries: tuple[Path, ...], diagnose: bool) -> None:
                 )
                 sig = state.injection_rate * state.signal
                 for channel, ch_hists in extracted["histograms"].items():
-                    diag_plots.update(
-                        makePostCombineSlice(
-                            pred_mean=state.pred_mean,
-                            pred_var=pred_var,
-                            test_data=state.test_data,
-                            blind_mask=state.blind_mask,
-                            signal_data=sig,
-                            post_fit_signal=ch_hists["fit_s_total_signal"],
-                            post_fit_background=ch_hists["fit_s_total_background"],
-                            injected_signal=state.injection_rate,
-                            extracted_signal=extracted["tree_fit_sb"]["r"],
-                        )
+                    makePostCombineSlice(
+                        pred_mean=state.pred_mean,
+                        pred_var=pred_var,
+                        test_data=state.test_data,
+                        plot_saver=saver,
+                        blind_mask=state.blind_mask,
+                        signal_data=sig,
+                        post_fit_signal=ch_hists["fit_s_total_signal"],
+                        post_fit_background=ch_hists["fit_s_total_background"],
+                        injected_signal=state.injection_rate,
+                        extracted_signal=extracted["tree_fit_sb"]["r"],
                     )
-                plots.update(diag_plots)
             else:
                 logger.warning(
                     f"Analysis state not found at {state_path}, skipping slice plots."
                 )
-
-        savePlots(plots, plot_dir, [summary_data["metadata"]])
         with open(summary_path, "w") as f:
             json.dump(summary_data, f, indent=2)
 
@@ -1130,7 +1123,6 @@ def harvest(summaries: tuple[Path, ...], diagnose: bool) -> None:
             f"Updated {summary_path} with {list(extracted.keys())} and generated plots."
         )
         success_count += 1
-
     logger.info(
         f"Harvest complete. Updated {success_count}/{len(summaries)} summary files."
     )
