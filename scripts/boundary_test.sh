@@ -1,0 +1,20 @@
+python3 -m fitting makecondor \
+    --signal 'export_complete_with_large/{year}/{pipeline}/signal*{year}*1000_800*/*.pklz4' \
+    --signal 'export_complete_with_large/{year}/{pipeline}/signal*{year}*1000_700*/*.pklz4' \
+    --signal 'export_complete_with_large/{year}/{pipeline}/signal*{year}*1000_600*/*.pklz4' \
+    --signal 'export_complete_with_large/{year}/{pipeline}/signal*{year}*1200_800*/*.pklz4' \
+    --signal 'export_complete_with_large/{year}/{pipeline}/signal*{year}*1200_900*/*.pklz4' \
+    --signal 'export_complete_with_large/{year}/{pipeline}/signal*{year}*1200_1000*/*.pklz4' \
+    --signal 'export_complete_with_large/{year}/{pipeline}/signal*{year}*1500_1000*/*.pklz4' \
+    --signal 'export_complete_with_large/{year}/{pipeline}/signal*{year}*1500_1100*/*.pklz4' \
+    --signal 'export_complete_with_large/{year}/{pipeline}/signal*{year}*1500_1200*/*.pklz4' \
+    --signal 'export_complete_with_large/{year}/{pipeline}/signal*{year}*1500_1200*/*.pklz4' \
+    --signal 'export_complete_with_large/{year}/{pipeline}/signal*{year}*2000_1200*/*.pklz4' \
+    --signal 'export_complete_with_large/{year}/{pipeline}/signal*{year}*2000_1300*/*.pklz4' \
+    --signal 'export_complete_with_large/{year}/{pipeline}/signal*{year}*2000_1400*/*.pklz4' \
+    --background 'smoothed_complete/{year}/{pipeline}/qcd_inclusive_2018/{reco_category}/{reco_category}_{toy_index}.pklz4' \
+    --years 2018 --pipelines Signal312 --pipelines Signal313 \
+    --output results/2026_04_20_boundary \
+    --config-pattern "resources/config_{reco_category}.yaml"  \
+    --subdir-format "{era.name}/{dataset_name}/{reco_category}/{window_spread}/{toy_index}" \
+    --num-toys 20

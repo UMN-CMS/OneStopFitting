@@ -166,7 +166,11 @@ def scanParametersForGroup(
 
 
 def selectBestParameters(
-    pipeline: str, category: str, group_results: dict, target_capture: float
+    pipeline: str,
+    category: str,
+    group_results: dict,
+    target_capture: float,
+    percentile: float = 0.95,
 ):
     best_params = None
     best_window_size = float("inf")
@@ -175,7 +179,7 @@ def selectBestParameters(
         if not results:
             continue
         cap_fracs = [r["capture_fraction"] for r in results]
-        p5_cap = np.percentile(cap_fracs, 5)
+        p5_cap = np.percentile(cap_fracs, int(100 * (1 - percentile)))
         median_cap = np.median(cap_fracs)
         min_cap = np.min(cap_fracs)
         mean_size = np.mean([r["window_size"] for r in results])
@@ -627,6 +631,12 @@ def generatePlots(
     default=0.0,
     help="Optional pre-smoothing of the signal histogram before significance calculation.",
 )
+@click.option(
+    "--percentile",
+    type=float,
+    default=0.95,
+    help="Percentile of the capture fraction to use for selecting the best parameters.",
+)
 def main(
     signal_base: Path,
     background_base: Path,
@@ -637,6 +647,7 @@ def main(
     resources_dir: Path,
     smooth_sigma: float,
     signal_smooth_sigma: float,
+    percentile: float,
 ):
     output.mkdir(parents=True, exist_ok=True)
 
@@ -678,7 +689,7 @@ def main(
         diagnostic_rows.extend(group_rows)
 
         best_params = selectBestParameters(
-            pipeline, category, group_results, target_capture
+            pipeline, category, group_results, target_capture, percentile=percentile
         )
 
         if best_params:
