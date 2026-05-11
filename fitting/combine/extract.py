@@ -222,8 +222,99 @@ def extractLikelihoodScan(std_file, froz_file) -> tuple[dict, dict]:
     return ret, plots
 
 
+def extractDiffNuisances(txt_file: Path) -> tuple[dict, dict]:
+    with open(txt_file) as f:
+        lines = f.readlines()
+
+    nuisances = []
+
+    for line in lines:
+        if (
+            line.startswith("name")
+            or line.startswith("diffNuisances")
+            or line.strip() == ""
+        ):
+            continue
+
+        parts = line.split()
+        if not parts:
+            continue
+        name = parts[0]
+        if name == "r":
+            continue
+
+        matches = re.findall(r"([-+]?\d*\.\d+)\s*\+/-\s*([-+]?\d*\.\d+)", line)
+        if len(matches) >= 3:
+            nuisances.append(
+                {
+                    "name": name,
+                    "pre_fit": float(matches[0][0]),
+                    "pre_err": float(matches[0][1]),
+                    "b_fit": float(matches[1][0]),
+                    "b_err": float(matches[1][1]),
+                    "s_fit": float(matches[2][0]),
+                    "s_err": float(matches[2][1]),
+                }
+            )
+
+    if not nuisances:
+        return {}, {}
+
+    ret = {"nuisance_pulls": nuisances}
+    plots = {}
+
+    nuisances.sort(key=lambda x: abs(x["b_fit"]), reverse=True)
+
+    N = min(len(nuisances), 40)
+    top_nuisances = nuisances[:N]
+
+    names = [n["name"] for n in top_nuisances]
+    b_fits = [n["b_fit"] for n in top_nuisances]
+    b_errs = [n["b_err"] for n in top_nuisances]
+
+    fig, ax = plt.subplots(figsize=(10, max(8, N * 0.25)))
+    y_pos = np.arange(len(names))
+    ax.errorbar(b_fits, y_pos, xerr=b_errs, fmt="o", color="black", capsize=3)
+    ax.axvline(0, color="gray", linestyle="--")
+    ax.fill_betweenx([-1, len(names)], -1, 1, color="green", alpha=0.2)
+    ax.fill_betweenx([-1, len(names)], -2, 2, color="yellow", alpha=0.2)
+    ax.set_yticks(y_pos)
+    ax.set_yticklabels(names)
+    ax.set_ylim(-1, len(names))
+    ax.set_xlabel("Pull (b-only fit)")
+    ax.set_title("Nuisance Parameter Pulls")
+    plots["nuisance_pulls"] = (fig, ax)
+
+    fig_tbl, ax_tbl = plt.subplots(figsize=(12, max(4, N * 0.4)))
+    ax_tbl.axis("off")
+
+    cell_text = []
+    for n in top_nuisances:
+        cell_text.append(
+            [
+                n["name"],
+                f"{n['pre_fit']:.2f} +/- {n['pre_err']:.2f}",
+                f"{n['b_fit']:.2f} +/- {n['b_err']:.2f}",
+                f"{n['s_fit']:.2f} +/- {n['s_err']:.2f}",
+            ]
+        )
+
+    table = ax_tbl.table(
+        cellText=cell_text,
+        colLabels=["Nuisance", "Pre-fit", "b-only fit", "s+b fit"],
+        loc="center",
+        cellLoc="center",
+    )
+    table.auto_set_font_size(False)
+    table.set_fontsize(10)
+    table.scale(1, 1.5)
+    plots["nuisance_table"] = (fig_tbl, ax_tbl)
+
+    return ret, plots
+
+
 EXTRACTORS: list[
-    tuple[tuple[re.Pattern] | re.Pattern, Callable[[uproot.TTree], dict]]
+    tuple[tuple[re.Pattern] | re.Pattern, Callable[[uproot.TTree | Path], dict]]
 ] = [
     (re.compile(r"fitDiagnosticsTest\.root"), extractFitDiagnostics),
     (re.compile(r"\.AsymptoticLimits\."), extractLimits),
@@ -243,6 +334,7 @@ EXTRACTORS: list[
         ),
         extractLikelihoodScan,
     ),
+    (re.compile(r"diff_nuisances\.txt"), extractDiffNuisances),
 ]
 
 
@@ -296,7 +388,7 @@ def extractCombineResults(combine_dir: Path) -> dict:
     merged_results = {}
     plots = {}
 
-    files = list(combine_dir.glob("*.root"))
+    files = list(combine_dir.glob("*.root")) + list(combine_dir.glob("*.txt"))
     for patterns, extractor in EXTRACTORS:
         patterns = patterns if isinstance(patterns, (list, tuple)) else [patterns]
         matched = []
@@ -325,10 +417,14 @@ def extractCombineResults(combine_dir: Path) -> dict:
         logger.info(f"Extracting results from {matched} using {extractor.__name__}")
         try:
             with ExitStack() as stack:
-                f = [
-                    stack.enter_context(uproot.open(m)) if m is not None else None
-                    for m in matched
-                ]
+                f = []
+                for m in matched:
+                    if m is None:
+                        f.append(None)
+                    elif m.suffix == ".root":
+                        f.append(stack.enter_context(uproot.open(m)))
+                    else:
+                        f.append(m)
                 extracted_data, extracted_plots = extractor(*f)
                 merged_results.update(extracted_data)
                 plots.update(extracted_plots)

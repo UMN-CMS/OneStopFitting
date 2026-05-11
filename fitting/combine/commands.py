@@ -58,7 +58,8 @@ class FitDiagnostics(CombineCommand):
         return [
             f"combine -M FitDiagnostics -d datacard.root"
             f" --saveShapes --saveNormalizations"
-            f" --rMin={ctx.r_min} --rMax={ctx.r_max}"
+            f" --rMin={ctx.r_min} --rMax={ctx.r_max}",
+            "python3 \\$CMSSW_BASE/src/HiggsAnalysis/CombinedLimit/test/diffNuisances.py fitDiagnosticsTest.root -a -A > diff_nuisances.txt",
         ]
 
 
