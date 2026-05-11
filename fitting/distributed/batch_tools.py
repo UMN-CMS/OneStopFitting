@@ -41,6 +41,7 @@ def generateBatchSubmit(
     min_counts: list[float] | None,
     injection_rates: list[float] | None,
     num_toys: int | None,
+    toy_offset: int = 0,
     extra_params: dict[str, list] | None = None,
     multi_signal: bool = False,
 ) -> None:
@@ -85,6 +86,7 @@ def generateBatchSubmit(
             venv_path=venv_path,
             container=container,
             num_toys=num_toys,
+            toy_offset=toy_offset,
             multi_signal=multi_signal,
         )
         return
@@ -112,7 +114,7 @@ def generateBatchSubmit(
                 pipelines=pipelines,
                 output_dir=str(output_dir / subdir_format),
                 config_pattern=str(config_base),
-                toy_index=t,
+                toy_index=t + toy_offset,
             )
         )
 

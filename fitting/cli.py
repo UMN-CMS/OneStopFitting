@@ -721,6 +721,7 @@ def aggregate(
 @click.option("--venv", type=str, help="Path to virtual environment to pack")
 @click.option("--container", type=str, help="Container image to use")
 @click.option("--num-toys", type=int, default=None, help="Number of toys to run over")
+@click.option("--toy-offset", type=int, default=0, help="Offset for toy index.")
 @click.option(
     "--combine-cmd",
     "combine_cmds",
@@ -744,6 +745,7 @@ def makecondor(
     venv: str | None,
     container: str | None,
     num_toys: int | None,
+    toy_offset: int,
     combine_cmds: tuple[str, ...],
     multi_signal: bool,
 ) -> None:
@@ -762,6 +764,7 @@ def makecondor(
         container=container,
         combine_cmds=list(combine_cmds),
         num_toys=num_toys,
+        toy_offset=toy_offset,
         multi_signal=multi_signal,
     )
 
@@ -829,6 +832,7 @@ def makecondor(
     help="Comma-separated injection rates (e.g., '0.0,1.0,10.0')",
 )
 @click.option("--num-toys", type=int, default=None, help="Number of toys to run over")
+@click.option("--toy-offset", type=int, default=0, help="Offset for toy index.")
 @click.option(
     "--param",
     "extra_params",
@@ -858,6 +862,7 @@ def makebatch(
     injection_rates: str | None,
     min_counts: str | None,
     num_toys: int | None,
+    toy_offset: int,
     extra_params: tuple[str, ...],
     multi_signal: bool,
 ) -> None:
@@ -885,6 +890,7 @@ def makebatch(
         min_counts=parse_csv_float(min_counts) if min_counts else None,
         injection_rates=parse_csv_float(injection_rates) if injection_rates else None,
         num_toys=num_toys,
+        toy_offset=toy_offset,
         extra_params=parsed_extra if parsed_extra else None,
         multi_signal=multi_signal,
     )

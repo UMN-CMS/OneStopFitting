@@ -372,6 +372,7 @@ def generateCondorSubmit(
     venv_path: str | None = None,
     container: str | None = None,
     num_toys: int | None = None,
+    toy_offset: int = 0,
     multi_signal: bool = False,
 ) -> None:
     container = (
@@ -395,7 +396,7 @@ def generateCondorSubmit(
                 pipelines,
                 str(output_dir / subdir_format),
                 config_pattern,
-                toy_index=t,
+                toy_index=t + toy_offset,
             )
         )
     if not jobs:
