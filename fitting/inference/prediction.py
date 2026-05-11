@@ -94,6 +94,7 @@ def fixCovarianceMatrix(cov: jnp.ndarray) -> jnp.ndarray:
 def computeScaledEigenvectors(
     cov: jnp.ndarray,
     threshold_fraction: float = 0.00,
+    signal_size: float | None = None,
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
     eigenvalues, eigenvectors = jnp.linalg.eigh(cov)
 
@@ -101,16 +102,31 @@ def computeScaledEigenvectors(
     eigenvalues = eigenvalues[idx]
     eigenvectors = eigenvectors[:, idx]
 
-    max_eval = eigenvalues[0]
-    mask = eigenvalues >= threshold_fraction * max_eval
+    if signal_size is not None and signal_size > 0.0:
+        threshold = threshold_fraction * signal_size
+        logger.info(
+            f"Clipping eigenvectors with scale threshold {threshold:.2e} "
+            f"(fraction {threshold_fraction} of signal size {signal_size:.2e})"
+        )
+        mask = jnp.sqrt(jnp.maximum(eigenvalues, 0.0)) >= threshold
+    else:
+        max_eval = eigenvalues[0]
+        threshold = threshold_fraction * max_eval
+        logger.info(
+            f"Clipping eigenvectors with eigenvalue threshold {threshold:.2e} "
+            f"(fraction {threshold_fraction} of max eigenvalue {max_eval:.2e})"
+        )
+        mask = eigenvalues >= threshold
+
+    n_total = len(eigenvalues)
     n_kept = int(jnp.sum(mask))
+    logger.info(f"Kept {n_kept}/{n_total} eigenvectors")
 
     eigenvalues = eigenvalues[:n_kept]
     eigenvectors = eigenvectors[:, :n_kept]
 
     scales = jnp.sqrt(jnp.maximum(eigenvalues, 0.0))
     scaled_vecs = eigenvectors * scales[None, :]
-
 
     return eigenvalues, scaled_vecs
 

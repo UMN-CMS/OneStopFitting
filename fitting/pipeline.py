@@ -52,7 +52,7 @@ class CombineConfig:
             "gof-saturated",
         ]
     )
-    eigenvar_threshold: float = 0.01
+    eigenvar_threshold: float = 0.1
     bg_rate_uncertainty: str = "none"
     combine_container: str = "/cvmfs/unpacked.cern.ch/gitlab-registry.cern.ch/cms-analysis/general/combine-container:latest"
     name_map: SystematicNameMap | None = None
@@ -90,6 +90,7 @@ class PipelineConfig:
     output_dir_format: str = "output"
     image_formats: list[str] = attrs.Factory(lambda: ["pdf"])
     metadata: dict[str, Any] = attrs.Factory(dict)
+    window_variance_inflation: float = 1.0
 
     @property
     def signalPaths(self) -> list[Path]:

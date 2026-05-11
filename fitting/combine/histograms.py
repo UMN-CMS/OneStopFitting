@@ -87,8 +87,14 @@ def exportCombineData(
     year = state.background_metadata["era"]["name"]
     postfix = f"_{year}" if year else ""
 
+    signal_size = 0.0
+    if state.signals:
+        for lbl, sig_binned in state.signals.items():
+            full_sig = doMask(sig_binned.Y)[blind_mask]
+            signal_size = max(signal_size, float(jnp.max(full_sig)))
+
     variations = computeEigenvariations(
-        pred_mean_masked, pred_cov_masked, threshold_fraction=eigenvar_threshold
+        pred_mean_masked, pred_cov_masked, threshold_fraction=eigenvar_threshold, signal_size=signal_size
     )
 
     for var in variations:

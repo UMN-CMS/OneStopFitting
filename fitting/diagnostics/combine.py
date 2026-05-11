@@ -66,10 +66,20 @@ def verifyEigenvariations(
     else:
         blind_mask = np.ones_like(state.test_data.Y, dtype=bool)
 
+    signal_size = 0.0
+    if state.signals:
+        for lbl, sig_binned in state.signals.items():
+            if state.domain_mask is not None:
+                full_sig = sig_binned.Y[state.domain_mask][blind_mask]
+            else:
+                full_sig = sig_binned.Y[blind_mask]
+            signal_size = max(signal_size, float(jnp.max(full_sig)))
+
     pred_cov = state.pred_cov[blind_mask, :][:, blind_mask]
     eigenvalues, scaled_vecs = computeScaledEigenvectors(
         pred_cov,
         threshold_fraction=eigenvar_threshold,
+        signal_size=signal_size,
     )
     recon_cov = scaled_vecs @ scaled_vecs.T
 
@@ -141,8 +151,17 @@ def visualizeEigenvariations(
 
     pred_cov = state.pred_cov[blind_mask, :][:, blind_mask]
 
+    signal_size = 0.0
+    if state.signals:
+        for lbl, sig_binned in state.signals.items():
+            if state.domain_mask is not None:
+                full_sig = sig_binned.Y[state.domain_mask][blind_mask]
+            else:
+                full_sig = sig_binned.Y[blind_mask]
+            signal_size = max(signal_size, float(jnp.max(full_sig)))
+
     eigenvalues, scaled_vecs = computeScaledEigenvectors(
-        pred_cov, threshold_fraction=state.config.combine.eigenvar_threshold
+        pred_cov, threshold_fraction=state.config.combine.eigenvar_threshold, signal_size=signal_size
     )
 
     base = state.test_data

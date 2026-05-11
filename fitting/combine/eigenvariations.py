@@ -9,6 +9,7 @@ def computeEigenvariations(
     pred_mean: jnp.ndarray,
     pred_cov: jnp.ndarray,
     threshold_fraction: float = 0.00,
+    signal_size: float | None = None,
 ) -> list[dict[str, jnp.ndarray]]:
     from ..inference.prediction import computeScaledEigenvectors
 
@@ -16,7 +17,7 @@ def computeEigenvariations(
         return []
 
     eigenvalues, scaled_vecs = computeScaledEigenvectors(
-        pred_cov, threshold_fraction=threshold_fraction
+        pred_cov, threshold_fraction=threshold_fraction, signal_size=signal_size
     )
 
     n_vars = scaled_vecs.shape[1]
