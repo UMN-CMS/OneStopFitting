@@ -31,6 +31,14 @@ def runDiagnostics(state: AnalysisState, rng_key: jax.Array) -> AnalysisState:
         rng_key=pred_key,
     )
 
+    inflation = state.config.window_variance_inflation
+    if inflation != 1.0 and state.blind_mask is not None:
+        diag_idx = jnp.arange(pred_cov.shape[0])
+        inflation_factors = jnp.where(state.blind_mask, inflation, 1.0)
+        logger.info(f"Inflating variance by factor {inflation} in blind regions.")
+
+        pred_cov = pred_cov.at[diag_idx, diag_idx].multiply(inflation_factors)
+
     pred_var = jnp.diag(pred_cov)
     state = attrs.evolve(state, pred_mean=pred_mean, pred_cov=pred_cov)
 
