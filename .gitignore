@@ -56,6 +56,13 @@ analyzer_resources/
 .inspect_cli_history
 oldpkl/
 old_fitting/
-results/
-exportedhistograms
 test*/
+smooth*/
+aggregate*/
+*export*/
+
+/studies/
+/notes/
+/results/
+/*exporte*/
+/*DELETE*/
