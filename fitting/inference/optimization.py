@@ -129,10 +129,10 @@ class MCMCConfig:
 
 @attrs.define
 class TwoStageConfig:
-    stage1_iters: int = 100
-    stage2_iters: int = 100
-    stage1_lr: float = 0.1
-    stage2_lr: float = 0.005
+    stage1_iters: int = 200
+    stage2_iters: int = 200
+    stage1_lr: float = 0.05
+    stage2_lr: float = 0.05
 
 
 @attrs.define
@@ -398,7 +398,7 @@ class RestartConfig:
 @attrs.define
 class OptimizationConfig:
     mode: InferenceMode = InferenceMode.OPTIMIZATION
-    lr: float = 0.1
+    lr: float = 0.01
     num_iters: int = 200
     optimizer: OptimizerType = OptimizerType.ADAM
     objective: ObjectiveType = ObjectiveType.MLL
@@ -827,7 +827,7 @@ def runHomoscedasticTwoStageFit(
 
     original_likelihood = likelihood
     flat_likelihood = gpjax.likelihoods.Gaussian(
-        num_datapoints=dataset.n, obs_stddev=jnp.array(1.0)
+        num_datapoints=dataset.n, obs_stddev=1e-4
     )
 
     stage1_posterior = posterior.prior * flat_likelihood

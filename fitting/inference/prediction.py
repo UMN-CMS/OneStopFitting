@@ -96,6 +96,10 @@ def computeScaledEigenvectors(
     threshold_fraction: float = 0.00,
     signal_size: float | None = None,
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
+
+    # TODO: Remove this
+    signal_size = None
+
     eigenvalues, eigenvectors = jnp.linalg.eigh(cov)
 
     idx = jnp.argsort(eigenvalues)[::-1]
