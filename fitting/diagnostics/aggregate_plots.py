@@ -79,6 +79,20 @@ class MultiPoint:
     metadata: dict | None = None
 
 
+def transformRToCoupling(value: Any, summary: dict[str, Any]) -> Any:
+    pre_scale = float(getByDotpath(summary, "config.signal_pre_scale"))
+    base_coupling = 0.1
+    used_coupling = base_coupling * np.sqrt(pre_scale)
+    if isinstance(value, (tuple, list)):
+        return type(value)(used_coupling * np.sqrt(v) for v in value)
+    return used_coupling * np.sqrt(value)
+
+
+transformRegistry = {
+    "r_to_coupling": transformRToCoupling,
+}
+
+
 def _handleOneSummary(
     points,
     summary,
@@ -87,6 +101,7 @@ def _handleOneSummary(
     group_by: list[str] | None = None,
     stop_dotpath: str = "metadata.other_data.stop_mass",
     chi_dotpath: str = "metadata.other_data.chargino_mass",
+    transform_name: str | None = None,
 ) -> dict[tuple[tuple[str, Any], ...], list[AggregatePoint]]:
     try:
         dotted = dict(dictToDot(summary))
@@ -105,6 +120,11 @@ def _handleOneSummary(
             value_raw = tuple(getByDotpath(summary, d) for d in metric_dotpath)
             value = value_raw[0] if len(value_raw) == 1 else value_raw
 
+        if transform_name:
+            if transform_name not in transformRegistry:
+                raise ValueError(f"Unknown transform '{transform_name}'")
+            value = transformRegistry[transform_name](value, summary)
+
         points[key].append(
             AggregatePoint(
                 mstop=mstop,
@@ -120,27 +140,31 @@ def _handleOneSummary(
 
 
 def collectPoints(
-    summary_files: Iterable[Path], *args, **kwargs
+    summary_files: Iterable[Path], *args, transform_name: str | None = None, **kwargs
 ) -> dict[tuple[tuple[str, Any], ...], list[AggregatePoint]]:
     points = defaultdict(list)
     for path in summary_files:
         summary = readSummary(path)
         if isinstance(summary, list):
             for s in summary:
-                _handleOneSummary(points, s, path, *args, **kwargs)
+                _handleOneSummary(
+                    points, s, path, *args, transform_name=transform_name, **kwargs
+                )
         else:
-            _handleOneSummary(points, summary, path, *args, **kwargs)
+            _handleOneSummary(
+                points, summary, path, *args, transform_name=transform_name, **kwargs
+            )
 
     return dict(points)
 
 
-def computeStatistics(values: list[float]) -> dict[str, float]:
+def computeStatistics(values: list[float], is_pvalue: bool = False) -> dict[str, Any]:
     if not values:
         return {}
 
     arr = np.array(values, dtype=float)
 
-    stats = {
+    stats: dict[str, Any] = {
         "mean": float(np.mean(arr)),
         "std": float(np.std(arr, ddof=1)),
         "min": float(np.min(arr)),
@@ -153,10 +177,34 @@ def computeStatistics(values: list[float]) -> dict[str, float]:
         "n": len(arr),
     }
 
+    if is_pvalue:
+        try:
+            from scipy.stats import kstest
+
+            ks_res = kstest(arr, "uniform")
+            stats["ks_pvalue_uniform"] = float(ks_res.pvalue)
+            stats["ks_stat_uniform"] = float(ks_res.statistic)
+
+            frac_below_half = float(np.mean(arr < 0.5))
+            stats["frac_below_half"] = frac_below_half
+
+            if ks_res.pvalue > 0.05:
+                verdict = "OK"
+            elif frac_below_half > 0.55:
+                verdict = "CONSERVATIVE"
+            elif frac_below_half < 0.45:
+                verdict = "DANGEROUS"
+            else:
+                verdict = "OK (marginal)"
+
+            stats["pvalue_skew_verdict"] = verdict
+        except Exception:
+            pass
+
     return stats
 
 
-def makeMulti(points):
+def makeMulti(points, is_pvalue: bool = False):
     grouped = defaultdict(list)
 
     for p in points:
@@ -168,7 +216,10 @@ def makeMulti(points):
         values = ([x.value for x in group],)
         statistics = {}
         try:
-            statistics = computeStatistics(values)
+            statistics = computeStatistics(
+                values[0] if isinstance(values[0], list) else values,
+                is_pvalue=is_pvalue,
+            )
         except Exception:
             pass
 
@@ -277,7 +328,10 @@ def makeAggregateSmoothPlot(
 
     fig, ax = plt.subplots()
     actual_norm = None
-    if "pvalue" in metric_name.lower() and cmap == "viridis":
+    if (
+        any(x in metric_name.lower() for x in ["pvalue", "p_value"])
+        and cmap == "viridis"
+    ):
         cmap = PVALUE_CMAP
         actual_norm = PVALUE_NORM
         if cmin is None:
@@ -467,3 +521,105 @@ def makeAggregateScatterPlot(
     n = dotFormat(name_format, metric_name=metric_name, **params)
     n = n.replace(".", "p")
     return {n: (fig, ax)}
+
+
+def makeAggregateReport(
+    points: list[MultiPoint],
+    *,
+    metric_name: str,
+    output_base: Path,
+    formats: tuple[str, ...] = ("pdf",),
+    latex_engine: str = "pdflatex",
+    keep_build: bool = False,
+    keep_tex: bool = False,
+) -> None:
+    from .point_report import renderLatex, buildPdfFromLatex
+    import csv
+
+    if not points:
+        logger.warning(
+            f"No points provided to generate aggregate report for {metric_name}."
+        )
+        return
+
+    sorted_points = sorted(points, key=lambda p: (p.mstop, p.mchi))
+
+    if "pdf" in formats:
+        template_dir = Path(__file__).parent / "templates"
+        context = {
+            "metric_name": metric_name,
+            "points": sorted_points,
+        }
+        latex_source = renderLatex(
+            template_dir=template_dir,
+            template_name="aggregate_report.tex.j2",
+            context=context,
+        )
+        output_pdf = output_base.with_suffix(".pdf")
+        buildPdfFromLatex(
+            latex_source=latex_source,
+            output_pdf=output_pdf,
+            latex_engine=latex_engine,
+            keep_build=keep_build,
+            keep_tex=keep_tex,
+        )
+        logger.info(f"Generated aggregate report at {output_pdf}")
+
+    if any(f in formats for f in ("csv", "md", "markdown", "print", "stdout")):
+
+        def safe_fmt(stats, key, fmt):
+            return f"{stats[key]:{fmt}}" if key in stats else "-"
+
+        columns = [
+            (
+                "m_stop",
+                lambda p: f"{p.mstop:.1f}" if p.mstop % 1 else f"{int(p.mstop)}",
+            ),
+            ("m_chi", lambda p: f"{p.mchi:.1f}" if p.mchi % 1 else f"{int(p.mchi)}"),
+            ("Mean", lambda p: safe_fmt(p.stats, "mean", ".3f")),
+            ("Median", lambda p: safe_fmt(p.stats, "median", ".3f")),
+            ("Std Dev", lambda p: safe_fmt(p.stats, "std", ".3f")),
+            ("KS p-value", lambda p: safe_fmt(p.stats, "ks_pvalue_uniform", ".3e")),
+            ("N", lambda p: str(p.stats.get("n", "-"))),
+            ("KS Stat", lambda p: safe_fmt(p.stats, "ks_stat_uniform", ".3f")),
+            ("Frac <0.5", lambda p: safe_fmt(p.stats, "frac_below_half", ".2f")),
+            ("Verdict", lambda p: str(p.stats.get("pvalue_skew_verdict", "-"))),
+        ]
+
+        headers = [col[0] for col in columns]
+        rows = [[col[1](p) for col in columns] for p in sorted_points]
+
+        if "csv" in formats:
+            csv_path = output_base.with_suffix(".csv")
+            with open(csv_path, "w", newline="") as f:
+                writer = csv.writer(f)
+                writer.writerow(headers)
+                writer.writerows(rows)
+            logger.info(f"Generated CSV report at {csv_path}")
+
+        if "md" in formats or "markdown" in formats:
+            md_path = output_base.with_suffix(".md")
+            lines = [f"# Aggregate Summary Report for {metric_name}\n"]
+            lines.append("| " + " | ".join(headers) + " |")
+            lines.append("|" + "|".join(["---"] * len(headers)) + "|")
+            for row in rows:
+                lines.append("| " + " | ".join(row) + " |")
+            with open(md_path, "w") as f:
+                f.write("\n".join(lines) + "\n")
+            logger.info(f"Generated Markdown report at {md_path}")
+
+        if "print" in formats or "stdout" in formats:
+            lines = [f"\n--- Aggregate Summary Report for {metric_name} ---"]
+            col_widths = [
+                max(len(str(item)) for item in col) for col in zip(*([headers] + rows))
+            ]
+
+            def format_row(r):
+                return " | ".join(str(item).ljust(w) for item, w in zip(r, col_widths))
+
+            lines.append(format_row(headers))
+            lines.append("-" * len(lines[-1]))
+            for row in rows:
+                lines.append(format_row(row))
+
+            print("\n".join(lines) + "\n")

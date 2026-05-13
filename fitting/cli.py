@@ -139,8 +139,14 @@ def main(verbose: bool) -> None:
     "--min-counts", type=float, default=1.0, help="Min bin count for fit domain."
 )
 @click.option("--num-iters", type=int, default=None, help="Training iterations.")
-@click.option("--lr", type=float, default=0.01, help="Learning rate.")
+@click.option("--lr", type=float, default=None, help="Learning rate.")
 @click.option("--seed", type=int, default=None, help="RNG seed.")
+@click.option(
+    "--signal-pre-scale",
+    type=float,
+    default=None,
+    help="Pre-scale signal by this value.",
+)
 @click.option(
     "--window-type",
     type=str,
@@ -231,6 +237,7 @@ def run(
     start_from: PipelineStep | None,
     combine_commands: tuple[str, ...],
     combine_container: str | None,
+    signal_pre_scale: float,
 ) -> None:
     from .core.serialization import converter
     from .pipeline import (
@@ -267,6 +274,8 @@ def run(
             raw["injection_rate"] = injection_rate
         if seed is not None:
             raw["rng_seed"] = seed
+        if signal_pre_scale is not None:
+            raw["signal_pre_scale"] = signal_pre_scale
         if num_iters is not None:
             raw["optimization"]["num_iters"] = num_iters
         if lr is not None:
@@ -311,6 +320,7 @@ def run(
                 combine_container=combine_container
                 or "/cvmfs/unpacked.cern.ch/gitlab-registry.cern.ch/cms-analysis/general/combine-container:latest",
             ),
+            signal_pre_scale=signal_pre_scale,
         )
     else:
         raise click.UsageError("Must specify either --config or --background.")
@@ -483,11 +493,18 @@ def gather(inputs: tuple[str, ...], output: Path):
     help="Image formats to write (repeatable), e.g. --formats png --formats pdf.",
 )
 @click.option(
+    "--report-formats",
+    multiple=True,
+    default=("pdf",),
+    show_default=True,
+    help="Report formats to write (repeatable), e.g. pdf, csv, md, print.",
+)
+@click.option(
     "--plot-types",
     multiple=True,
     default=("mass_plane",),
     show_default=True,
-    help="Types of aggregate plots to generate: mass_plane, violin, scatter.",
+    help="Types of aggregate plots to generate: mass_plane, violin, scatter, report.",
 )
 @click.option(
     "-g",
@@ -526,6 +543,19 @@ def gather(inputs: tuple[str, ...], output: Path):
     default="metadata.other_data.chargino_mass",
     show_default=True,
 )
+@click.option(
+    "-t",
+    "--transform",
+    type=str,
+    default=None,
+    help="Name of a registered transformation function to apply to the extracted metric.",
+)
+@click.option(
+    "--draw-contours",
+    type=CommaSeparatedFloat(),
+    default=None,
+    help="Comma-separated values for drawing contours on mass plane plots.",
+)
 @click.option("--merge/--no-merge", default=True, is_flag=True)
 @click.option("--pval-mode", default=False, is_flag=True)
 def aggregate(
@@ -533,6 +563,7 @@ def aggregate(
     metric_dotpath: tuple[str, ...],
     output: Path,
     formats: tuple[str, ...],
+    report_formats: tuple[str, ...],
     name_format: str,
     group_by: tuple[str, ...],
     title: str | None,
@@ -549,6 +580,8 @@ def aggregate(
     plot_types: tuple[str, ...],
     merge: bool,
     pval_mode: bool,
+    transform: str | None,
+    draw_contours: list[float] | None,
 ) -> None:
     """Create an aggregate 2D mass-plane plot from many summary.json files."""
     from .diagnostics.plot_utils import savePlots
@@ -562,6 +595,7 @@ def aggregate(
         makeAggregateSmoothPlot,
         makeAggregateViolinPlot,
         makeAggregateScatterPlot,
+        makeAggregateReport,
     )
 
     from fitting.utils import dotFormat
@@ -576,11 +610,23 @@ def aggregate(
         group_by=group_by,
         stop_dotpath=stop_dotpath,
         chi_dotpath=chi_dotpath,
+        transform_name=transform,
+    )
+
+    metric_name_str = (
+        metric_dotpath[0]
+        if isinstance(metric_dotpath, tuple) and len(metric_dotpath) > 0
+        else metric_dotpath
+    )
+    is_pvalue = (
+        "pvalue" in metric_name_str.lower()
+        or "p_value" in metric_name_str.lower()
+        or pval_mode
     )
 
     if merge:
         for k in list(points):
-            points[k] = makeMulti(points[k])
+            points[k] = makeMulti(points[k], is_pvalue=is_pvalue)
 
     all_points = [x for y in points.values() for x in y]
     logger.info(f"Gathered {len(all_points)} points into {len(points)} groups")
@@ -609,11 +655,7 @@ def aggregate(
         logger.info(f"Saving data to {p}")
         with open(p, "w") as f:
             json.dump(cattrs.unstructure(all_points), f, indent=2)
-    metric_name_str = (
-        metric_dotpath[0]
-        if isinstance(metric_dotpath, tuple) and len(metric_dotpath) > 0
-        else metric_dotpath
-    )
+
     for k, p in points.items():
         plots_k = {}
         if "mass_plane" in plot_types:
@@ -631,6 +673,9 @@ def aggregate(
                     if "{plot_type}" not in name_format
                     else name_format,
                     params=dict(k, plot_type="mass_plane"),
+                    draw_contours=tuple(draw_contours)
+                    if draw_contours is not None
+                    else None,
                 )
             )
         if "mass_plane_smooth" in plot_types:
@@ -648,6 +693,9 @@ def aggregate(
                     if "{plot_type}" not in name_format
                     else name_format,
                     params=dict(k, plot_type="mass_plane"),
+                    draw_contours=tuple(draw_contours)
+                    if draw_contours is not None
+                    else (1.0, 2.0),
                 )
             )
         if "violin" in plot_types:
@@ -680,6 +728,21 @@ def aggregate(
                     vlines=vlines,
                     pval_bands=pval_mode,
                 )
+            )
+
+        if "report" in plot_types:
+            report_name = dotFormat(
+                "report_" + name_format, metric_name=metric_name_str, **dict(k)
+            )
+            if "{" in report_name:
+                report_name = report_name.replace("{plot_type}", "report")
+            report_name = report_name.replace(".", "p")
+            output_base = output / report_name
+            makeAggregateReport(
+                p,
+                metric_name=metric_name_str,
+                output_base=output_base,
+                formats=report_formats,
             )
 
         savePlots(plots_k, output, [x.metadata for x in p], formats=formats)
