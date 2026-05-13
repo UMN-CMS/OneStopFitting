@@ -7,6 +7,7 @@ from fitting.utils import dictToDot, dotFormat, commonDict
 from collections import defaultdict
 import attrs
 from typing import Any, Iterable, Iterator
+import mplhep
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -90,7 +91,7 @@ def transformRToCoupling(value: Any, summary: dict[str, Any]) -> Any:
     return new_value
 
 
-transformRegistry = {
+transform_registry = {
     "r_to_coupling": transformRToCoupling,
 }
 
@@ -123,9 +124,9 @@ def _handleOneSummary(
             value = value_raw[0] if len(value_raw) == 1 else value_raw
 
         if transform_name:
-            if transform_name not in transformRegistry:
+            if transform_name not in transform_registry:
                 raise ValueError(f"Unknown transform '{transform_name}'")
-            value = transformRegistry[transform_name](value, summary)
+            value = transform_registry[transform_name](value, summary)
 
         points[key].append(
             AggregatePoint(
@@ -252,6 +253,8 @@ def makeAggregateMassPlanePlot(
     params: dict[str, Any] | None = None,
     name_format: str = "aggregate_{metric}",
     draw_contours: tuple[float, ...] | None = None,
+    contour_fmt: str | dict | None = None,
+    contour_label_kwargs: dict[str, Any] | None = None,
     colorbar_label: str | None = None,
 ) -> dict[str, tuple]:
     if not points:
@@ -261,7 +264,7 @@ def makeAggregateMassPlanePlot(
     xs = np.array([p.mstop for p in points], dtype=float)
     ys = np.array([p.mchi for p in points], dtype=float)
     vs = np.array([get_value_func(p) for p in points], dtype=float)
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(layout="constrained")
     actual_norm = None
     if "pvalue" in metric_name.lower() and cmap == "viridis":
         cmap = PVALUE_CMAP
@@ -290,7 +293,8 @@ def makeAggregateMassPlanePlot(
         edgecolors="black",
         **plot_kwargs,
     )
-    cb = fig.colorbar(sc, ax=ax)
+    cax = mplhep.append_axes(ax, size="5%", pad=0.05, position="right")
+    cb = fig.colorbar(sc, cax=cax)
 
     cb.set_label(colorbar_label or metric_name)
     ax.set_xlabel(r"$m_{\tilde{t}}$ [GeV]")
@@ -315,7 +319,10 @@ def makeAggregateSmoothPlot(
     params: dict[str, Any] | None = None,
     name_format: str = "aggregate_smooth_{metric}",
     draw_contours: tuple[float, ...] | None = (1.0, 2.0),
+    contour_fmt: str | dict | None = None,
+    contour_label_kwargs: dict[str, Any] | None = None,
     colorbar_label: str | None = None,
+    rasterize_mesh: bool = True,
 ) -> dict[str, tuple]:
     from scipy.interpolate import CloughTocher2DInterpolator
     from scipy.ndimage import gaussian_filter
@@ -331,7 +338,7 @@ def makeAggregateSmoothPlot(
     y_min, y_max = ys.min(), ys.max()
     x_min, x_max = xs.min(), xs.max()
 
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(layout="constrained")
     actual_norm = None
     if (
         any(x in metric_name.lower() for x in ["pvalue", "p_value"])
@@ -372,13 +379,21 @@ def makeAggregateSmoothPlot(
         plot_kwargs["vmin"] = vmin
         plot_kwargs["vmax"] = vmax
 
-    mesh = ax.pcolormesh(X, Y, Z, **plot_kwargs)
+    mesh = ax.pcolormesh(X, Y, Z, rasterized=rasterize_mesh, **plot_kwargs)
 
     if draw_contours:
-        for level in draw_contours:
-            ax.contour(X, Y, Z, [level], colors="k", linewidths=2)
+        # Levels must be strictly increasing for matplotlib
+        cs = ax.contour(X, Y, Z, sorted(draw_contours), colors="k", linewidths=2)
 
-    cb = fig.colorbar(mesh, ax=ax)
+        clabel_kwargs = {"inline": True, "fontsize": 10}
+        if contour_fmt is not None:
+            clabel_kwargs["fmt"] = contour_fmt
+        if contour_label_kwargs is not None:
+            clabel_kwargs.update(contour_label_kwargs)
+        ax.clabel(cs, **clabel_kwargs)
+
+    cax = mplhep.append_axes(ax, size="5%", pad=0.1, position="right")
+    cb = fig.colorbar(mesh, cax=cax)
 
     cb.set_label(colorbar_label or metric_name)
     ax.set_xlabel(r"$m_{\tilde{t}}$ [GeV]")

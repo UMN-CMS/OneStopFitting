@@ -487,14 +487,17 @@ def saveFigVariants(
 
     for variant in cms_texts:
         removeCMSAnnotations(ax)
-        addCMSBits(ax, all_meta, cms_text=variant)
+        addCMSBits(ax, all_meta, cms_text=variant, extra_text=extra_text)
 
         text_suffix = f"_{variant.lower().replace(' ', '_')}" if suffix_text else ""
         for ext in extensions:
             variant_path = base_path.with_stem(
                 f"{base_path.stem}{text_suffix}"
             ).with_suffix(ext)
-            fig.savefig(variant_path, **save_kwargs)
+            
+            kwargs = {"bbox_inches": "tight"}
+            kwargs.update(save_kwargs)
+            fig.savefig(variant_path, **kwargs)
             logger.info(f"Saved figure to {variant_path}")
 
 
@@ -515,8 +518,8 @@ def getPlotSaver(save_dir, all_meta, formats=("pdf",), **save_kwargs):
     return saver
 
 
-def savePlots(plots: dict[str, tuple], save_dir, all_meta, formats=("pdf",)):
-    saver = getPlotSaver(save_dir, all_meta, formats=formats)
+def savePlots(plots: dict[str, tuple], save_dir, all_meta, formats=("pdf",), **kwargs):
+    saver = getPlotSaver(save_dir, all_meta, formats=formats, **kwargs)
     for name, (fig, ax) in plots.items():
         saver(name, fig, ax)
     logger.info(f"Saved {len(plots)} to directory {save_dir}")

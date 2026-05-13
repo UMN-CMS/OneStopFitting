@@ -554,6 +554,15 @@ def gather(inputs: tuple[str, ...], output: Path):
 @click.option(
     "--colorbar-label", type=str, default=None, help="Colorbar label override."
 )
+@click.option(
+    "--cms-extra",
+    type=str,
+    default=None,
+    help="Extra text for CMS annotation, e.g. for signal process info.",
+)
+@click.option(
+    "--contour-fmt", type=str, default=None, help="Format string for contour labels."
+)
 def aggregate(
     inputs: tuple[str, ...],
     metric_dotpath: tuple[str, ...],
@@ -578,6 +587,8 @@ def aggregate(
     transform: str | None,
     draw_contours: list[float] | None,
     colorbar_label: str | None,
+    cms_extra: str | None,
+    contour_fmt: str | None,
 ) -> None:
     """Create an aggregate 2D mass-plane plot from many summary.json files."""
     from .diagnostics.plot_utils import savePlots
@@ -653,12 +664,41 @@ def aggregate(
 
     for k, p in points.items():
         plots_k = {}
+
+        from .utils import dictToDot, dotFormat
+
+        ctx = (
+            dict(dictToDot(p[0].metadata))
+            if p and getattr(p[0], "metadata", None)
+            else {}
+        )
+        ctx.update(dict(k))
+
+        def fmt(s):
+            if not isinstance(s, str):
+                return s
+            try:
+                return dotFormat(s, **ctx)
+            except KeyError:
+                return s
+
+        fmt_metric, fmt_title, fmt_colorbar, fmt_cms, fmt_contour = map(
+            fmt,
+            [
+                metric_name_str,
+                title,
+                colorbar_label,
+                cms_extra,
+                contour_fmt,
+            ],
+        )
+
         if "mass_plane" in plot_types:
             plots_k.update(
                 makeAggregateMassPlanePlot(
                     p,
-                    metric_name=metric_name_str,
-                    title=title,
+                    metric_name=fmt_metric,
+                    title=fmt_title,
                     cmap=cmap,
                     cmin=cmin,
                     cmax=cmax,
@@ -667,19 +707,20 @@ def aggregate(
                     name_format="{plot_type}_" + name_format
                     if "{plot_type}" not in name_format
                     else name_format,
-                    params=dict(k, plot_type="mass_plane"),
+                    params=dict(ctx, plot_type="mass_plane"),
                     draw_contours=tuple(draw_contours)
                     if draw_contours is not None
                     else None,
-                    colorbar_label=colorbar_label,
+                    colorbar_label=fmt_colorbar,
+                    contour_fmt=fmt_contour,
                 )
             )
         if "mass_plane_smooth" in plot_types:
             plots_k.update(
                 makeAggregateSmoothPlot(
                     p,
-                    metric_name=metric_name_str,
-                    title=title,
+                    metric_name=fmt_metric,
+                    title=fmt_title,
                     cmap=cmap,
                     cmin=cmin,
                     cmax=cmax,
@@ -688,11 +729,12 @@ def aggregate(
                     name_format="{plot_type}_" + name_format
                     if "{plot_type}" not in name_format
                     else name_format,
-                    params=dict(k, plot_type="mass_plane_smooth"),
+                    params=dict(ctx, plot_type="mass_plane_smooth"),
                     draw_contours=tuple(draw_contours)
                     if draw_contours is not None
                     else (1.0, 2.0),
-                    colorbar_label=colorbar_label,
+                    colorbar_label=fmt_colorbar,
+                    contour_fmt=fmt_contour,
                 )
             )
         if "violin" in plot_types:
@@ -701,12 +743,12 @@ def aggregate(
             plots_k.update(
                 makeAggregateViolinPlot(
                     p,
-                    metric_name=metric_name_str,
-                    title=title,
+                    metric_name=fmt_metric,
+                    title=fmt_title,
                     name_format="{plot_type}_" + name_format
                     if "{plot_type}" not in name_format
                     else name_format,
-                    params=dict(k, plot_type="violin"),
+                    params=dict(ctx, plot_type="violin"),
                 )
             )
         if "scatter" in plot_types:
@@ -715,19 +757,25 @@ def aggregate(
             plots_k.update(
                 makeAggregateScatterPlot(
                     p,
-                    metric_name=metric_name_str,
-                    title=title,
+                    metric_name=fmt_metric,
+                    title=fmt_title,
                     name_format="{plot_type}_" + name_format
                     if "{plot_type}" not in name_format
                     else name_format,
-                    params=dict(k, plot_type="scatter"),
+                    params=dict(ctx, plot_type="scatter"),
                     xlim=xlim,
                     vlines=vlines,
                     pval_bands=pval_mode,
                 )
             )
 
-        savePlots(plots_k, output, [x.metadata for x in p], formats=formats)
+        savePlots(
+            plots_k,
+            output,
+            [x.metadata for x in p],
+            formats=formats,
+            extra_text=fmt_cms,
+        )
     logger.info(f"Aggregate plot saved to {output}")
 
 
