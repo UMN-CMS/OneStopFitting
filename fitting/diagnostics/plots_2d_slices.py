@@ -387,7 +387,7 @@ def makeSlicePlots2D(
         )
         axis_key = fixAxisKey(axis_name)
         for val in window_vals:
-            val_key = f"{val:0.2g}".replace(".", "p").replace("-", "m")
+            val_key = f"{val:0.3g}".replace(".", "p").replace("-", "m")
             key = f"slice/{fixAxisKey(axis_name)}_{val_key}"
             _makeOneSlice(
                 pred_mean=pred_mean,
@@ -459,7 +459,7 @@ def makePostCombineSlice(
         )
         axis_key = fixAxisKey(axis_name)
         for val in window_vals:
-            val_key = f"{val:0.2g}".replace(".", "p").replace("-", "m")
+            val_key = f"{val:0.3g}".replace(".", "p").replace("-", "m")
             key = f"slice/{fixAxisKey(axis_name)}_{val_key}"
             perp = _perpendicularAxis(slice_axis)
             mask = _sliceMask(X, slice_axis, val)
