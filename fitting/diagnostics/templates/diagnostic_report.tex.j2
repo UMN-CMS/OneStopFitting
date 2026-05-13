@@ -1,0 +1,190 @@
+\documentclass[11pt]{article}
+\usepackage{geometry}
+\usepackage{longtable}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{tikz}
+\usepackage{amsmath}
+\usepackage{float}
+\usepackage{tcolorbox}
+\geometry{margin=0.75in}
+
+\definecolor{okgreen}{HTML}{2ECC40}
+\definecolor{consyellow}{HTML}{FFDC00}
+\definecolor{dangred}{HTML}{FF4136}
+
+\newcommand{\verdictbadge}[1]{%
+  \ifnum\pdfstrcmp{#1}{OK}=0
+    \textcolor{okgreen}{\textbf{OK}}%
+  \else\ifnum\pdfstrcmp{#1}{CONSERVATIVE}=0
+    \textcolor{consyellow}{\textbf{CONS}}%
+  \else\ifnum\pdfstrcmp{#1}{DANGEROUS}=0
+    \textcolor{dangred}{\textbf{DANG}}%
+  \else
+    #1%
+  \fi\fi\fi
+}
+
+\begin{document}
+
+\title{GP Calibration Diagnostic Report\\ \large for Coupling [[ report.coupling ]] }
+\author{OneStopFitting}
+\date{\today}
+\maketitle
+
+\section*{Configuration}
+
+\begin{tcolorbox}[colback=gray!5, colframe=gray!40, boxrule=0.4pt]
+\textbf{Model \& Likelihood}\\[2pt]
+\begin{tabular}{ll}
+Kernel & [[ run_config.kernel_type if run_config.kernel_type is not none else "default" ]] \\
+Hidden shapes & [[ run_config.hidden_shapes if run_config.hidden_shapes is not none else "default" ]] \\
+Activation & [[ run_config.activation if run_config.activation is not none else "default" ]] \\
+ARD & [[ run_config.ard if run_config.ard is not none else "default" ]] \\
+Pad variance quantile (PVQ) & [[ run_config.pvq if run_config.pvq is not none else "default" ]] \\
+Variance floor quantile & [[ run_config.variance_floor_quantile if run_config.variance_floor_quantile is not none else "default" ]] \\
+\end{tabular}
+
+\vspace{4pt}
+\textbf{Optimization}\\[2pt]
+\begin{tabular}{ll}
+Learning rate & [[ run_config.lr if run_config.lr is not none else "default" ]] \\
+Iterations & [[ run_config.num_iters if run_config.num_iters is not none else "default" ]] \\
+Optimizer & [[ run_config.optimizer if run_config.optimizer is not none else "default" ]] \\
+\end{tabular}
+
+\vspace{4pt}
+\textbf{Window \& Blinding}\\[2pt]
+\begin{tabular}{ll}
+Window type & [[ run_config.window_type if run_config.window_type is not none else "default" ]] \\
+Core threshold & [[ run_config.core_threshold_fraction if run_config.core_threshold_fraction is not none else "default" ]] \\
+Dilation margin & [[ run_config.dilation_margin if run_config.dilation_margin is not none else "default" ]] \\
+Smooth $\sigma$ & [[ run_config.smooth_sigma if run_config.smooth_sigma is not none else "default" ]] \\
+WVI & [[ run_config.wvi if run_config.wvi is not none else "default" ]] \\
+Blinding & [[ run_config.blinding_strategy if run_config.blinding_strategy is not none else "default" ]] \\
+\end{tabular}
+
+\vspace{4pt}
+\textbf{Data \& Combine}\\[2pt]
+\begin{tabular}{ll}
+Rebin & [[ run_config.rebin if run_config.rebin is not none else "default" ]] \\
+min\_counts & [[ run_config.min_counts if run_config.min_counts is not none else "default" ]] \\
+signal\_pre\_scale & [[ run_config.signal_pre_scale if run_config.signal_pre_scale is not none else "default" ]] \\
+Injection rate & [[ run_config.injection_rate if run_config.injection_rate is not none else "default" ]] \\
+Eigenvar threshold & [[ run_config.eigenvar_threshold if run_config.eigenvar_threshold is not none else "default" ]] \\
+\end{tabular}
+\end{tcolorbox}
+
+\section*{Executive Summary}
+
+\begin{tcolorbox}[colback=white, colframe=black!60, boxrule=0.6pt, title={}]
+\begin{tabular}{rl}
+Mass points & [[ report.points|length ]] \\
+Background-only toys & [[ report.overall_n_toys ]] \\
+Overall coverage ($|r| < r_{err}$) & [[ "%.1f"|format(report.overall_coverage * 100) ]]\%\ \ (target: 68\%) \\
+GOF verdicts & [[ report.n_ok ]] OK\,/\,[[ report.n_conservative ]] CONSERVATIVE\,/\,[[ report.n_dangerous ]] DANGEROUS \\
+\end{tabular}
+
+\vspace{6pt}
+[- if report.overall_coverage >= 0.63 and report.overall_coverage <= 0.73 -]
+\centering\textcolor{okgreen}{\textbf{PASS}} --- Coverage within $63$--$73$\% band.
+[- elif report.overall_coverage >= 0.55 and report.overall_coverage <= 0.80 -]
+\centering\textcolor{consyellow}{\textbf{MARGINAL}} --- Coverage $55$--$80$\%, but outside target band.
+[- else -]
+\centering\textcolor{dangred}{\textbf{FAIL}} --- Coverage significantly off-target.
+[- endif -]
+\end{tcolorbox}
+
+\section*{Category Summary}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lrrrrrrrr}
+\toprule
+Category & Points & Toys & Avg Cov. & Med Cov. & Avg Med $r$ & OK & Cons. & Danger. \\
+\midrule
+[- for s in category_summaries -]
+[[ s.category ]] & [[ s.n_points ]] & [[ s.n_toys_total ]] & [[ "%.1f"|format(s.avg_coverage * 100) ]]\% & [[ "%.1f"|format(s.median_coverage * 100) ]]\% & [[ "%.2f"|format(s.avg_median_r) ]] & [[ s.n_ok ]] & [[ s.n_conservative ]] & [[ s.n_dangerous ]] \\
+[- endfor -]
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section*{Coverage Map}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.65\textwidth]{[[ plot_paths.coverage_map ]]}
+\caption*{Coverage ($|r| < r_{err}$) per mass point. Green = 63--73\%, yellow = 55--80\%, red = outside. Edge color = category.}
+\end{figure}
+
+\section*{GOF Verdict Map}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.65\textwidth]{[[ plot_paths.verdict_map ]]}
+\caption*{Goodness-of-fit $p$-value verdict per mass point. Edge color = category.}
+\end{figure}
+
+\section*{Median $r$ Map}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.65\textwidth]{[[ plot_paths.median_r_map ]]}
+\caption*{Median signal strength $r$ per mass point. Background-only expectation: $r \approx 0$.}
+\end{figure}
+
+\section*{Coverage by Category}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.55\textwidth]{[[ plot_paths.coverage_by_category ]]}
+\caption*{Average coverage by signal region category. Dashed line: 68\% target.}
+\end{figure}
+
+\section*{GOF Verdict Summary}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.55\textwidth]{[[ plot_paths.gof_verdict_summary ]]}
+\caption*{GOF $p$-value verdict distribution by category.}
+\end{figure}
+
+\section*{Normalized Signal Strength}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.65\textwidth]{[[ plot_paths.r_vs_r_err ]]}
+\caption*{$r / r_{err}$ for all background-only toys. Green band: $|r/r_{err}| < 1$ (68\% expected inside).}
+\end{figure}
+
+\clearpage
+
+\section*{Per-Point Details}
+
+\begin{longtable}{rrllrrrrcc}
+\toprule
+$m_{\tilde{t}}$ & $m_{\tilde{\chi}^{\pm}}$ & Cat. & Toys & Med $r$ & Med $r_{err}$ & Coverage & Med GOF $p$ & KS $p$ & Verdict \\
+\midrule
+\endfirsthead
+
+\toprule
+$m_{\tilde{t}}$ & $m_{\tilde{\chi}^{\pm}}$ & Cat. & Toys & Med $r$ & Med $r_{err}$ & Coverage & Med GOF $p$ & KS $p$ & Verdict \\
+\midrule
+\endhead
+
+\bottomrule
+\endfoot
+
+\bottomrule
+\endlastfoot
+
+[- for p in points -]
+[[ "%d"|format(p.mstop|int) ]] & [[ "%d"|format(p.mchi|int) ]] & [[ p.category ]] & [[ p.n_toys ]] & [[ "%.2f"|format(p.median_r) ]] & [[ "%.2f"|format(p.median_r_err) ]] & [[ "%.1f"|format(p.coverage * 100) ]]\% & [[ "%.2f"|format(p.gof_median_pvalue) if p.gof_median_pvalue is not none else "-" ]] & [[ "%.3f"|format(p.gof_ks_pvalue) if p.gof_ks_pvalue is not none else "-" ]] &
+\verdictbadge{[[ p.gof_verdict ]]} \\
+[- endfor -]
+
+\end{longtable}
+
+\end{document}

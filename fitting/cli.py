@@ -493,18 +493,11 @@ def gather(inputs: tuple[str, ...], output: Path):
     help="Image formats to write (repeatable), e.g. --formats png --formats pdf.",
 )
 @click.option(
-    "--report-formats",
-    multiple=True,
-    default=("pdf",),
-    show_default=True,
-    help="Report formats to write (repeatable), e.g. pdf, csv, md, print.",
-)
-@click.option(
     "--plot-types",
     multiple=True,
     default=("mass_plane",),
     show_default=True,
-    help="Types of aggregate plots to generate: mass_plane, violin, scatter, report.",
+    help="Types of aggregate plots to generate: mass_plane, violin, scatter.",
 )
 @click.option(
     "-g",
@@ -563,7 +556,6 @@ def aggregate(
     metric_dotpath: tuple[str, ...],
     output: Path,
     formats: tuple[str, ...],
-    report_formats: tuple[str, ...],
     name_format: str,
     group_by: tuple[str, ...],
     title: str | None,
@@ -595,7 +587,6 @@ def aggregate(
         makeAggregateSmoothPlot,
         makeAggregateViolinPlot,
         makeAggregateScatterPlot,
-        makeAggregateReport,
     )
 
     from fitting.utils import dotFormat
@@ -728,21 +719,6 @@ def aggregate(
                     vlines=vlines,
                     pval_bands=pval_mode,
                 )
-            )
-
-        if "report" in plot_types:
-            report_name = dotFormat(
-                "report_" + name_format, metric_name=metric_name_str, **dict(k)
-            )
-            if "{" in report_name:
-                report_name = report_name.replace("{plot_type}", "report")
-            report_name = report_name.replace(".", "p")
-            output_base = output / report_name
-            makeAggregateReport(
-                p,
-                metric_name=metric_name_str,
-                output_base=output_base,
-                formats=report_formats,
             )
 
         savePlots(plots_k, output, [x.metadata for x in p], formats=formats)
@@ -1039,6 +1015,62 @@ def report(
         config=config,
     )
     logger.info(f"Generated {len(output_paths)} report(s)")
+
+
+@main.command()
+@click.argument(
+    "gathered",
+    type=click.Path(exists=True, path_type=Path),
+)
+@click.option(
+    "-o",
+    "--output",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Output PDF path. Defaults to diagnostic_report.pdf next to the gathered file.",
+)
+@click.option(
+    "--latex-engine",
+    default="pdflatex",
+    show_default=True,
+    help="LaTeX engine to use.",
+)
+@click.option("--keep-build", is_flag=True, help="Keep LaTeX build directory.")
+@click.option("--keep-tex", is_flag=True, help="Keep intermediate .tex files.")
+@click.option(
+    "--coupling",
+    type=str,
+    default=None,
+    help="Only generate report for this coupling (e.g. 312 or 313). Default: one report per coupling found.",
+)
+def diagnose(
+    gathered: Path,
+    output: Path | None,
+    latex_engine: str,
+    keep_build: bool,
+    keep_tex: bool,
+    coupling: str | None,
+) -> None:
+    """Generate a GP calibration diagnostic report from a gathered JSON file."""
+    from .diagnostics.diagnostic_report import (
+        generateDiagnosticReport,
+        loadGathered,
+    )
+
+    if output is None:
+        output = gathered.parent / "diagnostic_report.pdf"
+
+    data = loadGathered(gathered)
+    paths = generateDiagnosticReport(
+        gathered=data,
+        output_pdf=output,
+        coupling=coupling,
+        latex_engine=latex_engine,
+        keep_build=keep_build,
+        keep_tex=keep_tex,
+    )
+    for p in paths:
+        logger.info(f"Diagnostic report: {p}")
 
 
 @main.command()

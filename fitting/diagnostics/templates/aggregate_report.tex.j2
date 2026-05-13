@@ -1,0 +1,39 @@
+\documentclass{article}
+\usepackage{geometry}
+\usepackage{longtable}
+\usepackage{booktabs}
+\geometry{margin=1in}
+
+\begin{document}
+
+\title{Aggregate Summary Report for [[ metric_name|replace('_', '\_') ]]}
+\author{OneStopFitting}
+\date{\today}
+\maketitle
+
+\section*{Statistical Summary}
+
+\begin{longtable}{ccrrrrrccr}
+\toprule
+$m_{\tilde{t}}$ & $m_{\tilde{\chi}^{\pm}}$ & Mean & Median & Std. Dev. & KS $p$-value & $N$ & KS Stat & Frac $<0.5$ & Verdict \\
+\midrule
+\endfirsthead
+
+\toprule
+$m_{\tilde{t}}$ & $m_{\tilde{\chi}^{\pm}}$ & Mean & Median & Std. Dev. & KS $p$-value & $N$ & KS Stat & Frac $<0.5$ & Verdict \\
+\midrule
+\endhead
+
+\bottomrule
+\endfoot
+
+\bottomrule
+\endlastfoot
+
+[- for p in points -]
+[[ p.mstop ]] & [[ p.mchi ]] & [[ "%.3f"|format(p.stats.mean) if 'mean' in p.stats else '-' ]] & [[ "%.3f"|format(p.stats.median) if 'median' in p.stats else '-' ]] & [[ "%.3f"|format(p.stats.std) if 'std' in p.stats else '-' ]] & [[ "%.3e"|format(p.stats.ks_pvalue_uniform) if 'ks_pvalue_uniform' in p.stats else '-' ]] & [[ p.stats.n if 'n' in p.stats else '-' ]] & [[ "%.3f"|format(p.stats.ks_stat_uniform) if 'ks_stat_uniform' in p.stats else '-' ]] & [[ "%.2f"|format(p.stats.frac_below_half) if 'frac_below_half' in p.stats else '-' ]] & [[ p.stats.pvalue_skew_verdict if 'pvalue_skew_verdict' in p.stats else '-' ]] \\
+[- endfor -]
+
+\end{longtable}
+
+\end{document}
