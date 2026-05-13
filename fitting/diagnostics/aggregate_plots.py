@@ -84,8 +84,10 @@ def transformRToCoupling(value: Any, summary: dict[str, Any]) -> Any:
     base_coupling = 0.1
     used_coupling = base_coupling * np.sqrt(pre_scale)
     if isinstance(value, (tuple, list)):
-        return type(value)(used_coupling * np.sqrt(v) for v in value)
-    return used_coupling * np.sqrt(value)
+        new_value = type(value)(used_coupling * np.sqrt(v) for v in value)
+    else:
+        new_value = used_coupling * np.sqrt(value)
+    return new_value
 
 
 transformRegistry = {
@@ -250,6 +252,7 @@ def makeAggregateMassPlanePlot(
     params: dict[str, Any] | None = None,
     name_format: str = "aggregate_{metric}",
     draw_contours: tuple[float, ...] | None = None,
+    colorbar_label: str | None = None,
 ) -> dict[str, tuple]:
     if not points:
         raise ValueError("No points to plot.")
@@ -289,7 +292,7 @@ def makeAggregateMassPlanePlot(
     )
     cb = fig.colorbar(sc, ax=ax)
 
-    cb.set_label(metric_name)
+    cb.set_label(colorbar_label or metric_name)
     ax.set_xlabel(r"$m_{\tilde{t}}$ [GeV]")
     ax.set_ylabel(r"$m_{\tilde{\chi}^{\pm}}$ [GeV]")
 
@@ -312,8 +315,10 @@ def makeAggregateSmoothPlot(
     params: dict[str, Any] | None = None,
     name_format: str = "aggregate_smooth_{metric}",
     draw_contours: tuple[float, ...] | None = (1.0, 2.0),
+    colorbar_label: str | None = None,
 ) -> dict[str, tuple]:
     from scipy.interpolate import CloughTocher2DInterpolator
+    from scipy.ndimage import gaussian_filter
 
     if not points:
         raise ValueError("No points to plot.")
@@ -349,6 +354,15 @@ def makeAggregateSmoothPlot(
     interp = CloughTocher2DInterpolator(list(zip(xs, ys)), vs)
     Z = interp(X, Y)
 
+    if smooth_sigma is not None:
+        valid_mask = ~np.isnan(Z)
+        fill_value = np.nanmean(Z)
+        Z_filled = np.where(valid_mask, Z, fill_value)
+        Z_smooth = gaussian_filter(
+            Z_filled, sigma=smooth_sigma, truncate=smooth_truncate
+        )
+        Z = np.where(valid_mask, Z_smooth, np.nan)
+
     plot_kwargs: dict[str, Any] = {
         "cmap": cmap,
         "norm": actual_norm,
@@ -366,7 +380,7 @@ def makeAggregateSmoothPlot(
 
     cb = fig.colorbar(mesh, ax=ax)
 
-    cb.set_label(metric_name)
+    cb.set_label(colorbar_label or metric_name)
     ax.set_xlabel(r"$m_{\tilde{t}}$ [GeV]")
     ax.set_ylabel(r"$m_{\tilde{\chi}^{\pm}}$ [GeV]")
 

@@ -551,6 +551,9 @@ def gather(inputs: tuple[str, ...], output: Path):
 )
 @click.option("--merge/--no-merge", default=True, is_flag=True)
 @click.option("--pval-mode", default=False, is_flag=True)
+@click.option(
+    "--colorbar-label", type=str, default=None, help="Colorbar label override."
+)
 def aggregate(
     inputs: tuple[str, ...],
     metric_dotpath: tuple[str, ...],
@@ -574,6 +577,7 @@ def aggregate(
     pval_mode: bool,
     transform: str | None,
     draw_contours: list[float] | None,
+    colorbar_label: str | None,
 ) -> None:
     """Create an aggregate 2D mass-plane plot from many summary.json files."""
     from .diagnostics.plot_utils import savePlots
@@ -667,6 +671,7 @@ def aggregate(
                     draw_contours=tuple(draw_contours)
                     if draw_contours is not None
                     else None,
+                    colorbar_label=colorbar_label,
                 )
             )
         if "mass_plane_smooth" in plot_types:
@@ -683,10 +688,11 @@ def aggregate(
                     name_format="{plot_type}_" + name_format
                     if "{plot_type}" not in name_format
                     else name_format,
-                    params=dict(k, plot_type="mass_plane"),
+                    params=dict(k, plot_type="mass_plane_smooth"),
                     draw_contours=tuple(draw_contours)
                     if draw_contours is not None
                     else (1.0, 2.0),
+                    colorbar_label=colorbar_label,
                 )
             )
         if "violin" in plot_types:
