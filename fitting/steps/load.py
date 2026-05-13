@@ -36,6 +36,10 @@ def _loadSignals(config):
         loader = FileLoader.forPath(path)
         raw = loader.load(path)
         sig_hist = extractHistogram(raw)
+        if config.signal_pre_scale != 1.0:
+            logger.info(f"Pre-scaling signal by {config.signal_pre_scale}")
+            sig_hist = sig_hist * config.signal_pre_scale
+
         sig_binned = histToBinnedData(sig_hist, rebin=config.rebin, variation="central")
         sig_meta = extractMetadata(raw)
         label = _deriveSignalLabel(sig_meta, path)
