@@ -1,6 +1,7 @@
 [- set meta = metadata -]
 [- set other = meta.get("other_data", {}) -]
 [- set era = meta.get("era", {}) -]
+[- set cfg = config if config is defined else {} -]
 [- set point_dir_safe = point_dir | replace("_", "\\_") -]
 [- set dataset_name_safe = meta.get("dataset_name", "") | replace("_", "\\_") -]
 [- set era_name_safe = era.get("name", "") | replace("_", "\\_") -]
@@ -11,13 +12,14 @@
 [- set chargino_mass = other.get("chargino_mass", "") -]
 [- set dataset_title = meta.get("dataset_title", "") -]
 
-
+%% Title row
 \begin{tabularx}{\textwidth}{@{}X r@{}}
 {\Large \textbf{GPR point summary}} & {\small \texttt{[[ point_dir_safe ]]}} \\
 \end{tabularx}
 
 \vspace{0.25em}
 
+%% Physics parameters
 \noindent
 \begin{tabularx}{\textwidth}{@{\hspace{2pt}} X @{\hspace{2pt}}}
   \arrayrulecolor{gray!40}\toprule
@@ -29,6 +31,46 @@
   \textbf{Window:}~[[ window_type ]] \\
   \arrayrulecolor{gray!40}\bottomrule
 \end{tabularx}
+
+%% Configuration summary (concise)
+[- if cfg -]
+[- set model_cfg = cfg.get("model", {}) -]
+[- set opt_cfg = cfg.get("optimization", {}) -]
+[- set combine_cfg = cfg.get("combine", {}) -]
+\vspace{0.15em}
+\noindent
+\begin{tabularx}{\textwidth}{@{\hspace{2pt}} X @{\hspace{2pt}}}
+  \arrayrulecolor{gray!20}\toprule
+  {\scriptsize\color{gray!70}
+  [- if model_cfg.get("_type") -]
+  \textbf{Model:}~[[ model_cfg["_type"] | replace("_", "\\_") ]] \quad
+  [- endif -]
+  [- if cfg.get("rebin", 1) != 1 -]
+  \textbf{Rebin:}~[[ cfg.get("rebin", 1) ]] \quad
+  [- endif -]
+  [- if cfg.get("min_counts", 0) > 0 -]
+  \textbf{Min counts:}~[[ cfg["min_counts"] ]] \quad
+  [- endif -]
+  [- if cfg.get("signal_pre_scale") -]
+  \textbf{Pre-scale:}~[[ cfg["signal_pre_scale"] ]] \quad
+  [- endif -]
+  [- if combine_cfg.get("eigenvar_threshold") -]
+  \textbf{EV thr:}~[[ combine_cfg["eigenvar_threshold"] ]] \quad
+  [- endif -]
+  [- if combine_cfg.get("bg_rate_uncertainty", "none") != "none" -]
+  \textbf{BG rate:}~[[ combine_cfg["bg_rate_uncertainty"] | replace("_", "\\_") ]] \quad
+  [- endif -]
+  [- if cfg.get("window_variance_inflation", 1.0) != 1.0 -]
+  \textbf{Var inflate:}~[[ cfg["window_variance_inflation"] ]] \quad
+  [- endif -]
+  [- set transform_cfg = cfg.get("transform", {}) -]
+  [- if transform_cfg.get("_type") -]
+  \textbf{Transform:}~[[ transform_cfg["_type"] | replace("_", "\\_") ]]
+  [- endif -]
+  }\\
+  \arrayrulecolor{gray!20}\bottomrule
+\end{tabularx}
+[- endif -]
 
 \vspace{0.6em}
 

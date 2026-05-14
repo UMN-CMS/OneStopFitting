@@ -4,15 +4,19 @@
 \end{tabularx}
 \vspace{0.6em}
 
+%% ============================================================
+%%  Limits + Significance + Fit Results
+%% ============================================================
 [- set limits = combine.get("limits", {}) -]
-\begin{tabularx}{\textwidth}{@{\hspace{2pt}} L @{\hspace{4pt}} L @{\hspace{2pt}}}
-  %% summary table
+[- set cex = combine_extra if combine_extra is defined else {} -]
+\begin{tabularx}{\textwidth}{@{\hspace{2pt}} L @{\hspace{4pt}} L @{\hspace{4pt}} L @{\hspace{2pt}}}
+
+  %% Limits table
   \begin{minipage}[t]{\linewidth}
-    \small\textbf{Limits}\par
-    \vspace{0.3em}
+    \small\textbf{Exclusion Limits}\\[0.3em]
     \begin{tabular}{@{} l r @{}}
       \toprule
-      Metric & Value \\
+      Quantity & Value \\
       \midrule
       Observed & [[ "%.4g" | format(limits.get("observed", 0)) ]] \\
       Expected & [[ "%.4g" | format(limits.get("expected", 0)) ]] \\
@@ -23,50 +27,136 @@
       \bottomrule
     \end{tabular}
   \end{minipage} &
-  
+
+  %% Significance & GOF table
   \begin{minipage}[t]{\linewidth}
-    \small\textbf{Goodness of Fit \& Significance}\par
-    \vspace{0.3em}
+    \small\textbf{Significance \& GOF}\\[0.3em]
     \begin{tabular}{@{} l r @{}}
       \toprule
-      Metric & Value \\
+      Quantity & Value \\
       \midrule
+      Significance & [[ "%.4g" | format(combine.get("significance", 0)) ]] \\
       GOF $p$-value & [[ "%.4g" | format(combine.get("gof_p_value", 0)) ]] \\
       GOF Test Stat & [[ "%.4g" | format(combine.get("gof_test_statistic", 0)) ]] \\
-      Significance & [[ "%.4g" | format(combine.get("significance", 0)) ]] \\
+      [- if cex.get("expected_sensitivity") is not none -]
+      $1/r_{\mathrm{exp}}$ & [[ "%.3g" | format(cex["expected_sensitivity"]) ]] \\
+      [- endif -]
+      \bottomrule
+    \end{tabular}
+  \end{minipage} &
+
+  %% Fit results table
+  \begin{minipage}[t]{\linewidth}
+    \small\textbf{Fit Results}\\[0.3em]
+    \begin{tabular}{@{} l r @{}}
+      \toprule
+      Quantity & Value \\
+      \midrule
+      [- if cex.get("fitted_signal_strength") is not none -]
+      $r$ (S+B fit) & [[ "%.3g" | format(cex["fitted_signal_strength"]) ]] $\pm$ [[ "%.3g" | format(cex.get("fitted_signal_strength_err", 0)) ]] \\
+      [- endif -]
+      [- if cex.get("bonly_signal_strength") is not none -]
+      $r$ (B-only) & [[ "%.3g" | format(cex["bonly_signal_strength"]) ]] \\
+      [- endif -]
+      [- if cex.get("multidim_r") is not none -]
+      [- set mdf_err = cex.get("multidim_r_err", [0,0]) -]
+      $r$ (MultiDim) & [[ "%.3g" | format(cex["multidim_r"]) ]] ${}^{+[[ "%.2g" | format(mdf_err[0]) ]]}_{-[[ "%.2g" | format(mdf_err[1]) ]]}$ \\
+      [- endif -]
+      [- if cex.get("likelihood_scan_best_r") is not none -]
+      $r$ (NLL scan) & [[ "%.3g" | format(cex["likelihood_scan_best_r"]) ]] \\
+      [- endif -]
       \bottomrule
     \end{tabular}
   \end{minipage} \\
 \end{tabularx}
 
+%% ============================================================
+%%  Spot checks
+%% ============================================================
+[- if spot_checks is defined and spot_checks -]
+\vspace{0.6em}
+\noindent
+\begin{tabularx}{\textwidth}{@{\hspace{2pt}} X @{\hspace{2pt}}}
+  \arrayrulecolor{gray!40}\toprule
+  [- for flag in spot_checks -]
+  [- if flag["severity"] == "warning" -]
+  {\small\color{red!70!black} $\blacktriangle$~\textbf{[[ flag["check"] | replace("_", "\\_") ]]}: [[ flag["detail"] | replace("_", "\\_") ]]} \\
+  [- else -]
+  {\small\color{blue!60!black} $\circ$~[[ flag["check"] | replace("_", "\\_") ]]: [[ flag["detail"] | replace("_", "\\_") ]]} \\
+  [- endif -]
+  [- endfor -]
+  \arrayrulecolor{gray!40}\bottomrule
+\end{tabularx}
+[- endif -]
+
 \vspace{1em}
 
+%% ============================================================
+%%  Fit Slices
+%% ============================================================
+[- if combine_slices is defined and combine_slices -]
+\vspace{1em}
+\noindent\textbf{Fit Slices}\par
+\vspace{0.4em}
+\noindent
+[- for slice_path in combine_slices -]
+\begin{minipage}[t]{0.32\linewidth}
+  \includegraphics[width=\linewidth]{[[ slice_path ]]}
+\end{minipage}%
+[- if not loop.last -]
+  [- if loop.index % 3 == 0 -]
+  \\[0.5em]
+  [- else -]
+  \hfill
+  [- endif -]
+[- endif -]
+[- endfor -]
+[- endif -]
+
+%% ============================================================
+%%  Goodness of Fit | Likelihood scan | Nuisance pulls (if available)
+%% ============================================================
+[- set has_gof = image_paths.get("combine_gof_test") -]
+[- set has_lscan = image_paths.get("combine_likelihood_scan") -]
+[- set has_pulls = image_paths.get("combine_nuisance_pulls") -]
+[- if has_gof or has_lscan or has_pulls -]
+\vspace{1em}
 \begin{tabularx}{\textwidth}{@{\hspace{2pt}} L @{\hspace{4pt}} L @{\hspace{4pt}} L @{\hspace{2pt}}}
-  [- if image_paths.get("combine_fit_diagnostic") -]
-  \begin{minipage}[t]{\linewidth}\vspace{0pt}
-  \includegraphics[width=\linewidth]{[[ image_paths["combine_fit_diagnostic"] ]]}
-  \end{minipage}
-  [- else -]
-  \centering No Fit Diagnostic
-  [- endif -]
-  &
-  [- if image_paths.get("combine_fit_diagnostic_show_signal") -]
-  \begin{minipage}[t]{\linewidth}\vspace{0pt}
-  \includegraphics[width=\linewidth]{[[ image_paths["combine_fit_diagnostic_show_signal"] ]]}
-  \end{minipage}
-  [- else -]
-  \centering No Fit Diagnostic (Signal)
-  [- endif -]
-  &
-  [- if image_paths.get("combine_gof_test") -]
+  [- if has_gof -]
   \begin{minipage}[t]{\linewidth}\vspace{0pt}
   \includegraphics[width=\linewidth]{[[ image_paths["combine_gof_test"] ]]}
   \end{minipage}
   [- else -]
-  \centering No GOF Plot
+  ~
+  [- endif -]
+  &
+  [- if has_lscan -]
+  \begin{minipage}[t]{\linewidth}\vspace{0pt}
+  \includegraphics[width=\linewidth]{[[ image_paths["combine_likelihood_scan"] ]]}
+  \end{minipage}
+  [- else -]
+  ~
+  [- endif -]
+  &
+  [- if has_pulls -]
+  \begin{minipage}[t]{\linewidth}\vspace{0pt}
+  \includegraphics[width=\linewidth]{[[ image_paths["combine_nuisance_pulls"] ]]}
+  \end{minipage}
+  [- else -]
+  ~
   [- endif -]
   \\
-  \centering\scriptsize Fit Diagnostic (No Signal) &
-  \centering\scriptsize Fit Diagnostic (Show Signal) &
-  \centering\scriptsize Goodness of Fit Toys \\
+  [- if has_gof -]
+  \centering\scriptsize Goodness of Fit Toys
+  [- endif -]
+  &
+  [- if has_lscan -]
+  \centering\scriptsize Likelihood Scan
+  [- endif -]
+  &
+  [- if has_pulls -]
+  \centering\scriptsize Nuisance Pulls
+  [- endif -]
+  \\
 \end{tabularx}
+[- endif -]

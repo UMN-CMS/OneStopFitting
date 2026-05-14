@@ -37,14 +37,14 @@
 \smallskip\noindent\textcolor{gray!60}{\rule{\textwidth}{0.3pt}}\smallskip
 
 %% ============================================================
-%%  Row 2 — Pull Map | Pred. Variance
+%%  Row 2 — Pull Map | Total Pulls | Pred. Variance
 %% ============================================================
 \begin{tabularx}{\textwidth}{@{\hspace{2pt}} L @{\hspace{4pt}} L @{\hspace{4pt}} L @{\hspace{2pt}}}
   \includegraphics[width=\linewidth]{[[ pulls_2d_path ]]} &
-  &
+  \includegraphics[width=\linewidth]{[[ total_pulls_path ]]} &
   \includegraphics[width=\linewidth]{[[ predvar_path ]]}  \\
   \centering\scriptsize Pull Map &
-  \centering\scriptsize  &
+  \centering\scriptsize Total Pulls &
   \centering\scriptsize Predictive Variance \\
 \end{tabularx}
 
@@ -108,13 +108,15 @@
 \smallskip\noindent\textcolor{gray!60}{\rule{\textwidth}{0.3pt}}\smallskip
 
 %% ============================================================
-%%  Row 4 — Covariance (center) | Relative Uncertainty | Total Pulls
+%%  Row 4 — Covariance (center) | Relative Uncertainty
 %% ============================================================
-\begin{tabularx}{\textwidth}{@{\hspace{2pt}} L @{\hspace{4pt}} L @{\hspace{4pt}} L @{\hspace{2pt}}}
-  \includegraphics[width=\linewidth]{[[ covar_center_path ]]} &
-  \includegraphics[width=\linewidth]{[[ rel_unc_path ]]}      &
-  \includegraphics[width=\linewidth]{[[ total_pulls_path ]]}  \\
+\begin{tabularx}{\textwidth}{@{\hspace{2pt}} L @{\hspace{4pt}} L @{\hspace{2pt}}}
+  \begin{minipage}[t]{\linewidth}\vspace{0pt}
+  \includegraphics[width=0.8\linewidth]{[[ covar_center_path ]]}
+  \end{minipage} &
+  \begin{minipage}[t]{\linewidth}\vspace{0pt}
+  \includegraphics[width=0.8\linewidth]{[[ rel_unc_path ]]}
+  \end{minipage} \\
   \centering\scriptsize Covariance (center) &
-  \centering\scriptsize Relative Uncertainty &
-  \centering\scriptsize Total Pulls \\
+  \centering\scriptsize Relative Uncertainty \\
 \end{tabularx}
