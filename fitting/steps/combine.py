@@ -182,14 +182,14 @@ def prepareCombine(state: AnalysisState, rng_key: jax.Array) -> None:
     # Combine Diagnostics
     diag_dir = state.getRealOutPath() / "diagnostics" / "combine"
     diag_dir.mkdir(parents=True, exist_ok=True)
-    
+
     plot_saver = getPlotSaver(diag_dir, [state.metadata])
 
     plotCombineInputs(state, plot_saver=plot_saver)
     verifyEigenvariations(
-        state, 
+        state,
         plot_saver=plot_saver,
-        eigenvar_threshold=state.config.combine.eigenvar_threshold
+        eigenvar_threshold=state.config.combine.eigenvar_threshold,
     )
     visualizeEigenvariations(state, plot_saver=plot_saver)
 
