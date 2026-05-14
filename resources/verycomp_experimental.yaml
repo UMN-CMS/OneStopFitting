@@ -1,5 +1,5 @@
 injection_rate: 0.0
-min_counts: -1
+min_counts: 0
 rebin: 1
 
 window:
@@ -7,30 +7,27 @@ window:
   core_threshold_fraction: 0.5
   dilation_margin: 0.15
 
+window_variance_inflation: 1.0
 
 optimization:
   mode: optimization
   objective: mll
-  num_iters: 250
-  lr: 0.01
+  num_iters: 200
+  lr: 0.025
   optimizer: "adam"
-  restart:
-    num_restarts: 3
-    strategy:
-      _type: ResampleConfig
-    criterion:
-      _type: AlwaysContinueConfig
-    selection:
-      _type: BestLossConfig
+
+  # schedule:
+  #   _type: WarmupCosineScheduleConfig
+  #   warmup_steps: 50
 
 
-domain_window:
-  _type: AndWindowConfig
-  windows:
-    - _type: FunctionSliceWindowConfig
-      expression: "y < (np.sqrt(0.003 * x / 2500) + 0.935)"
-    - _type: FunctionSliceWindowConfig
-      expression: "y > 0.9"
+# domain_window:
+#   _type: AndWindowConfig
+#   windows:
+#     - _type: FunctionSliceWindowConfig
+#       expression: "y < (np.sqrt(0.003 * x / 2500) + 0.935)"
+#     - _type: FunctionSliceWindowConfig
+#       expression: "y > 0.7"
 
 model:
   _type: ExactGPConfig
@@ -39,7 +36,6 @@ model:
     kernels:
     - _type: NNWarpingKernelConfig
       hidden_shapes: [20,20]
-      activation: "selu"
       base_kernel_config:
         _type: RBFConfig
         ard: true
@@ -53,6 +49,6 @@ model:
   likelihood:
     _type: FixedGaussianNoiseConfig
     variance_floor_quantile: 0.05
-    # pad_variance_quantile: 0.25
+    # pad_variance_quantile: 0.05
   mean_function:
     _type: ConstantMeanConfig

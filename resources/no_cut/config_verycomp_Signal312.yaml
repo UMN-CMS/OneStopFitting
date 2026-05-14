@@ -1,5 +1,5 @@
 injection_rate: 0.0
-min_counts: -1.0
+min_counts: 0
 
 window:
   _type: CoreDilatedWindowConfig
@@ -19,7 +19,7 @@ model:
     hidden_shapes: [20,20]
   likelihood:
     _type: FixedGaussianNoiseConfig
-    variance_floor_quantile: 0.01
+    variance_floor_quantile: 0.05
     # pad_variance_quantile: 0.25
   mean_function:
     _type: ConstantMeanConfig
