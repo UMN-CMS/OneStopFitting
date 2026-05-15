@@ -13,6 +13,7 @@ from .file_tools import tarDirectory, tarFiles
 from ..utils import getSignal, getCategory, getRecoCategory
 from attrs import define
 from jinja2 import Environment
+import yaml
 import fitting
 
 logger = logging.getLogger("fitting")
@@ -253,6 +254,9 @@ def getJobs(
                         category=category,
                         reco_category=reco_category,
                     ),
+                    "pipeline": pipeline,
+                    "reco_category": reco_category,
+                    "coupling": pipeline.removeprefix("Signal"),
                 }
             )
     return jobs
@@ -361,6 +365,21 @@ def makeLocalTestScript(
     return test_path
 
 
+def _discoverInjectionFiles(config_paths: list[str]) -> list[str]:
+    injection_files = set()
+    for cp in config_paths:
+        try:
+            with open(cp, "r") as f:
+                cfg = yaml.safe_load(f)
+            if isinstance(cfg, dict):
+                sp = cfg.get("injection_signal_path")
+                if sp:
+                    injection_files.add(str(sp))
+        except Exception:
+            logger.debug(f"Could not inspect config {cp} for injection files")
+    return list(injection_files)
+
+
 def generateCondorSubmit(
     signal_pattern: tuple[str, ...],
     background_pattern: str,
@@ -416,10 +435,15 @@ def generateCondorSubmit(
             venv_path = ".venv"
 
     configs = list(set(x["config"] for x in jobs))
+    injection_files = _discoverInjectionFiles(configs)
+    if injection_files:
+        logger.info(
+            f"Discovered {len(injection_files)} injection signal file(s) to transfer"
+        )
     transfer_files = compressNeededFiles(
         venv_path=venv_path,
         condor_temp_loc=Path(".condor_temp/"),
-        extra_files=configs,
+        extra_files=configs + injection_files,
     )
 
     venv_activate_path = Path(Path(venv_path).name) / "bin" / "activate"

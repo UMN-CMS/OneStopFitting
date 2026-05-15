@@ -76,6 +76,7 @@ class CombineConfig:
 class PipelineConfig:
     background_path: Path
     signal_path: Path | list[Path] | None = None
+    injection_signal_path: Path | None = None
     injection_rate: float = 0.0
     rebin: int = 1
     min_counts: float = 0.0

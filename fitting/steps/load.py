@@ -105,11 +105,32 @@ def loadData(config: PipelineConfig) -> AnalysisState:
             "reco_category": reco_category,
         }
 
+    injection_signal = None
+    injection_signal_metadata = {}
+    if config.injection_signal_path is not None:
+        logger.info(f"Loading injection signal from {config.injection_signal_path}")
+        inj_loader = FileLoader.forPath(config.injection_signal_path)
+        inj_raw = inj_loader.load(config.injection_signal_path)
+        inj_hist = extractHistogram(inj_raw)
+        if config.signal_pre_scale != 1.0:
+            logger.info(f"Pre-scaling injection signal by {config.signal_pre_scale}")
+            inj_hist = inj_hist * config.signal_pre_scale
+        injection_signal = histToBinnedData(inj_hist, rebin=config.rebin, variation="central")
+        injection_signal_metadata = extractMetadata(inj_raw)
+        logger.info(
+            f"Loaded injection signal, total events = {float(injection_signal.Y.sum())}"
+        )
+        for k, v in injection_signal_metadata.items():
+            key = f"injection_{k}" if k in combined_metadata else k
+            combined_metadata[key] = v
+
     return AnalysisState(
         config=config,
         background=background,
         signal=first_signal,
         injection_rate=config.injection_rate,
+        injection_signal=injection_signal,
+        injection_signal_metadata=injection_signal_metadata,
         background_hist=bkg_hist,
         signal_hist=first_signal_hist,
         signals=signals,

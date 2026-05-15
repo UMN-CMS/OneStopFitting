@@ -4,9 +4,9 @@ import logging
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
-from fitting.utils import evolveCombos
+from fitting.utils import evolveCombos, dotFormat
 import functools as ft
-from .condor_tools import groupJobsByMassPoint
+from .condor_tools import groupJobsByMassPoint, _discoverInjectionFiles
 
 import yaml
 
@@ -24,6 +24,13 @@ def writeConfigFile(config: dict[str, Any], output_path: Path) -> None:
     with open(output_path, "w") as f:
         yaml.dump(config, f, default_flow_style=False)
     logger.info(f"Config written to {output_path}")
+
+
+def formatParamGrid(param_grid, format_kwargs):
+    return {
+        x: [dotFormat(z, **format_kwargs) if isinstance(z, str) else z for z in y]
+        for x, y in param_grid.items()
+    }
 
 
 def generateBatchSubmit(
@@ -137,7 +144,9 @@ def generateBatchSubmit(
     for i, (config_path, jgroup) in enumerate(jobs_by_config.items()):
         config_index = 0
         base_config = loadConfig(config_path)
-        for config in evolveCombos(base_config, **param_grids):
+        for config in evolveCombos(
+            base_config, **formatParamGrid(param_grids, jgroup[0])
+        ):
             total_configs += 1
             config_name = f"batch_config_{i}_{config_index:04d}.yaml"
             config_path = batch_config_dir / config_name
@@ -162,10 +171,15 @@ def generateBatchSubmit(
             venv_path = ".venv"
 
     configs = list(set(job["config"] for job in all_jobs))
+    injection_files = _discoverInjectionFiles(configs)
+    if injection_files:
+        logger.info(
+            f"Discovered {len(injection_files)} injection signal file(s) to transfer"
+        )
     transfer_files = compressNeededFiles(
         venv_path=venv_path,
         condor_temp_loc=Path(".condor_temp/"),
-        extra_files=configs,
+        extra_files=configs + injection_files,
     )
 
     venv_activate_path = Path(Path(venv_path).name) / "bin" / "activate"

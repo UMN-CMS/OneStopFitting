@@ -169,12 +169,14 @@ class AnalysisState:
     background: BinnedData | None = None
     signal: BinnedData | None = None
     injection_rate: float = 0.0
+    injection_signal: BinnedData | None = None
 
     background_hist: Any | None = None
     signal_hist: Any | None = None
     signals: dict[str, BinnedData] = attrs.field(factory=dict)
     signal_hists: dict[str, Any] = attrs.field(factory=dict)
     signal_metadata: dict[str, dict] = attrs.field(factory=dict)
+    injection_signal_metadata: dict[str, Any] = attrs.field(factory=dict)
 
     train_data: BinnedData | None = None
     test_data: BinnedData | None = None

@@ -128,6 +128,12 @@ def main(verbose: bool) -> None:
     "--injection-rate", "-r", type=float, default=None, help="Signal injection rate."
 )
 @click.option(
+    "--injection-signal",
+    type=click.Path(exists=True, path_type=Path),
+    default=None,
+    help="Signal file to inject (for bias studies).",
+)
+@click.option(
     "--output",
     "-o",
     type=str,
@@ -216,6 +222,7 @@ def run(
     background: Path | None,
     signal: tuple[Path, ...],
     injection_rate: float,
+    injection_signal: Path | None,
     output: str,
     rebin: int,
     min_counts: float,
@@ -272,6 +279,8 @@ def run(
             raw["output_dir_format"] = str(output)
         if injection_rate is not None:
             raw["injection_rate"] = injection_rate
+        if injection_signal is not None:
+            raw["injection_signal_path"] = str(injection_signal)
         if seed is not None:
             raw["rng_seed"] = seed
         if signal_pre_scale is not None:
@@ -305,6 +314,7 @@ def run(
             background_path=background,
             signal_path=signal_path_val,
             injection_rate=injection_rate,
+            injection_signal_path=injection_signal,
             output_dir_format=output,
             rebin=rebin,
             min_counts=min_counts,
@@ -1156,11 +1166,18 @@ def diagnose(
     required=True,
     help="Output format string with placeholders (e.g., 'output/{era.name}/{dataset_name}/{injection_rate}')",
 )
+@click.option(
+    "--injection-signal",
+    type=click.Path(exists=True, path_type=Path),
+    default=None,
+    help="Signal file to inject (for bias studies).",
+)
 def resolveOutput(
     background: Path,
     signal: tuple[Path, ...],
     config: Path,
     output_format: str,
+    injection_signal: Path | None,
 ) -> None:
     from .pipeline import PipelineConfig, loadData
     import yaml
@@ -1174,6 +1191,7 @@ def resolveOutput(
     pipeline_config = PipelineConfig(
         background_path=background,
         signal_path=signal_path_val,
+        injection_signal_path=injection_signal,
         output_dir_format=output_format,
     )
     pipeline_config = attrs.evolve(pipeline_config, **config_data)
@@ -1253,7 +1271,7 @@ def harvest(summaries: tuple[Path, ...], diagnose: bool) -> None:
                     if state.pred_cov is not None
                     else jnp.zeros_like(state.pred_mean)
                 )
-                sig = state.injection_rate * state.signal
+                sig = state.injection_rate * (state.injection_signal or state.signal)
                 for channel, ch_hists in extracted["histograms"].items():
                     makePostCombineSlice(
                         pred_mean=state.pred_mean,

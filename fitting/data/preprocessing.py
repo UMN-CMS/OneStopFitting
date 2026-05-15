@@ -71,10 +71,11 @@ def preprocess(
         window = strategy.buildWindow(window_config, state.signals)
 
     to_estimate = state.background
-    if state.signal is not None and state.injection_rate != 0.0:
+    injection_sig = state.injection_signal if state.injection_signal is not None else state.signal
+    if injection_sig is not None and state.injection_rate != 0.0:
         logger.info(f"Injecting signal with rate {state.injection_rate}")
-        injected_Y = state.background.Y + state.injection_rate * state.signal.Y
-        injected_V = state.background.V + state.injection_rate**2 * state.signal.V
+        injected_Y = state.background.Y + state.injection_rate * injection_sig.Y
+        injected_V = state.background.V + state.injection_rate**2 * injection_sig.V
         to_estimate = BinnedData(
             X=state.background.X,
             Y=injected_Y,
