@@ -4,8 +4,10 @@ import logging
 import os
 from pathlib import Path
 
+import uproot
 import jax
 import jax.numpy as jnp
+import numpy as np
 from jinja2 import Environment, FileSystemLoader
 
 from ..core.data import AnalysisState
@@ -23,6 +25,7 @@ from ..diagnostics.combine import (
     verifyEigenvariations,
     visualizeEigenvariations,
 )
+from ..combine.contamination import computeContaminationTemplate, plotContamination
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +74,9 @@ def _buildSystematics(state, processes, n_eigen, ch_name, bg_rate, hist_renames)
         )
 
     rate_systs = getattr(state.config.combine, "rate_systematics", None) or []
-    signal_labels = [p.name for p in processes if p.index <= 0]
+    signal_labels = [
+        p.name for p in processes if p.index <= 0 and p.name != "contamination"
+    ]
     rate_entries = resolveRateSystematics(
         rate_systs, signal_labels, state.signal_metadata
     )
@@ -85,7 +90,9 @@ def _buildSystematics(state, processes, n_eigen, ch_name, bg_rate, hist_renames)
         )
 
     if not rate_systs:
-        signal_names = {p.name for p in processes if p.index <= 0}
+        signal_names = {
+            p.name for p in processes if p.index <= 0 and p.name != "contamination"
+        }
         systematics.append(
             Systematic(
                 name="lumi",
@@ -157,10 +164,39 @@ def prepareCombine(state: AnalysisState, rng_key: jax.Array) -> None:
         hist_renames=hist_renames,
     )
 
+    contamination_result = None
+    if state.config.combine.contamination:
+        try:
+            contamination_arr, smoothed_signal = computeContaminationTemplate(state)
+            contamination_result = (contamination_arr, smoothed_signal)
+
+            num_active_bins = int(jnp.count_nonzero(state.blind_mask))
+            linear_edges = np.arange(num_active_bins + 1)
+
+            with uproot.update(shapes_path) as f:
+                f["contamination"] = (-contamination_arr, linear_edges)
+            logger.info("Added contamination histogram to shapes file")
+        except NotImplementedError as e:
+            logger.warning(f"Contamination skipped: {e}")
+        except Exception as e:
+            logger.error(f"Contamination computation failed: {e}")
+
     def doMask(x):
         return x[state.blind_mask]
 
     ch_name, observation, processes, bg_rate = _buildProcesses(state, doMask)
+
+    has_contamination = contamination_result is not None
+    if has_contamination:
+        contamination_arr, _ = contamination_result
+        contam_rate = float(np.sum(-contamination_arr))
+        n_signals = len(state.signals)
+        processes.append(
+            Process(name="contamination", rate=contam_rate, index=-(n_signals))
+        )
+        logger.info(
+            f"Added contamination process: rate={contam_rate:.4g}, index={-(n_signals)}"
+        )
 
     channels = [
         Channel(
@@ -193,6 +229,10 @@ def prepareCombine(state: AnalysisState, rng_key: jax.Array) -> None:
     )
     visualizeEigenvariations(state, plot_saver=plot_saver)
 
+    if has_contamination:
+        contamination_arr, smoothed_signal = contamination_result
+        plotContamination(state, contamination_arr, smoothed_signal, plot_saver)
+
     logger.info(f"Combine preparation complete. Datacard: {datacard_path}")
 
     # Build combine commands from the typed command system
@@ -203,6 +243,7 @@ def prepareCombine(state: AnalysisState, rng_key: jax.Array) -> None:
     context = CombineContext(
         signal_labels=list(state.signals.keys()),
         channel_name=ch_name,
+        has_contamination=has_contamination,
     )
 
     # Filter commands for injection runs

@@ -57,6 +57,7 @@ class CombineConfig:
     combine_container: str = "/cvmfs/unpacked.cern.ch/gitlab-registry.cern.ch/cms-analysis/general/combine-container:latest"
     name_map: SystematicNameMap | None = None
     rate_systematics: list[RateSystematic] = attrs.Factory(list)
+    contamination: bool = False
 
     def resolvedCommands(self):
         from .combine.commands import CombineCommand, resolveCommand
