@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import logging
+import matplotlib as mpl
+from typing import Literal
 from pathlib import Path
 from fitting.utils import dictToDot, dotFormat, commonDict
 from collections import defaultdict
@@ -316,6 +318,7 @@ def makeAggregateMassPlanePlot(
     contour_fmt: str | dict | None = None,
     contour_label_kwargs: dict[str, Any] | None = None,
     colorbar_label: str | None = None,
+    colorbar_scale: Literal["linear", "log"] = "linear",
 ) -> dict[str, tuple]:
     if not points:
         raise ValueError("No points to plot.")
@@ -326,6 +329,12 @@ def makeAggregateMassPlanePlot(
     vs = np.array([get_value_func(p) for p in points], dtype=float)
     fig, ax = plt.subplots(layout="constrained")
     actual_norm = None
+
+    plot_kwargs: dict[str, Any] = {
+        "cmap": cmap,
+        "norm": actual_norm,
+    }
+
     if "pvalue" in metric_name.lower() and cmap == "viridis":
         cmap = PVALUE_CMAP
         actual_norm = PVALUE_NORM
@@ -333,12 +342,10 @@ def makeAggregateMassPlanePlot(
             cmin = 0.0
         if cmax is None:
             cmax = 1.0
+    elif colorbar_scale == "log":
+        plot_kwargs["norm"] = mpl.colors.LogNorm()
     vmin = cmin if cmin is not None else None
     vmax = cmax if cmax is not None else None
-    plot_kwargs: dict[str, Any] = {
-        "cmap": cmap,
-        "norm": actual_norm,
-    }
     if actual_norm is None:
         plot_kwargs["vmin"] = vmin
         plot_kwargs["vmax"] = vmax
@@ -383,6 +390,7 @@ def makeAggregateSmoothPlot(
     contour_label_kwargs: dict[str, Any] | None = None,
     colorbar_label: str | None = None,
     rasterize_mesh: bool = True,
+    colorbar_scale: Literal["linear", "log"] = "linear",
 ) -> dict[str, tuple]:
     from scipy.interpolate import CloughTocher2DInterpolator
     from scipy.ndimage import gaussian_filter
@@ -400,6 +408,7 @@ def makeAggregateSmoothPlot(
 
     fig, ax = plt.subplots(layout="constrained")
     actual_norm = None
+    plot_kwargs = {}
     if (
         any(x in metric_name.lower() for x in ["pvalue", "p_value"])
         and cmap == "viridis"
@@ -410,6 +419,8 @@ def makeAggregateSmoothPlot(
             cmin = 0.0
         if cmax is None:
             cmax = 1.0
+    elif colorbar_scale == "log":
+        plot_kwargs["norm"] = mpl.colors.LogNorm()
 
     vmin = cmin if cmin is not None else None
     vmax = cmax if cmax is not None else None
@@ -430,11 +441,13 @@ def makeAggregateSmoothPlot(
         )
         Z = np.where(valid_mask, Z_smooth, np.nan)
 
-    plot_kwargs: dict[str, Any] = {
-        "cmap": cmap,
-        "norm": actual_norm,
-        "shading": "auto",
-    }
+    plot_kwargs.update(
+        {
+            "cmap": cmap,
+            "norm": actual_norm,
+            "shading": "auto",
+        }
+    )
     if actual_norm is None:
         plot_kwargs["vmin"] = vmin
         plot_kwargs["vmax"] = vmax

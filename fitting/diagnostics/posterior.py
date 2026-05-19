@@ -1,20 +1,3 @@
-"""Bayesian posterior predictive checks.
-
-Implements posterior predictive checking: for each posterior sample,
-generate synthetic data from the observation model and compare
-against the actual observations. This assesses whether the
-fitted model could plausibly have generated the observed data.
-
-The procedure is:
-1. Draw function samples f* from the posterior GP at test points
-2. For each f*, generate synthetic "observed" data y_rep
-   by drawing from the observation model p(y | f*)
-3. Compute test statistics T(y_rep) and T(y_obs)
-4. p-value = fraction of samples where T(y_rep) >= T(y_obs)
-
-A well-calibrated model yields p-values near 0.5.
-"""
-
 from __future__ import annotations
 
 import logging
@@ -34,11 +17,6 @@ def chi2TestStatistic(
     y_pred: jnp.ndarray,
     variance: jnp.ndarray,
 ) -> float:
-    """Chi-squared test statistic.
-
-    T(y) = sum((y_obs - y_pred)^2 / variance)
-    Only includes bins with variance > 0.
-    """
     mask = variance > 0
     return float(jnp.sum((y_obs[mask] - y_pred[mask]) ** 2 / variance[mask]))
 

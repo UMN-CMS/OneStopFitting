@@ -668,6 +668,7 @@ def aggregate(
 )
 @click.option("--draw-contours", type=CommaSeparatedFloat(), default=None)
 @click.option("--colorbar-label", type=str, default=None)
+@click.option("--colorbar-scale", type=str, default="linear")
 @click.option("--contour-fmt", type=str, default=None)
 @click.pass_context
 def massPlaneCmd(
@@ -682,6 +683,7 @@ def massPlaneCmd(
     value_func,
     draw_contours,
     colorbar_label,
+    colorbar_scale,
     contour_fmt,
 ):
     from .diagnostics.aggregate_plots import makeAggregateMassPlanePlot
@@ -708,6 +710,7 @@ def massPlaneCmd(
             params=dict(fmt_ctx, plot_type="mass_plane"),
             draw_contours=tuple(draw_contours) if draw_contours else None,
             colorbar_label=fmt(colorbar_label),
+            colorbar_scale=colorbar_scale,
             contour_fmt=fmt(contour_fmt),
         )
         _saveGroupPlots(plots, output, p, ctx.obj["formats"], ctx.obj["cms_extra"])
@@ -742,6 +745,7 @@ def massPlaneCmd(
 )
 @click.option("--draw-contours", type=CommaSeparatedFloat(), default=None)
 @click.option("--colorbar-label", type=str, default=None)
+@click.option("--colorbar-scale", type=str, default="linear")
 @click.option("--contour-fmt", type=str, default=None)
 @click.pass_context
 def smoothCmd(
@@ -758,6 +762,7 @@ def smoothCmd(
     value_func,
     draw_contours,
     colorbar_label,
+    colorbar_scale,
     contour_fmt,
 ):
     from .diagnostics.aggregate_plots import makeAggregateSmoothPlot
@@ -786,6 +791,7 @@ def smoothCmd(
             params=dict(fmt_ctx, plot_type="smooth"),
             draw_contours=tuple(draw_contours) if draw_contours else (1.0, 2.0),
             colorbar_label=fmt(colorbar_label),
+            colorbar_scale=colorbar_scale,
             contour_fmt=fmt(contour_fmt),
         )
         _saveGroupPlots(plots, output, p, ctx.obj["formats"], ctx.obj["cms_extra"])
