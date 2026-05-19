@@ -142,12 +142,14 @@ def _handleOneSummary(
         logger.warning(f"Skipping {path}: {e}")
 
 
-def collectPoints(
-    summary_files: Iterable[Path], *args, transform_name: str | None = None, **kwargs
+def extractPoints(
+    summaries: Iterable[tuple[Path, Any]],
+    *args,
+    transform_name: str | None = None,
+    **kwargs,
 ) -> dict[tuple[tuple[str, Any], ...], list[AggregatePoint]]:
     points = defaultdict(list)
-    for path in summary_files:
-        summary = readSummary(path)
+    for path, summary in summaries:
         if isinstance(summary, list):
             for s in summary:
                 _handleOneSummary(
@@ -157,8 +159,14 @@ def collectPoints(
             _handleOneSummary(
                 points, summary, path, *args, transform_name=transform_name, **kwargs
             )
-
     return dict(points)
+
+
+def collectPoints(
+    summary_files: Iterable[Path], *args, transform_name: str | None = None, **kwargs
+) -> dict[tuple[tuple[str, Any], ...], list[AggregatePoint]]:
+    summaries = [(path, readSummary(path)) for path in summary_files]
+    return extractPoints(summaries, *args, transform_name=transform_name, **kwargs)
 
 
 def computeStatistics(values: list[float], is_pvalue: bool = False) -> dict[str, Any]:

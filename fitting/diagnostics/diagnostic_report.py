@@ -93,20 +93,27 @@ class DiagnosticReport:
     all_meta: list[dict] = attrs.field(default=attrs.Factory(list))
 
 
-def _extractToyDataByCoupling(gathered: list[dict]) -> dict[str, dict[tuple[float, float], list[dict]]]:
-    by_coupling: dict[str, dict[tuple[float, float], list[dict]]] = defaultdict(lambda: defaultdict(list))
+def _extractByMassPoint(gathered: list[dict]) -> dict[tuple[float, float], list[dict]]:
+    by_mass: dict[tuple[float, float], list[dict]] = defaultdict(list)
     for entry in gathered:
         meta = entry.get("metadata", {}).get("other_data", {})
         mstop = meta.get("stop_mass")
         mchi = meta.get("chargino_mass")
-        coupling = str(meta.get("coupling", "unknown"))
         if mstop is None or mchi is None:
             continue
-        by_coupling[coupling][(float(mstop), float(mchi))].append(entry)
-    return {k: dict(v) for k, v in by_coupling.items()}
+        by_mass[(float(mstop), float(mchi))].append(entry)
+    return dict(by_mass)
 
 
-def _computePointDiagnosis(coupling: str, mstop: float, mchi: float, toys: list[dict]) -> PointDiagnosis:
+def _inferCoupling(gathered: list[dict]) -> str:
+    for entry in gathered:
+        c = entry.get("metadata", {}).get("other_data", {}).get("coupling")
+        if c is not None:
+            return str(c)
+    return "unknown"
+
+
+def _computePointDiagnosis(mstop: float, mchi: float, toys: list[dict]) -> PointDiagnosis:
     r_vals = []
     r_err_vals = []
     gof_pvals = []
@@ -137,6 +144,8 @@ def _computePointDiagnosis(coupling: str, mstop: float, mchi: float, toys: list[
     gof_ks = gof_stats.get("ks_pvalue_uniform")
     gof_verdict = gof_stats.get("pvalue_skew_verdict", "UNKNOWN")
     gof_median = gof_stats.get("median")
+
+    coupling = str(toys[0].get("metadata", {}).get("other_data", {}).get("coupling", "unknown")) if toys else "unknown"
 
     return PointDiagnosis(
         mstop=mstop,
@@ -214,15 +223,15 @@ def _extractRunConfig(gathered: list[dict]) -> RunConfig:
     )
 
 
-def computeDiagnostics(gathered: list[dict], coupling: str) -> DiagnosticReport:
-    all_by_coupling = _extractToyDataByCoupling(gathered)
-    grouped = all_by_coupling.get(coupling, {})
+def computeDiagnostics(gathered: list[dict]) -> DiagnosticReport:
+    grouped = _extractByMassPoint(gathered)
+    coupling = _inferCoupling(gathered)
 
-    all_meta = [e.get("metadata", {}) for e in gathered if str(e.get("metadata", {}).get("other_data", {}).get("coupling", "")) == coupling][:1]
+    all_meta = [e.get("metadata", {}) for e in gathered[:1]]
 
     points = []
     for (mstop, mchi), toys in sorted(grouped.items()):
-        points.append(_computePointDiagnosis(coupling, mstop, mchi, toys))
+        points.append(_computePointDiagnosis(mstop, mchi, toys))
 
     cat_groups: dict[str, list[PointDiagnosis]] = defaultdict(list)
     for p in points:
@@ -474,55 +483,49 @@ def discoverCouplings(gathered: list[dict]) -> list[str]:
 def generateDiagnosticReport(
     *,
     gathered: list[dict],
-    output_pdf: Path,
-    coupling: str | None = None,
+    output_dir: Path,
+    name_format: str = "diagnostic_report",
+    name_ctx: dict | None = None,
     latex_engine: str = "pdflatex",
     keep_build: bool = False,
     keep_tex: bool = False,
-) -> list[Path]:
-    output_pdf = Path(output_pdf).resolve()
+) -> Path:
+    from ..utils import dictToDot, dotFormat
+    if not gathered:
+        return
 
-    if coupling is not None:
-        couplings = [coupling]
-    else:
-        couplings = discoverCouplings(gathered)
+    output_dir = Path(output_dir).resolve()
 
-    results: list[Path] = []
-    for c in couplings:
-        report = computeDiagnostics(gathered, c)
+    report = computeDiagnostics(gathered)
 
-        if len(couplings) > 1:
-            c_dir = output_pdf.parent / f"coupling_{c}"
-            c_pdf = c_dir / output_pdf.name
-        else:
-            c_dir = output_pdf.parent
-            c_pdf = output_pdf
+    fmt_ctx = dict(dictToDot(gathered[0])) | (name_ctx or {})
+    output_name = dotFormat(name_format, **fmt_ctx).replace(".", "p")
+    output_pdf = output_dir / f"{output_name}.pdf"
+    output_pdf.parent.mkdir(parents=True, exist_ok=True)
 
-        plots_dir = c_dir / "diagnostic_plots"
-        plot_paths = generateDiagnosticPlots(report, plots_dir)
+    plots_dir = output_pdf.parent / "diagnostic_plots"
+    plot_paths = generateDiagnosticPlots(report, plots_dir)
 
-        template_dir = Path(__file__).parent / "templates"
-        context = {
-            "report": report,
-            "plot_paths": {k: str(v.resolve()) for k, v in plot_paths.items()},
-            "run_config": report.run_config,
-            "points": report.points,
-            "category_summaries": report.category_summaries,
-        }
+    template_dir = Path(__file__).parent / "templates"
+    context = {
+        "report": report,
+        "plot_paths": {k: str(v.resolve()) for k, v in plot_paths.items()},
+        "run_config": report.run_config,
+        "points": report.points,
+        "category_summaries": report.category_summaries,
+    }
 
-        latex_source = renderLatex(
-            template_dir=template_dir,
-            template_name="diagnostic_report.tex.j2",
-            context=context,
-        )
-        buildPdfFromLatex(
-            latex_source=latex_source,
-            output_pdf=c_pdf,
-            latex_engine=latex_engine,
-            keep_build=keep_build,
-            keep_tex=keep_tex,
-        )
-        logger.info(f"Generated diagnostic report for coupling {c}: {c_pdf}")
-        results.append(c_pdf)
-
-    return results
+    latex_source = renderLatex(
+        template_dir=template_dir,
+        template_name="diagnostic_report.tex.j2",
+        context=context,
+    )
+    buildPdfFromLatex(
+        latex_source=latex_source,
+        output_pdf=output_pdf,
+        latex_engine=latex_engine,
+        keep_build=keep_build,
+        keep_tex=keep_tex,
+    )
+    logger.info(f"Generated diagnostic report: {output_pdf}")
+    return output_pdf
