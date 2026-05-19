@@ -1,17 +1,23 @@
 # OneStopFitting
 
-OneStopFitting is a software package for Gaussian Process (GP) background estimation. It processes one and two-dimensional histograms to generate background estimates and uncertainties for use in the Combine statistical framework.
+OneStopFitting is a software package for Gaussian Process (GP) background estimation. 
+Estimation pipelines are constructed using a yaml-based configuration, which can then be run either locally or distributed over condor.
+It processes one and two-dimensional histograms to generate background estimates and uncertainties for use in the Combine statistical framework.
+If includes a large number of prebuilt kernels, models, means, and transformations.
+Also provided is a substantial suite of diagnostic information, including plots, metrics, and summary reports.
+
+There is also a system for post-processing combine results, generating limit/significance plots, GOF examinations, likelihood scans, etc.
 
 ## Project Structure
 
 The codebase is organized into modules under the `fitting/` directory:
 
-- `core/`: Utilities and state serialization.
+- `core/`: Core data structures and transforms.
 - `combine/`: Interface for the Combine framework.
-- `data/`: Data handling, rebinning, and masking.
-- `diagnostics/`: Plotting and report generation.
-- `distributed/`: Parameter sweep management and HTCondor support.
-- `inference/`: Models, optimization, and MCMC using JAX and GPJax.
+- `data/`: Core data manipulation.
+- `diagnostics/`: Plotting other tools for examining results.
+- `distributed/`: Parameter sweeps and HTCondor support.
+- `inference/`: Models, kernels, means, optimization, etc. The meat and potatoes. 
 - `steps/`: Pipeline execution steps.
 
 ## Installation
@@ -159,30 +165,29 @@ python -m fitting harvest output/2018/qcd_inclusive/comp/**/summary.json
 Models and inference methods are implemented in `fitting.inference`.
 
 ### 1. GP Models
-- `ExactGPConfig`: Full-batch Gaussian Process fit.
-- `SparseGPConfig`: Variational inducing points for large datasets.
-- `VariationalGPConfig`: Stochastic variational inference.
-- `MultiFidelityGPConfig`: Two-stage autoregressive framework using a low-fidelity representation and a high-fidelity surrogate.
-- `QCDPriorGPConfig`: Bayesian workflow using hyperpriors from simulation.
+- `ExactGPConfig`: Exact 
+- `SparseGPConfig`: Spare matrix approximations for large datasets.
+- `VariationalGPConfig`: Stochastic variational inference with learnable inducing points.
+- `MultiFidelityGPConfig`: Experimental multi-fidelity gaussian process based on QCD simulation.
+- `QCDPriorGPConfig`: Bayesian workflow using hyperpriors from MC.
 
 ### 2. Kernels
-Kernels include options from GPJax and physics-specific extensions.
+Kernels include options from GPJax and custom extensions.
 - **Standard**: `RBF`, `Matern12` / `Matern32` / `Matern52`, `RationalQuadratic`, `Polynomial`, `Periodic`, `Linear`, `White`.
 - **Composites**: `SumKernelConfig`, `ProductKernelConfig`, `ScaledKernelConfig`.
-- **Neural Network Kernel**: Dense neural network applied before a base kernel.
+- **Neural Network Kernel**: Dense neural network applied before a base kernel. Comes in warping and absolute versions.
 - **`MCEnsembleKernel`**: Covariance matrix derived from systematic variations.
-- **`MultiFidelityResidualKernel`**: Residuals between data and simulation.
+- **`MultiFidelityResidualKernel`**: Used in the multi-fidelity model.
 
 ### 3. Mean Functions
 Available mean functions:
 - `ZeroMeanConfig`, `ConstantMeanConfig`: Standard means.
-- `PolynomialBackgroundMeanConfig`, `ParametricBackgroundMeanConfig`: Parametric backgrounds.
-- `DoubleSidedCrystalBallMeanConfig`, `GaussianBumpMeanConfig`, etc.: Resonance structures.
-- `QCDMCMeanConfig`: Mean field from simulation with trainable adjustments.
-- `SignalTemplateMeanConfig`: Signal injection geometry.
-- `LookupTableMeanConfig`, `InterpolatedMeanConfig`: Manual specifications.
+- `PolynomialBackgroundMeanConfig`, `ParametricBackgroundMeanConfig`, `SignalTemplateMeanConfig`: Parametric backgrounds.
+- `DoubleSidedCrystalBallMeanConfig`, `GaussianBumpMeanConfig`: Resonance structures.
+- `QCDMCMeanConfig`: Mean derived from MC.
+- `LookupTableMeanConfig`, `InterpolatedMeanConfig`: Pre-specified means, can be useful as part of more complex pipelines.
 
 ### 4. Inference and Optimization
 - `OPTIMIZATION`: MLE or MAP estimates using Optax minimizers (Adam, AdamW, SGD).
-- `TWO_STAGE`: Iterative procedure for kernel and mean function optimization.
+- `TWO_STAGE`: Iterative procedure for kernel and mean function optimization. First tries to fit the mean to learn large scale structure, then uses GPR to learn residuals.
 - `SAMPLING`: Bayesian inference using NumPyro.
