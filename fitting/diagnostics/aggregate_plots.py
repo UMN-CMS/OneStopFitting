@@ -226,6 +226,58 @@ def makeMulti(points, is_pvalue: bool = False):
         except Exception:
             pass
 
+        try:
+            vals = values[0]
+            if (
+                isinstance(vals, (list, tuple))
+                and vals
+                and isinstance(vals[0], (tuple, list))
+                and len(vals[0]) >= 2
+            ):
+                xy = np.array(vals, dtype=float)
+                unique_x = np.unique(xy[:, 0])
+                if len(unique_x) >= 2:
+                    median_y = []
+                    sem_y = []
+                    std_y = []
+                    for ux in unique_x:
+                        ys = xy[xy[:, 0] == ux, 1]
+                        median_y.append(float(np.median(ys)))
+                        std_val = float(np.std(ys, ddof=1)) if len(ys) > 1 else 0.0
+                        std_y.append(std_val)
+                        sem_y.append(std_val / np.sqrt(len(ys)) if len(ys) > 1 else 0.0)
+                    x_fit = np.array(unique_x)
+                    y_fit = np.array(median_y)
+                    sem_fit = np.array(sem_y)
+                    weights = np.where(sem_fit > 0, 1.0 / sem_fit, 1.0)
+                    coeffs, cov = np.polyfit(x_fit, y_fit, deg=1, w=weights, cov=True)
+                    slope = float(coeffs[0])
+                    intercept = float(coeffs[1])
+                    statistics["slope"] = slope
+                    statistics["intercept"] = intercept
+                    statistics["slope_err"] = (
+                        float(np.sqrt(cov[0, 0]))
+                        if np.isfinite(cov[0, 0])
+                        else float("nan")
+                    )
+                    statistics["intercept_err"] = (
+                        float(np.sqrt(cov[1, 1]))
+                        if np.isfinite(cov[1, 1])
+                        else float("nan")
+                    )
+                    fitted = slope * x_fit + intercept
+                    residuals = (y_fit - fitted) / np.where(sem_fit > 0, sem_fit, 1.0)
+                    ndf = len(x_fit) - 2
+                    statistics["line_fit_chi2_ndf"] = (
+                        float(np.sum(residuals**2) / ndf) if ndf > 0 else float("nan")
+                    )
+                statistics["line_fit_unique_x"] = unique_x.tolist()
+                statistics["line_fit_median_y"] = median_y
+                statistics["line_fit_sem_y"] = sem_y
+                statistics["line_fit_std_y"] = std_y
+        except Exception:
+            pass
+
         ret.append(
             MultiPoint(
                 *k,
@@ -550,3 +602,99 @@ def makeAggregateScatterPlot(
     n = dotFormat(name_format, metric_name=metric_name, **params)
     n = n.replace(".", "p")
     return {n: (fig, ax)}
+
+
+def makeInjectionLinePlot(
+    points: list[MultiPoint],
+    *,
+    x_label: str = "Injected $r$",
+    y_label: str = "Extracted $r$",
+    title: str | None = None,
+    name_format: str = "injection_line_{dataset_name}",
+    error_type: str = "sem",
+    ylim: tuple[float, float] | None = None,
+) -> dict[str, tuple]:
+    all_plots: dict[str, tuple] = {}
+
+    for p in sorted(points, key=lambda pt: (pt.mstop, pt.mchi)):
+        stats = p.stats
+        if "slope" not in stats:
+            continue
+
+        fig, ax = plt.subplots(layout="constrained")
+        vals = p.value[0]
+        xy = np.array(vals, dtype=float)
+
+        ax.scatter(xy[:, 0], xy[:, 1], color="gray", alpha=0.15, s=8, zorder=1)
+
+        unique_x = np.array(stats["line_fit_unique_x"])
+        median_y = np.array(stats["line_fit_median_y"])
+        if error_type == "std":
+            err_y = np.array(stats["line_fit_std_y"])
+        else:
+            err_y = np.array(stats["line_fit_sem_y"])
+
+        ax.errorbar(
+            unique_x,
+            median_y,
+            yerr=err_y,
+            fmt="o",
+            color="black",
+            markersize=6,
+            elinewidth=1.5,
+            capsize=3,
+            zorder=3,
+            label="Median (toys)",
+        )
+
+        x_line = np.linspace(unique_x.min(), unique_x.max(), 100)
+        y_line = stats["slope"] * x_line + stats["intercept"]
+        ax.plot(x_line, y_line, "r-", linewidth=1.5, zorder=2, label="Linear fit")
+        ax.plot(
+            x_line, x_line, "k--", linewidth=0.8, alpha=0.5, zorder=2, label="$y = x$"
+        )
+
+        ann_lines = []
+        slope_err = stats.get("slope_err", float("nan"))
+        intercept_err = stats.get("intercept_err", float("nan"))
+        if np.isfinite(slope_err):
+            ann_lines.append(f"slope = {stats['slope']:.3f} $\\pm$ {slope_err:.3f}")
+        else:
+            ann_lines.append(f"slope = {stats['slope']:.3f}")
+        if np.isfinite(intercept_err):
+            ann_lines.append(
+                f"intercept = {stats['intercept']:.3f} $\\pm$ {intercept_err:.3f}"
+            )
+        else:
+            ann_lines.append(f"intercept = {stats['intercept']:.3f}")
+        ann_lines.append(p.metadata["dataset_title"])
+        ax.text(
+            0.03,
+            0.7,
+            "\n".join(ann_lines),
+            transform=ax.transAxes,
+            fontsize=16,
+            verticalalignment="top",
+            fontfamily="monospace",
+            bbox=dict(boxstyle="round,pad=0.4", facecolor="white", alpha=0.85),
+        )
+
+        ax.set_xlabel(x_label)
+        ax.set_ylabel(y_label)
+
+        # title = (
+        #     title
+        #     or "{title}"  # $m_{{\\tilde{{t}}}}$ = {other_data.stop_mass} \\textrm{{GeV}}, $m_{{\\tilde{{\\chi}}^{{\\pm}}}}$ = {other_data.chargino_mass} \\textrm{{GeV}}"
+        # )
+        # title = dotFormat(title, **dict(dictToDot(p.metadata)))
+        # ax.set_title(title)
+        ax.legend(loc="lower right", fontsize="small")
+
+        if ylim is not None:
+            ax.set_ylim(ylim)
+
+        n = dotFormat(name_format, **dict(dictToDot(p.metadata)))
+        n = n.replace(".", "p")
+        all_plots[n] = (fig, ax)
+
+    return all_plots

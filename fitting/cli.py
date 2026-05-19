@@ -573,6 +573,26 @@ def gather(inputs: tuple[str, ...], output: Path):
 @click.option(
     "--contour-fmt", type=str, default=None, help="Format string for contour labels."
 )
+@click.option(
+    "--value-func",
+    type=str,
+    default="median",
+    show_default=True,
+    help="Stat key for mass plane plots: median, mean, slope, intercept, etc.",
+)
+@click.option(
+    "--error-type",
+    type=click.Choice(["sem", "std"]),
+    default="sem",
+    show_default=True,
+    help="Error bar type for injection_line plots.",
+)
+@click.option(
+    "--ylim",
+    type=CommaSeparatedFloat(),
+    default=None,
+    help="Y-axis limits for injection_line plots (e.g. -0.5,1.5).",
+)
 def aggregate(
     inputs: tuple[str, ...],
     metric_dotpath: tuple[str, ...],
@@ -599,6 +619,9 @@ def aggregate(
     colorbar_label: str | None,
     cms_extra: str | None,
     contour_fmt: str | None,
+    value_func: str,
+    error_type: str,
+    ylim: list[float] | None,
 ) -> None:
     """Create an aggregate 2D mass-plane plot from many summary.json files."""
     from .diagnostics.plot_utils import savePlots
@@ -612,6 +635,7 @@ def aggregate(
         makeAggregateSmoothPlot,
         makeAggregateViolinPlot,
         makeAggregateScatterPlot,
+        makeInjectionLinePlot,
     )
 
     from fitting.utils import dotFormat
@@ -703,11 +727,14 @@ def aggregate(
             ],
         )
 
+        get_value_func = lambda x: x.stats.get(value_func, x.stats.get("median"))
+
         if "mass_plane" in plot_types:
             plots_k.update(
                 makeAggregateMassPlanePlot(
                     p,
                     metric_name=fmt_metric,
+                    get_value_func=get_value_func,
                     title=fmt_title,
                     cmap=cmap,
                     cmin=cmin,
@@ -730,6 +757,7 @@ def aggregate(
                 makeAggregateSmoothPlot(
                     p,
                     metric_name=fmt_metric,
+                    get_value_func=get_value_func,
                     title=fmt_title,
                     cmap=cmap,
                     cmin=cmin,
@@ -776,6 +804,15 @@ def aggregate(
                     xlim=xlim,
                     vlines=vlines,
                     pval_bands=pval_mode,
+                )
+            )
+        if "injection_line" in plot_types:
+            plots_k.update(
+                makeInjectionLinePlot(
+                    p,
+                    title=fmt_title,
+                    error_type=error_type,
+                    ylim=tuple(ylim) if ylim is not None else None,
                 )
             )
 

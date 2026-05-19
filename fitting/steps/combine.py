@@ -244,6 +244,7 @@ def prepareCombine(state: AnalysisState, rng_key: jax.Array) -> None:
         signal_labels=list(state.signals.keys()),
         channel_name=ch_name,
         has_contamination=has_contamination,
+        expected_r=state.config.injection_rate,
     )
 
     # Filter commands for injection runs

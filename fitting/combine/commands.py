@@ -11,6 +11,7 @@ class CombineContext:
     channel_name: str
     r_min: float = -20
     r_max: float = 20
+    expected_r: float | None = None
     has_contamination: bool = False
 
     @property
@@ -68,13 +69,16 @@ class FitDiagnostics(CombineCommand):
 
 @attrs.define
 class MultiDimFit(CombineCommand):
-    points: int = 100
+    points: int = 200
 
     def render(self, ctx):
-        base = (
-            f"combine -M MultiDimFit -d datacard.root"
-            f" --rMin={ctx.r_min} --rMax={ctx.r_max}"
-        )
+        if ctx.expected_r is not None:
+            r_min = ctx.expected_r - 3
+            r_max = ctx.expected_r + 3
+        else:
+            r_min = ctx.r_min
+            r_max = ctx.r_max
+        base = f"combine -M MultiDimFit -d datacard.root --rMin={r_min} --rMax={r_max}"
         return [
             f"{base} -n .mdimnon --algo singles",
             f"{base} -n .mdimgrid --algo grid --points {self.points}",
