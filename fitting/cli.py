@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 from .pipeline import PipelineStep
 import attrs
 
+
 if TYPE_CHECKING:
     from .data.windowing import WindowConfig
 
@@ -209,6 +210,7 @@ def main(verbose: bool) -> None:
         "multidimfit",
         "significance",
         "gof-saturated",
+        "impacts",
     ],
     help="Combine commands to run (e.g., 'fit', 'limits', 'significance', or full custom commands).",
 )
@@ -1040,7 +1042,6 @@ def makecondor(
     container: str | None,
     num_toys: int | None,
     toy_offset: int,
-    combine_cmds: tuple[str, ...],
     multi_signal: bool,
 ) -> None:
     """Generate HTCondor submit files for distributed processing."""
@@ -1056,7 +1057,6 @@ def makecondor(
         subdir_format=subdir_format,
         venv_path=venv,
         container=container,
-        combine_cmds=list(combine_cmds),
         num_toys=num_toys,
         toy_offset=toy_offset,
         multi_signal=multi_signal,
