@@ -220,28 +220,34 @@ def _runSpotChecks(
         exp_lo = limits.get("expected_minus_2sigma", expected)
         exp_hi = limits.get("expected_plus_2sigma", expected)
         if observed < exp_lo * 0.5:
-            flags.append({
-                "check": "observed_limit_below_band",
-                "severity": "warning",
-                "detail": f"Observed limit ({observed:.3g}) far below expected "
-                          f"-2σ band ({exp_lo:.3g})",
-            })
+            flags.append(
+                {
+                    "check": "observed_limit_below_band",
+                    "severity": "warning",
+                    "detail": f"Observed limit ({observed:.3g}) far below expected "
+                    f"-2sigma band ({exp_lo:.3g})",
+                }
+            )
         elif observed > exp_hi * 2.0:
-            flags.append({
-                "check": "observed_limit_above_band",
-                "severity": "warning",
-                "detail": f"Observed limit ({observed:.3g}) far above expected "
-                          f"+2σ band ({exp_hi:.3g})",
-            })
+            flags.append(
+                {
+                    "check": "observed_limit_above_band",
+                    "severity": "warning",
+                    "detail": f"Observed limit ({observed:.3g}) far above expected "
+                    f"+2sigma band ({exp_hi:.3g})",
+                }
+            )
 
     # Check: expected limit extremely large (unconstrained)
     if expected > SPOT_CHECK_THRESHOLDS["limit_vs_unc_ratio"]:
-        flags.append({
-            "check": "weak_expected_limit",
-            "severity": "info",
-            "detail": f"Expected limit ({expected:.3g}) is large, "
-                      f"indicating weak sensitivity",
-        })
+        flags.append(
+            {
+                "check": "weak_expected_limit",
+                "severity": "info",
+                "detail": f"Expected limit ({expected:.3g}) is large, "
+                f"indicating weak sensitivity",
+            }
+        )
 
     # Check: PPC p-values
     chi2_stats = ppc.get("test_stats", {}).get("chi2", {})
@@ -251,39 +257,47 @@ def _runSpotChecks(
         if pval is None:
             continue
         if pval < SPOT_CHECK_THRESHOLDS["ppc_pvalue_low"]:
-            flags.append({
-                "check": f"ppc_pvalue_low_{region_name}",
-                "severity": "warning",
-                "detail": f"PPC p-value ({region_name}) = {pval:.4f} < "
-                          f"{SPOT_CHECK_THRESHOLDS['ppc_pvalue_low']}",
-            })
+            flags.append(
+                {
+                    "check": f"ppc_pvalue_low_{region_name}",
+                    "severity": "warning",
+                    "detail": f"PPC p-value ({region_name}) = {pval:.4f} < "
+                    f"{SPOT_CHECK_THRESHOLDS['ppc_pvalue_low']}",
+                }
+            )
         elif pval > SPOT_CHECK_THRESHOLDS["ppc_pvalue_high"]:
-            flags.append({
-                "check": f"ppc_pvalue_high_{region_name}",
-                "severity": "info",
-                "detail": f"PPC p-value ({region_name}) = {pval:.4f} is unusually high",
-            })
+            flags.append(
+                {
+                    "check": f"ppc_pvalue_high_{region_name}",
+                    "severity": "info",
+                    "detail": f"PPC p-value ({region_name}) = {pval:.4f} is unusually high",
+                }
+            )
 
     # Check: χ²/bin
     for key in ["global_chi2_per_bin", "blinded_chi2_per_bin"]:
         val = metrics.get(key)
         if val is not None and val > SPOT_CHECK_THRESHOLDS["chi2_per_bin_high"]:
-            flags.append({
-                "check": f"high_{key}",
-                "severity": "warning",
-                "detail": f"{key} = {val:.3g} exceeds threshold "
-                          f"{SPOT_CHECK_THRESHOLDS['chi2_per_bin_high']}",
-            })
+            flags.append(
+                {
+                    "check": f"high_{key}",
+                    "severity": "warning",
+                    "detail": f"{key} = {val:.3g} exceeds threshold "
+                    f"{SPOT_CHECK_THRESHOLDS['chi2_per_bin_high']}",
+                }
+            )
 
     # Check: GOF p-value
     gof_p = combine.get("gof_p_value")
     if gof_p is not None:
         if gof_p < SPOT_CHECK_THRESHOLDS["ppc_pvalue_low"]:
-            flags.append({
-                "check": "gof_pvalue_low",
-                "severity": "warning",
-                "detail": f"GOF p-value = {gof_p:.4f} indicates poor fit",
-            })
+            flags.append(
+                {
+                    "check": "gof_pvalue_low",
+                    "severity": "warning",
+                    "detail": f"GOF p-value = {gof_p:.4f} indicates poor fit",
+                }
+            )
 
     # Check: fitted signal strength consistency with injection
     tree_sb = combine.get("tree_fit_sb", {})
@@ -292,12 +306,14 @@ def _runSpotChecks(
     if r_fit is not None and r_err is not None and r_err > 0:
         # For blinded analysis with injection_rate=0, r should be consistent with 0
         if abs(r_fit) > 3 * r_err:
-            flags.append({
-                "check": "large_signal_strength",
-                "severity": "info",
-                "detail": f"Fitted r = {r_fit:.3g} ± {r_err:.3g} "
-                          f"({abs(r_fit/r_err):.1f}σ from 0)",
-            })
+            flags.append(
+                {
+                    "check": "large_signal_strength",
+                    "severity": "info",
+                    "detail": f"Fitted r = {r_fit:.3g} +/- {r_err:.3g} "
+                    f"({abs(r_fit / r_err):.1f}sigma from 0)",
+                }
+            )
 
     return flags
 
