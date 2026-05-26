@@ -87,6 +87,30 @@ class ChannelModel:
         return len(self.data_obs)
 
 
+def computeShapeMetrics(nominal: np.ndarray, up: np.ndarray, down: np.ndarray) -> str:
+    mask = nominal > 0
+    if not np.any(mask):
+        return "0.0% [0.0%, 0.0%]"
+
+    rel_up = np.zeros_like(nominal)
+    rel_down = np.zeros_like(nominal)
+
+    rel_up[mask] = (up[mask] - nominal[mask]) / nominal[mask]
+    rel_down[mask] = (down[mask] - nominal[mask]) / nominal[mask]
+
+    all_changes = np.concatenate([rel_up[mask], rel_down[mask]])
+    if len(all_changes) == 0:
+        return "0.0% [0.0%, 0.0%]"
+
+    median_dev = np.median(np.abs(all_changes))
+    min_change = np.min(all_changes)
+    max_change = np.max(all_changes)
+
+    return (
+        f"{median_dev * 100:.1f}% [{min_change * 100:+.1f}%, {max_change * 100:+.1f}%]"
+    )
+
+
 @attrs.define
 class CombineModel:
     channels: list[ChannelModel]
@@ -213,3 +237,68 @@ class CombineModel:
         self.writeShapes(out_dir / self.shapes_file)
         (out_dir / "datacard.txt").write_text(self.renderDatacard())
         logger.info(f"Wrote datacard to {out_dir / 'datacard.txt'}")
+
+    def getSystematicsSummary(self) -> tuple[list[str], list[list[str]]]:
+        headers = ["Systematic", "Type"]
+        col_keys = []
+        for ch in self.channels:
+            for proc in ch.processes:
+                headers.append(f"{ch.name}_{proc.name}")
+                col_keys.append((ch, proc))
+
+        syst_map = self._collectSystematics()
+        rows = []
+        for syst_name, distribution in syst_map.items():
+            row = [syst_name, distribution]
+            for ch, proc in col_keys:
+                effect = None
+                for se in proc.systematics:
+                    if se.name == syst_name:
+                        effect = se.effect
+                        break
+                if effect is None:
+                    row.append("-")
+                elif isinstance(effect, RateEffect):
+                    row.append(effect.value)
+                elif isinstance(effect, ShapeEffect):
+                    row.append(
+                        computeShapeMetrics(proc.nominal, effect.up, effect.down)
+                    )
+                else:
+                    row.append("-")
+            rows.append(row)
+
+        return headers, rows
+
+    def renderSystematicsTable(self, format: str = "csv") -> str:
+        format_type = format.lower()
+        if format_type not in ["csv", "latex"]:
+            raise ValueError(f"Unknown format: {format}")
+
+        headers, rows = self.getSystematicsSummary()
+
+        if format_type == "csv":
+            lines = []
+            lines.append(",".join(headers))
+            for row in rows:
+                lines.append(",".join(row))
+            return "\n".join(lines) + "\n"
+
+        elif format_type == "latex":
+            escaped_headers = [
+                h.replace("_", r"\_").replace("%", r"\%") for h in headers
+            ]
+            aligns = "l" * 2 + "c" * (len(headers) - 2)
+            lines = []
+            lines.append(r"\begin{tabular}{" + aligns + r"}")
+            lines.append(r"\hline")
+            lines.append(" & ".join(escaped_headers) + r" \\")
+            lines.append(r"\hline")
+            for row in rows:
+                escaped_row = [
+                    cell.replace("_", r"\_").replace("%", r"\%") for cell in row
+                ]
+                lines.append(" & ".join(escaped_row) + r" \\")
+            lines.append(r"\hline")
+            lines.append(r"\end{tabular}")
+            return "\n".join(lines) + "\n"

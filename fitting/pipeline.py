@@ -60,6 +60,7 @@ class CombineConfig:
     name_map: SystematicNameMap | None = DEFAULT_NAME_MAP
     rate_systematics: list[RateSystematic] = DEFAULT_RATE_SYSTEMATICS
     background_syst_prefix: str = "CMS_NPS_25_007"
+    export_systematics_table: bool = True
 
     def resolvedCommands(self):
         from .combine.commands import CombineCommand, resolveCommand

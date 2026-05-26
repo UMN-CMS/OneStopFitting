@@ -89,5 +89,14 @@ def prepareCombine(state: AnalysisState, rng_key: jax.Array) -> None:
     out_dir = state.getRealOutPath() / "combine"
     model.write(out_dir)
 
+    if state.config.combine.export_systematics_table:
+        csv_table = model.renderSystematicsTable("csv")
+        (out_dir / "systematics.csv").write_text(csv_table)
+        logger.info(f"Wrote systematics summary CSV to {out_dir / 'systematics.csv'}")
+
+        latex_table = model.renderSystematicsTable("latex")
+        (out_dir / "systematics.tex").write_text(latex_table)
+        logger.info(f"Wrote systematics summary LaTeX to {out_dir / 'systematics.tex'}")
+
     _makePlots(state)
     _makeScript(state, model.channels[0].name)
