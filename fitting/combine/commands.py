@@ -12,14 +12,13 @@ class CombineContext:
     r_min: float = -20
     r_max: float = 20
     expected_r: float | None = None
-    has_contamination: bool = False
 
     @property
     def isMultiSignal(self) -> bool:
         return len(self.signal_labels) > 1
 
     def physicsModelArgs(self) -> str:
-        if not self.isMultiSignal and not self.has_contamination:
+        if not self.isMultiSignal:
             return ""
         model = "HiggsAnalysis.CombinedLimit.PhysicsModel:multiSignalModel"
         po_maps = []
@@ -28,8 +27,6 @@ class CombineContext:
                 po_maps.append(f"'map=.*/{lbl}:r[1,{self.r_min},{self.r_max}]'")
             else:
                 po_maps.append(f"'map=.*/{lbl}:r'")
-        if self.has_contamination:
-            po_maps.append("'map=.*/contamination:r'")
         po_flags = " ".join(f"--PO {po}" for po in ["verbose"] + po_maps)
         return f"-P {model} {po_flags}"
 

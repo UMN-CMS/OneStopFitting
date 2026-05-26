@@ -2,10 +2,7 @@ from __future__ import annotations
 
 import logging
 import re
-from collections import defaultdict
 from typing import Any
-from ..data.loading import variationNames
-from .histograms import normalizeVarName
 
 import attrs
 
@@ -16,6 +13,14 @@ DIRECTION_PATTERNS = [
     (re.compile(r"^[Dd]own(?:_(.*))?$"), "Down"),
     (re.compile(r"^[Dd]n(?:_(.*))?$"), "Down"),
     (re.compile(r"^[Uu]P(?:_(.*))?$"), "Up"),
+]
+
+UP_RES = [re.compile(r"Up$"), re.compile(r"_up_"), re.compile(r"_up$")]
+DOWN_RES = [
+    re.compile(r"Down$"),
+    re.compile(r"Dn$"),
+    re.compile(r"_down_"),
+    re.compile(r"_down$"),
 ]
 
 
@@ -39,6 +44,19 @@ def parseRawVariation(raw: str) -> tuple[str, str | None, str | None]:
             return category, detail, direction
 
     return category, rest, None
+
+
+def normalizeVarName(var_name: str) -> tuple[str, str | None]:
+    """Fallback parser for variation names not matching the structured format."""
+    if var_name == "central":
+        return "central", None
+    for expr in UP_RES:
+        if expr.search(var_name):
+            return expr.sub("", var_name), "Up"
+    for expr in DOWN_RES:
+        if expr.search(var_name):
+            return expr.sub("", var_name), "Down"
+    return var_name, None
 
 
 @attrs.define
@@ -125,63 +143,12 @@ class RateSystematic:
         return era in self.era_scope
 
 
-def collectShapeSystematics(
-    signal_hists: dict[str, Any],
-    signal_metadata: dict[str, dict],
-    name_map: SystematicNameMap = DEFAULT_NAME_MAP,
-) -> tuple[list[dict], dict[str, dict[str, str]]]:
-    """Collect and merge shape systematics across all signals.
-    Returns:
-        syst_entries: list of Systematic-compatible dicts
-            [{name, distribution, values}, ...]
-        hist_renames: dict mapping (process_label -> {raw_variation -> cms_hist_suffix})
-            Used by exportCombineData to name histograms correctly.
-    """
-
-    nuisance_map: dict[str, dict[str, str]] = defaultdict(dict)
-    hist_renames: dict[str, dict[str, str]] = defaultdict(dict)
-
-    for lbl, sig_hist in signal_hists.items():
-        for raw_var in variationNames(sig_hist):
-            if raw_var == "central" or raw_var.endswith("_disabled"):
-                continue
-
-            cms_name, direction = name_map.resolve(raw_var)
-            if direction is None:
-                logger.warning(f"Cannot determine direction for '{raw_var}', skipping")
-                continue
-
-            nuisance_map[cms_name][lbl] = "1"
-            hist_renames[lbl][raw_var] = f"{cms_name}{direction}"
-
-    syst_entries = [
-        {"name": name, "distribution": "shape", "values": dict(values)}
-        for name, values in sorted(nuisance_map.items())
-    ]
-
-    logger.info(
-        f"Collected {len(syst_entries)} shape systematics "
-        f"across {len(signal_hists)} signals"
-    )
-
-
-    return syst_entries, dict(hist_renames)
-
-
-def resolveRateSystematics(
-    rate_systematics: list[RateSystematic],
-    signal_labels: list[str],
-    signal_metadata: dict[str, dict],
-) -> list[dict]:
-    entries = []
-    for rs in rate_systematics:
-        values = {}
-        for lbl in signal_labels:
-            meta = signal_metadata.get(lbl, {})
-            if rs.appliesTo(meta):
-                values[lbl] = rs.value
-        if values:
-            entries.append(
-                {"name": rs.name, "distribution": rs.distribution, "values": values}
-            )
-    return entries
+DEFAULT_RATE_SYSTEMATICS = [
+    RateSystematic("lumi_13TeV_2016", "lnN", "1.02", ["2016_preVFP", "2016_postVFP"]),
+    RateSystematic("lumi_13TeV_2017", "lnN", "1.0082", ["2017"]),
+    RateSystematic("lumi_13TeV_2018", "lnN", "1.009", ["2018"]),
+    RateSystematic("lumi_13p6TeV_2022", "lnN", "1.014", ["2022_preEE", "2022_postEE"]),
+    RateSystematic(
+        "lumi_13p6TeV_2023", "lnN", "1.013", ["2023_preBPix", "2023_preBPix"]
+    ),
+]

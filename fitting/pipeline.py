@@ -33,7 +33,7 @@ from .steps.diagnostics import runDiagnostics
 from .steps.plot import generatePlots
 from .steps.combine import prepareCombine
 from .steps.report import runPointReport
-from .combine.systematics import DEFAULT_NAME_MAP
+from .combine.systematics import DEFAULT_NAME_MAP, DEFAULT_RATE_SYSTEMATICS
 
 logger = logging.getLogger(__name__)
 
@@ -58,10 +58,12 @@ class CombineConfig:
     bg_rate_uncertainty: str = "none"
     combine_container: str = "/cvmfs/unpacked.cern.ch/gitlab-registry.cern.ch/cms-analysis/general/combine-container:latest"
     name_map: SystematicNameMap | None = DEFAULT_NAME_MAP
-    rate_systematics: list[RateSystematic] = attrs.Factory(list)
+    rate_systematics: list[RateSystematic] = DEFAULT_RATE_SYSTEMATICS
+    background_syst_prefix: str = "CMS_NPS_25_007"
 
     def resolvedCommands(self):
         from .combine.commands import CombineCommand, resolveCommand
+
 
         resolved = []
         for cmd in self.combine_commands:

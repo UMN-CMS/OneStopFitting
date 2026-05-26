@@ -99,7 +99,6 @@ def extractFitDiagnostics(root_file: uproot.ReadOnlyDirectory) -> tuple[dict, di
     fit_types = ["shapes_prefit", "shapes_fit_b", "shapes_fit_s"]
     cat = ["data", "total_background", "total_signal"]
 
-    # Dynamically find channels (directories in shapes_prefit)
     channels = [
         k.split(";")[0] for k in root_file["shapes_prefit"].keys() if "/" not in k
     ]
