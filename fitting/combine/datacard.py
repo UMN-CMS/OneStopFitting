@@ -4,6 +4,7 @@ import logging
 from pathlib import Path
 
 import attrs
+from fitting.utils import formatLines
 
 logger = logging.getLogger(__name__)
 
@@ -29,16 +30,6 @@ class Channel:
     processes: list[Process]
     shapes_file: str | None = None
     use_auto_mc_stats: bool = False
-
-
-def formatLines(elems: list[list[str]], separator: str = "  ") -> list[str]:
-    if not elems:
-        return []
-    max_row_len = max(len(row) for row in elems)
-    padded_elems = [row + [""] * (max_row_len - len(row)) for row in elems]
-    max_lens = [max(len(str(x)) for x in col) for col in zip(*padded_elems)]
-    row_format = separator.join(f"{{: <{width}}}" for width in max_lens)
-    return [row_format.format(*e).rstrip() for e in padded_elems]
 
 
 @attrs.define
@@ -114,7 +105,9 @@ class DataCard:
 
         for rp in self.rate_params:
             bounds_str = f"[{rp.bounds[0]:.4f},{rp.bounds[1]:.4f}]"
-            lines.append(f"{rp.channel} rateParam {rp.process} {rp.init_value:.4f} {bounds_str}")
+            lines.append(
+                f"{rp.channel} rateParam {rp.process} {rp.init_value:.4f} {bounds_str}"
+            )
 
         for ch in self.channels:
             if ch.use_auto_mc_stats:

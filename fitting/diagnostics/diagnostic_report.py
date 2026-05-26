@@ -57,26 +57,26 @@ class CategorySummary:
 
 @attrs.define(frozen=True)
 class RunConfig:
-    pvq: float | None
-    wvi: float | None
-    signal_pre_scale: float | None
-    min_counts: float | None
-    lr: float | None
-    injection_rate: float | None
-    rebin: int | None
-    num_iters: int | None
-    optimizer: str | None
-    variance_floor_quantile: float | None
-    kernel_type: str | None
-    hidden_shapes: list[int] | None
-    activation: str | None
-    ard: bool | None
-    blinding_strategy: str | None
-    window_type: str | None
-    core_threshold_fraction: float | None
-    dilation_margin: float | None
-    smooth_sigma: float | None
-    eigenvar_threshold: float | None
+    pvq: float | None = None
+    wvi: float | None = None
+    signal_pre_scale: float | None = None
+    min_counts: float | None = None
+    lr: float | None = None
+    injection_rate: float | None = None
+    rebin: int | None = None
+    num_iters: int | None = None
+    optimizer: str | None = None
+    variance_floor_quantile: float | None = None
+    kernel_type: str | None = None
+    hidden_shapes: list[int] | None = None
+    activation: str | None = None
+    ard: bool | None = None
+    blinding_strategy: str | None = None
+    window_type: str | None = None
+    core_threshold_fraction: float | None = None
+    dilation_margin: float | None = None
+    smooth_sigma: float | None = None
+    eigenvar_threshold: float | None = None
 
 
 @attrs.define
@@ -113,7 +113,9 @@ def _inferCoupling(gathered: list[dict]) -> str:
     return "unknown"
 
 
-def _computePointDiagnosis(mstop: float, mchi: float, toys: list[dict]) -> PointDiagnosis:
+def _computePointDiagnosis(
+    mstop: float, mchi: float, toys: list[dict]
+) -> PointDiagnosis:
     r_vals = []
     r_err_vals = []
     gof_pvals = []
@@ -121,8 +123,7 @@ def _computePointDiagnosis(mstop: float, mchi: float, toys: list[dict]) -> Point
     for toy in toys:
         combine = toy.get("combine", {})
         tree_fit = combine.get("tree_fit_sb", {})
-        r = tree_fit.get("r")
-        r_err = tree_fit.get("r_err")
+        r, r_err = tree_fit.get("r"), tree_fit.get("r_err")
         gof = combine.get("gof_p_value")
 
         if r is not None and r_err is not None:
@@ -145,7 +146,13 @@ def _computePointDiagnosis(mstop: float, mchi: float, toys: list[dict]) -> Point
     gof_verdict = gof_stats.get("pvalue_skew_verdict", "UNKNOWN")
     gof_median = gof_stats.get("median")
 
-    coupling = str(toys[0].get("metadata", {}).get("other_data", {}).get("coupling", "unknown")) if toys else "unknown"
+    coupling = (
+        str(
+            toys[0].get("metadata", {}).get("other_data", {}).get("coupling", "unknown")
+        )
+        if toys
+        else "unknown"
+    )
 
     return PointDiagnosis(
         mstop=mstop,
@@ -167,7 +174,9 @@ def _computePointDiagnosis(mstop: float, mchi: float, toys: list[dict]) -> Point
     )
 
 
-def _computeCategorySummary(cat_name: str, points: list[PointDiagnosis]) -> CategorySummary:
+def _computeCategorySummary(
+    cat_name: str, points: list[PointDiagnosis]
+) -> CategorySummary:
     coverages = [p.coverage for p in points]
     median_rs = [p.median_r for p in points]
     ks_vals = [p.gof_ks_pvalue for p in points if p.gof_ks_pvalue is not None]
@@ -180,7 +189,9 @@ def _computeCategorySummary(cat_name: str, points: list[PointDiagnosis]) -> Cate
         median_coverage=float(np.median(coverages)),
         avg_median_r=float(np.mean(median_rs)),
         avg_gof_ks_pvalue=float(np.mean(ks_vals)) if ks_vals else None,
-        n_ok=sum(1 for p in points if p.gof_verdict == "OK"),
+        n_ok=sum(
+            1 for p in points if p.gof_verdict not in ["CONSERVATIVE", "DANGEROUS"]
+        ),
         n_conservative=sum(1 for p in points if p.gof_verdict == "CONSERVATIVE"),
         n_dangerous=sum(1 for p in points if p.gof_verdict == "DANGEROUS"),
     )
@@ -188,8 +199,7 @@ def _computeCategorySummary(cat_name: str, points: list[PointDiagnosis]) -> Cate
 
 def _extractRunConfig(gathered: list[dict]) -> RunConfig:
     if not gathered:
-        return RunConfig(None, None, None, None, None, None, None, None, None,
-                         None, None, None, None, None, None, None, None, None, None, None)
+        return RunConfig()
     cfg = gathered[0].get("config", {})
     model = cfg.get("model", {})
     likelihood = model.get("likelihood", {})
@@ -238,12 +248,11 @@ def computeDiagnostics(gathered: list[dict]) -> DiagnosticReport:
         cat_groups[p.category].append(p)
 
     cat_summaries = [
-        _computeCategorySummary(name, pts)
-        for name, pts in sorted(cat_groups.items())
+        _computeCategorySummary(name, pts) for name, pts in sorted(cat_groups.items())
     ]
 
     all_coverages = [p.coverage for p in points]
-    n_ok = sum(1 for p in points if p.gof_verdict == "OK")
+    n_ok = sum(1 for p in points if p.gof_verdict not in ["CONSERVATIVE", "DANGEROUS"])
     n_conservative = sum(1 for p in points if p.gof_verdict == "CONSERVATIVE")
     n_dangerous = sum(1 for p in points if p.gof_verdict == "DANGEROUS")
 
@@ -261,10 +270,12 @@ def computeDiagnostics(gathered: list[dict]) -> DiagnosticReport:
     )
 
 
-def _coverageColor(coverage: float) -> str:
-    if 0.63 <= coverage <= 0.73:
+def _coverageColor(
+    coverage: float, expected_coverage=0.68, ok_band=0.05, medium_band=0.1
+) -> str:
+    if expected_coverage - ok_band <= coverage <= expected_coverage + ok_band:
         return "green"
-    if 0.55 <= coverage <= 0.80:
+    if expected_coverage - medium_band <= coverage <= expected_coverage + medium_band:
         return "yellow"
     return "red"
 
@@ -295,14 +306,21 @@ CAT_COLORS = {
 }
 
 
-def plotCoverageMap(report: DiagnosticReport) -> tuple[plt.Figure, plt.Axes]:
+def plotCoverageMap(
+    report: DiagnosticReport, expected_coverage=0.68, ok_band=0.05, medium_band=0.1
+) -> tuple[plt.Figure, plt.Axes]:
     fig, ax = plt.subplots()
     for point in report.points:
         color = CAT_COLORS.get(point.category, "gray")
         ax.scatter(
-            point.mstop, point.mchi,
+            point.mstop,
+            point.mchi,
             c=[_coverageColor(point.coverage)],
-            marker="s", s=120, linewidths=0.8, edgecolors=color, zorder=3,
+            marker="s",
+            s=120,
+            linewidths=0.8,
+            edgecolors=color,
+            zorder=3,
         )
 
     for cat_name, color in CAT_COLORS.items():
@@ -312,16 +330,34 @@ def plotCoverageMap(report: DiagnosticReport) -> tuple[plt.Figure, plt.Axes]:
     ax.set_ylabel(r"$m_{\tilde{\chi}^{\pm}}$ [GeV]")
 
     from matplotlib.patches import Patch
+
     legend_elements = [
-        Patch(facecolor="green", label="63--73%"),
-        Patch(facecolor="yellow", label="55--80%"),
+        Patch(
+            facecolor="green",
+            label="{100*(expected_coverage - ok_band):d}--{100*(expected_coverage + ok_band):d}%",
+        ),
+        Patch(
+            facecolor="yellow",
+            label="{100*(expected_coverage - medium_band):d}--{100*(expected_coverage + medium_band):d}%",
+        ),
         Patch(facecolor="red", label="Outside"),
     ]
-    ax.legend(handles=legend_elements, title="Coverage", loc="lower left", fontsize="small",
-              framealpha=0.9)
-    ax.add_artist(ax.legend(title="Category", loc="upper left", fontsize="small", framealpha=0.9))
+    ax.legend(
+        handles=legend_elements,
+        title="Coverage",
+        loc="lower left",
+        fontsize="small",
+        framealpha=0.9,
+    )
+    ax.add_artist(
+        ax.legend(title="Category", loc="upper left", fontsize="small", framealpha=0.9)
+    )
 
-    _addCMSLabel(ax, report, f"Coverage: $|r| < r_{{err}}$\nOverall: {report.overall_coverage:.1%}, N={report.overall_n_toys}")
+    _addCMSLabel(
+        ax,
+        report,
+        f"Coverage: $|r| < r_{{err}}$\nOverall: {report.overall_coverage:.1%}, N={report.overall_n_toys}",
+    )
     return fig, ax
 
 
@@ -331,8 +367,18 @@ def plotMedianRMap(report: DiagnosticReport) -> tuple[plt.Figure, plt.Axes]:
     ys = [p.mchi for p in report.points]
     vs = [p.median_r for p in report.points]
 
-    sc = ax.scatter(xs, ys, c=vs, cmap="RdBu_r", marker="s", s=120,
-                    vmin=-2, vmax=2, linewidths=0.5, edgecolors="black")
+    sc = ax.scatter(
+        xs,
+        ys,
+        c=vs,
+        cmap="RdBu_r",
+        marker="s",
+        s=120,
+        vmin=-2,
+        vmax=2,
+        linewidths=0.5,
+        edgecolors="black",
+    )
     fig.colorbar(sc, ax=ax, label="Median $r$")
     ax.set_xlabel(r"$m_{\tilde{t}}$ [GeV]")
     ax.set_ylabel(r"$m_{\tilde{\chi}^{\pm}}$ [GeV]")
@@ -345,29 +391,94 @@ def plotVerdictMap(report: DiagnosticReport) -> tuple[plt.Figure, plt.Axes]:
 
     xs = [p.mstop for p in report.points]
     ys = [p.mchi for p in report.points]
-    ks_vals = [p.gof_ks_pvalue if p.gof_ks_pvalue is not None else np.nan for p in report.points]
+    ks_vals = [
+        p.gof_ks_pvalue if p.gof_ks_pvalue is not None else np.nan
+        for p in report.points
+    ]
     edge_colors = [CAT_COLORS.get(p.category, "gray") for p in report.points]
 
     sc = ax.scatter(
-        xs, ys,
-        c=ks_vals, cmap="RdYlGn", marker="s", s=120,
-        vmin=0, vmax=1, linewidths=0.8, edgecolors=edge_colors, zorder=3,
+        xs,
+        ys,
+        c=ks_vals,
+        cmap="RdYlGn",
+        marker="s",
+        s=120,
+        vmin=0,
+        vmax=1,
+        linewidths=0.8,
+        edgecolors=edge_colors,
+        zorder=3,
     )
     cb = fig.colorbar(sc, ax=ax, label="GOF KS $p$-value")
     cb.ax.axhline(0.05, color="black", linestyle="--", linewidth=0.8)
+
+    for p in report.points:
+        if p.gof_verdict == "CONSERVATIVE":
+            ax.annotate(
+                "CONS",
+                (p.mstop, p.mchi),
+                textcoords="offset points",
+                xytext=(0, 8),
+                ha="center",
+                va="bottom",
+                fontsize=8,
+                weight="bold",
+                bbox=dict(
+                    boxstyle="round,pad=0.15",
+                    fc="#FFDC00",
+                    alpha=0.85,
+                    ec="black",
+                    lw=0.5,
+                ),
+                zorder=4,
+            )
+        elif p.gof_verdict == "DANGEROUS":
+            ax.annotate(
+                "DANG",
+                (p.mstop, p.mchi),
+                textcoords="offset points",
+                xytext=(0, 8),
+                ha="center",
+                va="bottom",
+                fontsize=8,
+                weight="bold",
+                bbox=dict(
+                    boxstyle="round,pad=0.15",
+                    fc="#FF4136",
+                    alpha=0.85,
+                    ec="black",
+                    lw=0.5,
+                ),
+                zorder=4,
+            )
 
     ax.set_xlabel(r"$m_{\tilde{t}}$ [GeV]")
     ax.set_ylabel(r"$m_{\tilde{\chi}^{\pm}}$ [GeV]")
 
     from matplotlib.patches import Patch
-    cat_handles = [Patch(facecolor="none", edgecolor=c, label=n) for n, c in CAT_COLORS.items()]
-    ax.legend(handles=cat_handles, title="Category", loc="lower right", fontsize="small",
-              framealpha=0.9)
-    _addCMSLabel(ax, report, f"GOF KS $p$-value\n{report.n_ok} OK, {report.n_conservative} CONS, {report.n_dangerous} DANG")
+
+    cat_handles = [
+        Patch(facecolor="none", edgecolor=c, label=n) for n, c in CAT_COLORS.items()
+    ]
+    ax.legend(
+        handles=cat_handles,
+        title="Category",
+        loc="lower right",
+        fontsize="small",
+        framealpha=0.9,
+    )
+    _addCMSLabel(
+        ax,
+        report,
+        f"GOF KS $p$-value\n{report.n_ok} OK, {report.n_conservative} CONS, {report.n_dangerous} DANG",
+    )
     return fig, ax
 
 
-def plotCoverageBarByCategory(report: DiagnosticReport) -> tuple[plt.Figure, plt.Axes]:
+def plotCoverageBarByCategory(
+    report: DiagnosticReport, expected_coverage=0.68, ok_band=0.05, medium_band=0.1
+) -> tuple[plt.Figure, plt.Axes]:
     fig, ax = plt.subplots()
     cats = [s.category for s in report.category_summaries]
     coverages = [s.avg_coverage for s in report.category_summaries]
@@ -376,15 +487,32 @@ def plotCoverageBarByCategory(report: DiagnosticReport) -> tuple[plt.Figure, plt
 
     bar_colors = [CMS_COLORS[i] for i in range(len(cats))]
     bars = ax.bar(labels, coverages, color=bar_colors)
-    ax.axhline(0.68, color="black", linestyle="--", linewidth=1.5, label="Target (68%)")
-    ax.axhspan(0.63, 0.73, color=CMS_COLORS[3], alpha=0.2)
+    ax.axhline(
+        expected_coverage,
+        color="black",
+        linestyle="--",
+        linewidth=1.5,
+        label="Target (68%)",
+    )
+    ax.axhspan(
+        expected_coverage - ok_band,
+        expected_coverage + ok_band,
+        color=CMS_COLORS[3],
+        alpha=0.2,
+    )
     ax.set_ylabel("Average Coverage ($|r| < r_{err}$)")
     ax.set_ylim(0, 1.0)
     ax.legend(fontsize="small")
 
     for bar, cov in zip(bars, coverages):
-        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.02,
-                f"{cov:.1%}", ha="center", va="bottom", fontsize=10)
+        ax.text(
+            bar.get_x() + bar.get_width() / 2,
+            bar.get_height() + 0.02,
+            f"{cov:.1%}",
+            ha="center",
+            va="bottom",
+            fontsize=10,
+        )
     _addCMSLabel(ax, report, "Coverage by Category")
     return fig, ax
 
@@ -421,7 +549,10 @@ def plotRvsRErr(report: DiagnosticReport) -> tuple[plt.Figure, plt.Axes]:
         ax.scatter(
             np.full(len(normalized), point.mstop),
             normalized,
-            c=color, alpha=0.15, s=8, zorder=2,
+            c=color,
+            alpha=0.15,
+            s=8,
+            zorder=2,
         )
 
     ax.axhline(1, color="black", linestyle="--", linewidth=0.8)
@@ -438,7 +569,9 @@ def plotRvsRErr(report: DiagnosticReport) -> tuple[plt.Figure, plt.Axes]:
     return fig, ax
 
 
-def generateDiagnosticPlots(report: DiagnosticReport, output_dir: Path) -> dict[str, Path]:
+def generateDiagnosticPlots(
+    report: DiagnosticReport, output_dir: Path
+) -> dict[str, Path]:
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -491,6 +624,7 @@ def generateDiagnosticReport(
     keep_tex: bool = False,
 ) -> Path:
     from ..utils import dictToDot, dotFormat
+
     if not gathered:
         return
 
@@ -506,12 +640,25 @@ def generateDiagnosticReport(
     plots_dir = output_pdf.parent / "diagnostic_plots"
     plot_paths = generateDiagnosticPlots(report, plots_dir)
 
+    # Sort points by verdict priority for the details table: DANGEROUS first, then CONSERVATIVE, then OK / other.
+    # Within each verdict, sort by stop mass then chargino mass.
+    def verdictPriority(p: PointDiagnosis) -> tuple[int, float, float]:
+        if p.gof_verdict == "DANGEROUS":
+            priority = 0
+        elif p.gof_verdict == "CONSERVATIVE":
+            priority = 1
+        else:
+            priority = 2
+        return (priority, p.mstop, p.mchi)
+
+    sorted_points = sorted(report.points, key=verdictPriority)
+
     template_dir = Path(__file__).parent / "templates"
     context = {
         "report": report,
         "plot_paths": {k: str(v.resolve()) for k, v in plot_paths.items()},
         "run_config": report.run_config,
-        "points": report.points,
+        "points": sorted_points,
         "category_summaries": report.category_summaries,
     }
 
@@ -527,5 +674,28 @@ def generateDiagnosticReport(
         keep_build=keep_build,
         keep_tex=keep_tex,
     )
+    logger.info("=" * 60)
+    logger.info(f"DIAGNOSTIC VERDICT SUMMARY for Coupling: {report.coupling}")
+    logger.info(f"Total points: {len(report.points)}")
+    logger.info(f"  OK: {report.n_ok}")
+    logger.info(f"  CONSERVATIVE: {report.n_conservative}")
+    logger.info(f"  DANGEROUS: {report.n_dangerous}")
+
+    if report.n_dangerous > 0:
+        dang_list = [
+            f"({int(p.mstop)}, {int(p.mchi)})"
+            for p in report.points
+            if p.gof_verdict == "DANGEROUS"
+        ]
+        logger.info(f"  --> DANGEROUS points: {', '.join(dang_list)}")
+    if report.n_conservative > 0:
+        cons_list = [
+            f"({int(p.mstop)}, {int(p.mchi)})"
+            for p in report.points
+            if p.gof_verdict == "CONSERVATIVE"
+        ]
+        logger.info(f"  --> CONSERVATIVE points: {', '.join(cons_list)}")
+    logger.info("=" * 60)
+
     logger.info(f"Generated diagnostic report: {output_pdf}")
     return output_pdf

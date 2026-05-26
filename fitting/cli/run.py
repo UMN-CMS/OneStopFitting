@@ -161,6 +161,7 @@ def runCmd(
         PipelineConfig,
         runPipeline,
         PipelineStep,
+        OptimizationConfig,
     )
     import yaml
 

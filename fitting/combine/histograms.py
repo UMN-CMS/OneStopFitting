@@ -53,6 +53,7 @@ def exportCombineData(
     if state.pred_mean is None or state.pred_cov is None:
         raise ValueError("Cannot export Combine data without prediction results.")
 
+    hist_renames = hist_renames or {}
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -105,7 +106,7 @@ def exportCombineData(
         histograms[f"background_gpr_eigen{idx}{postfix}Down"] = (down, linear_edges)
 
     for lbl, sig_hist_entry in state.signal_hists.items():
-        rename_map = hist_renames.get(lbl, {}) if hist_renames else {}
+        rename_map = hist_renames.get(lbl, {})
 
         if hasVariationAxis(sig_hist_entry):
             for var_name in variationNames(sig_hist_entry):

@@ -44,64 +44,7 @@ def _buildProcesses(state, doMask):
     return ch_name, observation, processes, bg_rate
 
 
-def _buildSystematics(state, processes, n_eigen, ch_name, bg_rate, hist_renames):
-
-    systematics = []
-
-    year = state.background_metadata["era"]["name"]
-    postfix = f"_{year}" if year else ""
-
-    for i in range(n_eigen):
-        systematics.append(
-            Systematic(
-                name=f"gpr_eigen{i}{postfix}",
-                distribution="shape",
-                values={"background": "1"},
-            )
-        )
-
-    name_map = getattr(state.config.combine, "name_map", None) or DEFAULT_NAME_MAP
-    sig_syst_entries, _ = collectShapeSystematics(
-        state.signal_hists, state.signal_metadata, name_map=name_map
-    )
-    for entry in sig_syst_entries:
-        systematics.append(
-            Systematic(
-                name=entry["name"],
-                distribution=entry["distribution"],
-                values=entry["values"],
-            )
-        )
-
-    rate_systs = getattr(state.config.combine, "rate_systematics", None) or []
-    signal_labels = [
-        p.name for p in processes if p.index <= 0 and p.name != "contamination"
-    ]
-    rate_entries = resolveRateSystematics(
-        rate_systs, signal_labels, state.signal_metadata
-    )
-    for entry in rate_entries:
-        systematics.append(
-            Systematic(
-                name=entry["name"],
-                distribution=entry["distribution"],
-                values=entry["values"],
-            )
-        )
-
-    if not rate_systs:
-        signal_names = {
-            p.name for p in processes if p.index <= 0 and p.name != "contamination"
-        }
-        systematics.append(
-            Systematic(
-                name="lumi",
-                distribution="lnN",
-                values={name: "1.02" for name in signal_names},
-            )
-        )
-
-    rate_params = []
+def _addBackgroundRateUnc(state, bg_rate, systematics, rate_params, ch_name, postfix):
     bg_rate_unc = state.config.combine.bg_rate_uncertainty
     if bg_rate_unc != "none" and state.pred_cov is not None:
         blind_mask = state.blind_mask
@@ -136,118 +79,62 @@ def _buildSystematics(state, processes, n_eigen, ch_name, bg_rate, hist_renames)
                 )
             )
 
+
+def _buildSystematics(state, sig_syst_entries, processes, n_eigen, ch_name, bg_rate):
+    systematics = []
+    year = state.background_metadata["era"]["name"]
+    postfix = f"_{year}" if year else ""
+
+    for i in range(n_eigen):
+        systematics.append(
+            Systematic(
+                name=f"gpr_eigen{i}{postfix}",
+                distribution="shape",
+                values={"background": "1"},
+            )
+        )
+
+    for entry in sig_syst_entries:
+        systematics.append(
+            Systematic(
+                name=entry["name"],
+                distribution=entry["distribution"],
+                values=entry["values"],
+            )
+        )
+
+    signal_labels = [p.name for p in processes if p.index <= 0]
+    rate_entries = resolveRateSystematics(
+        state.config.combine.rate_systematics, signal_labels, state.signal_metadata
+    )
+    for entry in rate_entries:
+        systematics.append(
+            Systematic(
+                name=entry["name"],
+                distribution=entry["distribution"],
+                values=entry["values"],
+            )
+        )
+
+    rate_params = []
+    _addBackgroundRateUnc(state, bg_rate, systematics, rate_params, ch_name, postfix)
+
     return systematics, rate_params
 
 
-def prepareCombine(state: AnalysisState, rng_key: jax.Array) -> None:
-    if not state.config.signal_path:
-        logger.info("Skipping Combine preparation: no signal path")
-        return
-    out_dir = state.getRealOutPath() / "combine"
-    shapes_file = "shapes.root"
-    shapes_path = out_dir / shapes_file
-    datacard_path = out_dir / "datacard.txt"
+def _makeScript(state, channel_name):
 
-    logger.info(f"Preparing Combine inputs in {out_dir}")
-
-    # Collect systematics first to get hist_renames
-
-    name_map = getattr(state.config.combine, "name_map", None) or DEFAULT_NAME_MAP
-    _, hist_renames = collectShapeSystematics(
-        state.signal_hists, state.signal_metadata, name_map=name_map
-    )
-
-    n_eigen = exportCombineData(
-        state=state,
-        output_path=shapes_path,
-        eigenvar_threshold=state.config.combine.eigenvar_threshold,
-        hist_renames=hist_renames,
-    )
-
-    contamination_result = None
-    if state.config.combine.contamination:
-        try:
-            contamination_arr, smoothed_signal = computeContaminationTemplate(state)
-            contamination_result = (contamination_arr, smoothed_signal)
-
-            num_active_bins = int(jnp.count_nonzero(state.blind_mask))
-            linear_edges = np.arange(num_active_bins + 1)
-
-            with uproot.update(shapes_path) as f:
-                f["contamination"] = (-contamination_arr, linear_edges)
-            logger.info("Added contamination histogram to shapes file")
-        except NotImplementedError as e:
-            logger.warning(f"Contamination skipped: {e}")
-        except Exception as e:
-            logger.error(f"Contamination computation failed: {e}")
-
-    def doMask(x):
-        return x[state.blind_mask]
-
-    ch_name, observation, processes, bg_rate = _buildProcesses(state, doMask)
-
-    has_contamination = contamination_result is not None
-    if has_contamination:
-        contamination_arr, _ = contamination_result
-        contam_rate = float(np.sum(-contamination_arr))
-        n_signals = len(state.signals)
-        processes.append(
-            Process(name="contamination", rate=contam_rate, index=-(n_signals))
-        )
-        logger.info(
-            f"Added contamination process: rate={contam_rate:.4g}, index={-(n_signals)}"
-        )
-
-    channels = [
-        Channel(
-            name=ch_name,
-            observation=observation,
-            processes=processes,
-            shapes_file=shapes_file,
-            use_auto_mc_stats=True,
-        )
-    ]
-
-    systematics, rate_params = _buildSystematics(
-        state, processes, n_eigen, ch_name, bg_rate, hist_renames
-    )
-
-    card = DataCard(channels=channels, systematics=systematics, rate_params=rate_params)
-    card.write(datacard_path)
-
-    # Combine Diagnostics
-    diag_dir = state.getRealOutPath() / "diagnostics" / "combine"
-    diag_dir.mkdir(parents=True, exist_ok=True)
-
-    plot_saver = getPlotSaver(diag_dir, [state.metadata])
-
-    plotCombineInputs(state, plot_saver=plot_saver)
-    verifyEigenvariations(
-        state,
-        plot_saver=plot_saver,
-        eigenvar_threshold=state.config.combine.eigenvar_threshold,
-    )
-    visualizeEigenvariations(state, plot_saver=plot_saver)
-
-    if has_contamination:
-        contamination_arr, smoothed_signal = contamination_result
-        plotContamination(state, contamination_arr, smoothed_signal, plot_saver)
-
-    logger.info(f"Combine preparation complete. Datacard: {datacard_path}")
-
-    # Build combine commands from the typed command system
     resolved_cmds = state.config.combine.resolvedCommands()
     if not resolved_cmds:
         return
 
     context = CombineContext(
         signal_labels=list(state.signals.keys()),
-        channel_name=ch_name,
-        has_contamination=has_contamination,
+        channel_name=channel_name,
+        # has_contamination=has_contamination,
         expected_r=state.config.injection_rate,
     )
 
-    # Filter commands for injection runs
     if state.config.injection_rate is not None and state.config.injection_rate > 0:
         from ..combine.commands import GoodnessOfFit, Impacts
 
@@ -281,3 +168,74 @@ def prepareCombine(state: AnalysisState, rng_key: jax.Array) -> None:
     logger.info(f"Combine script generated at {script_path}")
     logger.info(f"Contains {len(all_shell_cmds)} command(s)")
     logger.info(f"To run: bash {script_path}")
+
+
+def _makePlots(state):
+    diag_dir = state.getRealOutPath() / "diagnostics" / "combine"
+    diag_dir.mkdir(parents=True, exist_ok=True)
+
+    plot_saver = getPlotSaver(diag_dir, [state.metadata])
+
+    plotCombineInputs(state, plot_saver=plot_saver)
+    verifyEigenvariations(
+        state,
+        plot_saver=plot_saver,
+        eigenvar_threshold=state.config.combine.eigenvar_threshold,
+    )
+
+    visualizeEigenvariations(state, plot_saver=plot_saver)
+
+
+def makeSystematicsTable(state, sig_syst_entries):
+    pass
+
+def prepareCombine(state: AnalysisState, rng_key: jax.Array) -> None:
+    if not state.config.signal_path:
+        logger.info("Skipping Combine preparation: no signal path")
+        return
+    out_dir = state.getRealOutPath() / "combine"
+    shapes_file = "shapes.root"
+    shapes_path = out_dir / shapes_file
+    datacard_path = out_dir / "datacard.txt"
+
+    logger.info(f"Preparing Combine inputs in {out_dir}")
+
+    sig_syst_entries, hist_renames = collectShapeSystematics(
+        state.signal_hists,
+        state.signal_metadata,
+        name_map=state.config.combine.name_map,
+    )
+
+
+    n_eigen = exportCombineData(
+        state=state,
+        output_path=shapes_path,
+        eigenvar_threshold=state.config.combine.eigenvar_threshold,
+        hist_renames=hist_renames,
+    )
+
+    def doMask(x):
+        return x[state.blind_mask]
+
+    ch_name, observation, processes, bg_rate = _buildProcesses(state, doMask)
+    channels = [
+        Channel(
+            name=ch_name,
+            observation=observation,
+            processes=processes,
+            shapes_file=shapes_file,
+            use_auto_mc_stats=True,
+        )
+    ]
+
+    systematics, rate_params = _buildSystematics(
+        state, sig_syst_entries, processes, n_eigen, ch_name, bg_rate
+    )
+
+    card = DataCard(channels=channels, systematics=systematics, rate_params=rate_params)
+    card.write(datacard_path)
+
+    _makePlots(state)
+    logger.info(f"Combine preparation complete. Datacard: {datacard_path}")
+
+    _makeScript(state, ch_name)

@@ -33,6 +33,7 @@ from .steps.diagnostics import runDiagnostics
 from .steps.plot import generatePlots
 from .steps.combine import prepareCombine
 from .steps.report import runPointReport
+from .combine.systematics import DEFAULT_NAME_MAP
 
 logger = logging.getLogger(__name__)
 
@@ -50,14 +51,14 @@ class CombineConfig:
             "multidimfit",
             "significance",
             "gof-saturated",
+            "impacts",
         ]
     )
     eigenvar_threshold: float = 0.01
     bg_rate_uncertainty: str = "none"
     combine_container: str = "/cvmfs/unpacked.cern.ch/gitlab-registry.cern.ch/cms-analysis/general/combine-container:latest"
-    name_map: SystematicNameMap | None = None
+    name_map: SystematicNameMap | None = DEFAULT_NAME_MAP
     rate_systematics: list[RateSystematic] = attrs.Factory(list)
-    contamination: bool = False
 
     def resolvedCommands(self):
         from .combine.commands import CombineCommand, resolveCommand

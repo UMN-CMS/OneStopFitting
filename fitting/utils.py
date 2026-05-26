@@ -126,3 +126,12 @@ def getCategory(mstop, mchi):
         return "comp"
     else:
         return "verycomp"
+
+def formatLines(elems: list[list[str]], separator: str = "  ") -> list[str]:
+    if not elems:
+        return []
+    max_row_len = max(len(row) for row in elems)
+    padded_elems = [row + [""] * (max_row_len - len(row)) for row in elems]
+    max_lens = [max(len(str(x)) for x in col) for col in zip(*padded_elems)]
+    row_format = separator.join(f"{{: <{width}}}" for width in max_lens)
+    return [row_format.format(*e).rstrip() for e in padded_elems]

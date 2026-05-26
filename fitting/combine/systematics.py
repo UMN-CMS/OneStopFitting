@@ -118,7 +118,7 @@ class RateSystematic:
     value: str
     era_scope: list[str] | None = None
 
-    def appliesTo(self, process_label: str, metadata: dict) -> bool:
+    def appliesTo(self, metadata: dict) -> bool:
         if self.era_scope is None:
             return True
         era = metadata["era"]["name"]
@@ -131,7 +131,6 @@ def collectShapeSystematics(
     name_map: SystematicNameMap = DEFAULT_NAME_MAP,
 ) -> tuple[list[dict], dict[str, dict[str, str]]]:
     """Collect and merge shape systematics across all signals.
-
     Returns:
         syst_entries: list of Systematic-compatible dicts
             [{name, distribution, values}, ...]
@@ -165,6 +164,7 @@ def collectShapeSystematics(
         f"across {len(signal_hists)} signals"
     )
 
+
     return syst_entries, dict(hist_renames)
 
 
@@ -178,7 +178,7 @@ def resolveRateSystematics(
         values = {}
         for lbl in signal_labels:
             meta = signal_metadata.get(lbl, {})
-            if rs.appliesTo(lbl, meta):
+            if rs.appliesTo(meta):
                 values[lbl] = rs.value
         if values:
             entries.append(

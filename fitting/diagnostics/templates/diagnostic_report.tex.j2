@@ -96,6 +96,48 @@ GOF verdicts & [[ report.n_ok ]] OK\,/\,[[ report.n_conservative ]] CONSERVATIVE
 [- endif -]
 \end{tcolorbox}
 
+\section*{Points by GOF Verdict}
+
+\begin{tcolorbox}[colback=white, colframe=black!40, boxrule=0.5pt, title={}]
+\textbf{DANGEROUS} ([[ report.n_dangerous ]] points):\\
+[- if report.n_dangerous > 0 -]
+  [- set ns = namespace(first=true) -]
+  [- for p in report.points -]
+    [- if p.gof_verdict == "DANGEROUS" -]
+      [- if not ns.first -], [- endif -]($[[ p.mstop|int ]]$, $[[ p.mchi|int ]]$)[- set ns.first = false -]
+    [- endif -]
+  [- endfor -]
+[- else -]
+  None
+[- endif -]
+
+\vspace{6pt}
+\textbf{CONSERVATIVE} ([[ report.n_conservative ]] points):\\
+[- if report.n_conservative > 0 -]
+  [- set ns = namespace(first=true) -]
+  [- for p in report.points -]
+    [- if p.gof_verdict == "CONSERVATIVE" -]
+      [- if not ns.first -], [- endif -]($[[ p.mstop|int ]]$, $[[ p.mchi|int ]]$)[- set ns.first = false -]
+    [- endif -]
+  [- endfor -]
+[- else -]
+  None
+[- endif -]
+
+\vspace{6pt}
+\textbf{OK} ([[ report.n_ok ]] points):\\
+[- if report.n_ok > 0 -]
+  [- set ns = namespace(first=true) -]
+  [- for p in report.points -]
+    [- if p.gof_verdict not in ["CONSERVATIVE", "DANGEROUS"] -]
+      [- if not ns.first -], [- endif -]($[[ p.mstop|int ]]$, $[[ p.mchi|int ]]$)[- set ns.first = false -]
+    [- endif -]
+  [- endfor -]
+[- else -]
+  None
+[- endif -]
+\end{tcolorbox}
+
 \section*{Category Summary}
 
 \begin{table}[H]

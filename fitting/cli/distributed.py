@@ -63,7 +63,6 @@ def makecondorCmd(
     container: str | None,
     num_toys: int | None,
     toy_offset: int,
-    combine_cmds: tuple[str, ...],
     multi_signal: bool,
 ) -> None:
     """Generate HTCondor submit files for distributed processing."""
@@ -79,7 +78,6 @@ def makecondorCmd(
         subdir_format=subdir_format,
         venv_path=venv,
         container=container,
-        combine_cmds=list(combine_cmds),
         num_toys=num_toys,
         toy_offset=toy_offset,
         multi_signal=multi_signal,
@@ -173,7 +171,6 @@ def makebatchCmd(
     subdir_format: str,
     venv: str | None,
     container: str | None,
-    combine_cmds: tuple[str, ...],
     rates: str | None,
     rebin: str | None,
     injection_rates: str | None,
