@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from collections import OrderedDict
 from pathlib import Path
-from typing import Union
+from typing import Any, Callable
 
 import attrs
 import numpy as np
@@ -34,13 +34,14 @@ class RateEffect:
         return cls(distribution="lnN", value=f"{value:.4f}")
 
 
-SystematicVariation = Union[ShapeEffect, RateEffect]
+SystematicVariation = ShapeEffect | RateEffect
 
 
 @attrs.define
 class SystematicEffect:
     name: str
     effect: SystematicVariation
+    category_name: str
 
 
 @attrs.define
@@ -54,15 +55,25 @@ class ProcessModel:
     def rate(self) -> float:
         return float(np.sum(self.nominal))
 
-    def addShape(self, name: str, up: np.ndarray, down: np.ndarray) -> None:
-        self.systematics.append(
-            SystematicEffect(name=name, effect=ShapeEffect(up=up, down=down))
-        )
-
-    def addRate(self, name: str, distribution: str, value: str) -> None:
+    def addShape(
+        self, name: str, category_name: str, up: np.ndarray, down: np.ndarray
+    ) -> None:
         self.systematics.append(
             SystematicEffect(
-                name=name, effect=RateEffect(distribution=distribution, value=value)
+                name=name,
+                category_name=category_name,
+                effect=ShapeEffect(up=up, down=down),
+            )
+        )
+
+    def addRate(
+        self, name: str, category_name: str, distribution: str, value: str
+    ) -> None:
+        self.systematics.append(
+            SystematicEffect(
+                name=name,
+                category_name=category_name,
+                effect=RateEffect(distribution=distribution, value=value),
             )
         )
 
@@ -87,28 +98,58 @@ class ChannelModel:
         return len(self.data_obs)
 
 
-def computeShapeMetrics(nominal: np.ndarray, up: np.ndarray, down: np.ndarray) -> str:
-    mask = nominal > 0
-    if not np.any(mask):
-        return "0.0% [0.0%, 0.0%]"
+# def computeShapeMetrics(
+#     nominal: np.ndarray, ups: list[np.ndarray], down: list[np.ndarray]
+# ) -> str:
+#     nominal = np.concatenate([nominal] * len(ups))
+#     up, down = np.concatenate(ups), np.concatenate(down)
+#     mask = nominal > 0
+#     if not np.any(mask):
+#         return "0.0% [0.0%, 0.0%]"
 
-    rel_up = np.zeros_like(nominal)
-    rel_down = np.zeros_like(nominal)
+#     rel_up = np.zeros_like(nominal)
+#     rel_down = np.zeros_like(nominal)
 
-    rel_up[mask] = (up[mask] - nominal[mask]) / nominal[mask]
-    rel_down[mask] = (down[mask] - nominal[mask]) / nominal[mask]
+#     rel_up[mask] = (up[mask] - nominal[mask]) / nominal[mask]
+#     rel_down[mask] = (down[mask] - nominal[mask]) / nominal[mask]
 
-    all_changes = np.concatenate([rel_up[mask], rel_down[mask]])
-    if len(all_changes) == 0:
-        return "0.0% [0.0%, 0.0%]"
+#     all_changes = np.concatenate([rel_up[mask], rel_down[mask]])
+#     if len(all_changes) == 0:
+#         return "0.0% [0.0%, 0.0%]"
 
-    median_dev = np.median(np.abs(all_changes))
-    min_change = np.min(all_changes)
-    max_change = np.max(all_changes)
+#     median_dev = np.median(np.abs(all_changes))
+#     min_change = np.min(all_changes)
+#     max_change = np.max(all_changes)
 
-    return (
-        f"{median_dev * 100:.1f}% [{min_change * 100:+.1f}%, {max_change * 100:+.1f}%]"
-    )
+#     return (
+#         f"{median_dev * 100:.1f}% [{min_change * 100:+.1f}%, {max_change * 100:+.1f}%]"
+#     )
+
+
+def computeShapeMetrics(
+    nominal: np.ndarray, ups: list[np.ndarray], down: list[np.ndarray]
+) -> str:
+    nominal = np.concatenate([nominal] * len(ups))
+    up, down = np.concatenate(ups), np.concatenate(down)
+
+    up_change = up - nominal
+    down_change = down - nominal
+
+    all_changes = abs(np.concatenate([up_change, down_change]))
+
+    percentile_16 = np.percentile(all_changes, 16)
+    percentile_84 = np.percentile(all_changes, 84)
+    median_dev = np.median(all_changes)
+    max_dev = np.max(all_changes)
+
+    return f"{int(percentile_16)}-{int(percentile_84)} ({int(max_dev)})"
+
+
+def computeRateMetrics(nominal: float, values: list[float], dists: list[str]) -> str:
+    changes = [nominal * (float(value) - 1) for value in values]
+    med = np.median(changes)
+
+    return f"{int(med)}"
 
 
 @attrs.define
@@ -117,14 +158,15 @@ class CombineModel:
     rate_params: list[RateParam] = attrs.Factory(list)
     shapes_file: str = "shapes.root"
 
-    def _collectSystematics(self) -> OrderedDict[str, str]:
+    def _collectSystematics(self, gather_by=lambda x: x.name) -> OrderedDict[Any, str]:
         """Collect unique systematic names and their distribution types."""
-        syst_order: OrderedDict[str, str] = OrderedDict()
+        syst_order: OrderedDict[Any, str] = OrderedDict()
         for ch in self.channels:
             for proc in ch.processes:
                 for se in proc.systematics:
-                    if se.name not in syst_order:
-                        syst_order[se.name] = se.effect.distribution
+                    key = gather_by(se)
+                    if key not in syst_order:
+                        syst_order[key] = se.effect.distribution
         return syst_order
 
     def _systematicValue(self, proc: ProcessModel, syst_name: str) -> str:
@@ -243,29 +285,39 @@ class CombineModel:
         col_keys = []
         for ch in self.channels:
             for proc in ch.processes:
-                headers.append(f"{ch.name}_{proc.name}")
+                headers.append(f"{proc.name}")
                 col_keys.append((ch, proc))
 
-        syst_map = self._collectSystematics()
+        gather_by = lambda x: x.category_name
+        syst_map = self._collectSystematics(gather_by=gather_by)
         rows = []
-        for syst_name, distribution in syst_map.items():
-            row = [syst_name, distribution]
+        for k, distribution in syst_map.items():
+            row = [k, distribution]
             for ch, proc in col_keys:
-                effect = None
+                effects = []
                 for se in proc.systematics:
-                    if se.name == syst_name:
-                        effect = se.effect
-                        break
-                if effect is None:
+                    if gather_by(se) == k:
+                        effects.append(se.effect)
+                if not effects:
                     row.append("-")
-                elif isinstance(effect, RateEffect):
-                    row.append(effect.value)
-                elif isinstance(effect, ShapeEffect):
+                elif all(isinstance(e, RateEffect) for e in effects):
                     row.append(
-                        computeShapeMetrics(proc.nominal, effect.up, effect.down)
+                        computeRateMetrics(
+                            proc.nominal,
+                            [x.value for x in effects],
+                            [x.distribution for x in effects],
+                        )
+                    )
+                elif all(isinstance(e, ShapeEffect) for e in effects):
+                    row.append(
+                        computeShapeMetrics(
+                            proc.nominal,
+                            [x.up for x in effects],
+                            [x.down for x in effects],
+                        )
                     )
                 else:
-                    row.append("-")
+                    raise ValueError(f"Unexpected effect type in {k}: {effects}")
             rows.append(row)
 
         return headers, rows

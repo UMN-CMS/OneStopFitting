@@ -4,6 +4,7 @@ import logging
 
 import jax.numpy as jnp
 import numpy as np
+from collections import defaultdict
 
 from ..core.data import AnalysisState
 from ..data.loading import hasVariationAxis, variationNames, histToBinnedData
@@ -65,6 +66,7 @@ def buildBackgroundProcess(
             + f"gpr_eigen{var['index']}{postfix}",
             up=np.asarray(var["up"]),
             down=np.asarray(var["down"]),
+            category_name="Bkg Est.",
         )
 
     bg_rate_unc = state.config.combine.bg_rate_uncertainty
@@ -78,6 +80,7 @@ def buildBackgroundProcess(
             name=f"bg_norm{postfix}",
             distribution="lnN",
             value=f"{1.0 + rate_unc:.4f}",
+            category_name="Bkg. Rate",
         )
         logger.info(
             f"Background rate uncertainty: {rate_unc:.4f} "
@@ -106,7 +109,12 @@ def buildSignalProcess(
     meta = state.signal_metadata.get(label, {})
     for rs in rate_systematics:
         if rs.appliesTo(meta):
-            proc.addRate(name=rs.name, distribution=rs.distribution, value=rs.value)
+            proc.addRate(
+                name=rs.name,
+                distribution=rs.distribution,
+                value=rs.value,
+                category_name=rs.category_name,
+            )
 
     return proc
 
@@ -118,13 +126,13 @@ def _addShapeVariations(
     blind_mask: jnp.ndarray,
     name_map: SystematicNameMap,
 ) -> None:
-    pending: dict[str, dict[str, np.ndarray]] = {}
+    pending: dict[tuple[str, str], dict[str, np.ndarray]] = defaultdict(dict)
 
     for raw_var in variationNames(sig_hist):
         if raw_var == "central" or raw_var.endswith("_disabled"):
             continue
 
-        cms_name, direction = name_map.resolve(raw_var)
+        cms_name, direction, category = name_map.resolve(raw_var)
         if direction is None:
             logger.warning(f"Cannot determine direction for '{raw_var}', skipping")
             continue
@@ -136,9 +144,9 @@ def _addShapeVariations(
             _applyDomainMask(sig_binned.Y, state.domain_mask)[blind_mask]
         )
 
-        pending.setdefault(cms_name, {})[direction] = values
+        pending[cms_name, category][direction] = values
 
-    for cms_name, directions in sorted(pending.items()):
+    for (cms_name, category), directions in sorted(pending.items()):
         up = directions.get("Up")
         down = directions.get("Down")
         if up is None or down is None:
@@ -148,7 +156,7 @@ def _addShapeVariations(
                 f"'{proc.name}', skipping"
             )
             continue
-        proc.addShape(name=cms_name, up=up, down=down)
+        proc.addShape(name=cms_name, up=up, down=down, category_name=category)
 
 
 def buildChannel(state: AnalysisState) -> ChannelModel:

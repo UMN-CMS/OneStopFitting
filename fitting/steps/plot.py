@@ -17,7 +17,7 @@ from ..core.serialization import limitedSummary
 logger = logging.getLogger(__name__)
 
 
-def generatePlots(state: AnalysisState, rng_key: jax.Array) -> None:
+def generatePlots(state: AnalysisState, rng_key: jax.Array) -> AnalysisState:
     """Generate and save diagnostic plots."""
 
     if (
@@ -99,3 +99,5 @@ def generatePlots(state: AnalysisState, rng_key: jax.Array) -> None:
     with open(plot_dir / "ALL.json", "w") as f:
         json.dump(limitedSummary(state), f)
     logger.info(f"Pipeline complete. Plots saved to {plot_dir}")
+
+    return state

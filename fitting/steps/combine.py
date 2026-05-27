@@ -80,10 +80,10 @@ def _makePlots(state):
     visualizeEigenvariations(state, plot_saver=plot_saver)
 
 
-def prepareCombine(state: AnalysisState, rng_key: jax.Array) -> None:
+def prepareCombine(state: AnalysisState, rng_key: jax.Array) -> AnalysisState:
     if not state.config.signal_path:
         logger.info("Skipping Combine preparation: no signal path")
-        return
+        return state
 
     model = buildCombineModel(state)
     out_dir = state.getRealOutPath() / "combine"
@@ -100,3 +100,4 @@ def prepareCombine(state: AnalysisState, rng_key: jax.Array) -> None:
 
     _makePlots(state)
     _makeScript(state, model.channels[0].name)
+    return state

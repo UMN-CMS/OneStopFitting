@@ -161,7 +161,9 @@ def visualizeEigenvariations(
             signal_size = max(signal_size, float(jnp.max(full_sig)))
 
     eigenvalues, scaled_vecs = computeScaledEigenvectors(
-        pred_cov, threshold_fraction=state.config.combine.eigenvar_threshold, signal_size=signal_size
+        pred_cov,
+        threshold_fraction=state.config.combine.eigenvar_threshold,
+        signal_size=signal_size,
     )
 
     base = state.test_data

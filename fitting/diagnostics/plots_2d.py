@@ -93,9 +93,7 @@ def makeDiagnosticPlots2D(
         for lbl, sig in sigs.items():
             key = "signal_template" if lbl == "template" else f"signal_template_{lbl}"
             with makePlot(key) as ax:
-                plotBinnedData(
-                    ax, sig, cbar_title=r"Events ($\lambda^{\prime\prime} = 0.1$)"
-                )
+                plotBinnedData(ax, sig, cbar_title=r"Events")
                 ax.set_title(f"Signal Template: {lbl}")
                 if test_data.axis_names and len(test_data.axis_names) >= 2:
                     ax.set_xlabel(test_data.axis_names[0])

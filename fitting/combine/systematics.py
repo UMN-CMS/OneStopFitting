@@ -67,6 +67,7 @@ class SystematicNameRule:
     cms_prefix: str
     strip_detail_prefix: str | None = None
     syst_class: str = "custom"
+    category: str = "custom"
 
     def matches(self, category: str) -> bool:
         return category == self.raw_prefix
@@ -86,42 +87,53 @@ class SystematicNameMap:
 
     rules: list[SystematicNameRule] = attrs.Factory(list)
 
-    def resolve(self, raw_variation: str) -> tuple[str, str | None]:
-        """Returns (cms_nuisance_name, direction_or_None)."""
+    def resolve(self, raw_variation: str) -> tuple[str, str | None, str | None]:
+        """Returns (cms_nuisance_name, direction_or_None, category_or_None)."""
         if raw_variation == "central" or raw_variation.endswith("_disabled"):
-            return raw_variation, None
+            return raw_variation, None, None
 
         category, detail, direction = parseRawVariation(raw_variation)
 
         for rule in self.rules:
             if rule.matches(category):
-                return rule.apply(detail), direction
+                return rule.apply(detail), direction, rule.category
 
         logger.warning(f"No rule for variation '{raw_variation}', using raw name")
 
-        return normalizeVarName(raw_variation)
+        return (*normalizeVarName(raw_variation), None)
 
 
 DEFAULT_RULES = [
-    SystematicNameRule("bjetshapesf", "CMS_btag", syst_class="btag"),
+    SystematicNameRule(
+        "bjetshapesf", "CMS_btag", syst_class="btag", category="DeepJet Shape"
+    ),
     SystematicNameRule(
         "jes",
         "CMS_scale_j",
         strip_detail_prefix="jesRegrouped_",
         syst_class="jet_energy_scale",
+        category="JES",
     ),
     SystematicNameRule(
         "jer",
         "CMS_res_j",
         strip_detail_prefix="JER",
         syst_class="jet_energy_resolution",
+        category="JER",
     ),
-    SystematicNameRule("pusf", "CMS_pileup", syst_class="pileup"),
+    SystematicNameRule("pusf", "CMS_pileup", syst_class="pileup", category="PU"),
     SystematicNameRule(
-        "l1prefiring", "CMS_L1Prefiring", syst_class="other_experimental"
+        "l1prefiring",
+        "CMS_L1Prefiring",
+        syst_class="other_experimental",
+        category="L1 Pre-fire",
     ),
-    SystematicNameRule("triggereff", "CMS_trigger", syst_class="other_experimental"),
-    SystematicNameRule("puid", "CMS_puid", syst_class="jet_efficiency"),
+    SystematicNameRule(
+        "triggereff", "CMS_trigger", syst_class="other_experimental", category="Trigger"
+    ),
+    SystematicNameRule(
+        "puid", "CMS_puid", syst_class="jet_efficiency", category="PU ID"
+    ),
 ]
 
 DEFAULT_NAME_MAP = SystematicNameMap(rules=list(DEFAULT_RULES))
@@ -134,6 +146,7 @@ class RateSystematic:
     name: str
     distribution: str
     value: str
+    category_name: str
     era_scope: list[str] | None = None
 
     def appliesTo(self, metadata: dict) -> bool:
@@ -144,11 +157,19 @@ class RateSystematic:
 
 
 DEFAULT_RATE_SYSTEMATICS = [
-    RateSystematic("lumi_13TeV_2016", "lnN", "1.02", ["2016_preVFP", "2016_postVFP"]),
-    RateSystematic("lumi_13TeV_2017", "lnN", "1.0082", ["2017"]),
-    RateSystematic("lumi_13TeV_2018", "lnN", "1.009", ["2018"]),
-    RateSystematic("lumi_13p6TeV_2022", "lnN", "1.014", ["2022_preEE", "2022_postEE"]),
     RateSystematic(
-        "lumi_13p6TeV_2023", "lnN", "1.013", ["2023_preBPix", "2023_preBPix"]
+        "lumi_13TeV_2016", "lnN", "1.02", "Lumi", ["2016_preVFP", "2016_postVFP"]
+    ),
+    RateSystematic("lumi_13TeV_2017", "lnN", "1.0082", "Lumi", ["2017"]),
+    RateSystematic("lumi_13TeV_2018", "lnN", "1.009", "Lumi", ["2018"]),
+    RateSystematic(
+        "lumi_13p6TeV_2022", "lnN", "1.014", "Lumi", ["2022_preEE", "2022_postEE"]
+    ),
+    RateSystematic(
+        "lumi_13p6TeV_2023",
+        "lnN",
+        "1.013",
+        "Lumi",
+        ["2023_preBPix", "2023_preBPix"],
     ),
 ]
