@@ -5,7 +5,6 @@ import click
 from fitting.cli.base import logger, _parseWindowParams
 
 
-
 @click.command("print-params")
 @click.argument("input", type=str)
 def printParamsCmd(input):

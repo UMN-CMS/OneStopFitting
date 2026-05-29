@@ -57,7 +57,9 @@ def buildBackgroundProcess(
         signal_size=signal_size,
     )
 
-    proc = ProcessModel(name="background", index=1, nominal=pred_mean_masked)
+    proc = ProcessModel(
+        name="background", index=1, nominal=pred_mean_masked, allow_mc_stats=False
+    )
 
     for var in variations:
         proc.addShape(

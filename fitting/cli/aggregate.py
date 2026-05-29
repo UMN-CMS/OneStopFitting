@@ -500,7 +500,7 @@ def diagnoseCmd(ctx, name_format, latex_engine, keep_build, keep_tex):
         grouped = defaultdict(list)
         for entry in flat:
             dotted = dict(dictToDot(entry))
-            key = tuple((x, dotted.get(x)) for x in group_by)
+            key = tuple((x, dotted[x]) for x in group_by)
             grouped[key].append(entry)
     else:
         grouped = {(): flat}

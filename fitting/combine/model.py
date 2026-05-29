@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import hist
 from collections import OrderedDict
 from pathlib import Path
 from typing import Any, Callable
@@ -49,6 +50,7 @@ class ProcessModel:
     name: str
     index: int
     nominal: np.ndarray
+    allow_mc_stats: bool = True
     systematics: list[SystematicEffect] = attrs.Factory(list)
 
     @property
@@ -186,7 +188,17 @@ class CombineModel:
             edges = np.arange(ch.nbins + 1, dtype=float)
             histograms["data_obs"] = (np.asarray(ch.data_obs), edges)
             for proc in ch.processes:
-                histograms[proc.name] = (np.asarray(proc.nominal), edges)
+                if proc.allow_mc_stats:
+                    histograms[proc.name] = (np.asarray(proc.nominal), edges)
+                else:
+                    h = hist.Hist(
+                        hist.axis.Variable(edges, name="gpr_bin"),
+                        storage=hist.storage.Weight(),
+                    )
+                    h[...] = np.stack(
+                        [np.asarray(proc.nominal), np.zeros_like(proc.nominal)], axis=-1
+                    )
+                    histograms[proc.name] = h
 
                 for se in proc.systematics:
                     if isinstance(se.effect, ShapeEffect):

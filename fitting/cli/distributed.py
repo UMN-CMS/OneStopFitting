@@ -121,12 +121,6 @@ def makecondorCmd(
 @click.option("--venv", type=str, help="Path to virtual environment to pack")
 @click.option("--container", type=str, help="Container image to use")
 @click.option(
-    "--combine-cmd",
-    "combine_cmds",
-    multiple=True,
-    help="Combine commands to run after the fit",
-)
-@click.option(
     "--rates",
     type=str,
     help="Comma-separated injection rates (e.g., '0.0,0.1,0.5')",

@@ -77,10 +77,13 @@ class MultiDimFit(CombineCommand):
             r_max = ctx.r_max
         base = f"combine -M MultiDimFit -d datacard.root --rMin={r_min} --rMax={r_max}"
         return [
-            f"{base} -n .mdimnon --algo singles",
+            f"{base} -n .mdimnon --algo singles --saveWorkspace",
             f"{base} -n .mdimgrid --algo grid --points {self.points}",
-            f"{base} -n .mdimgridfreeze --algo grid --points {self.points}"
-            f" --freezeParameters allConstrainedNuisances",
+            (
+                f"combine -M MultiDimFit higgsCombine.mdimnon.MultiDimFit.mH120.root"
+                f" --rMin={r_min} --rMax={r_max} -n .mdimgridfreeze --algo grid"
+                f" --points {self.points} --freezeParameters allConstrainedNuisances --snapshot MultiDimFit"
+            ),
         ]
 
 
@@ -101,8 +104,8 @@ class GoodnessOfFit(CombineCommand):
     def render(self, ctx):
         base = f"combine -M GoodnessOfFit --algorithm {self.algorithm} -d datacard.root"
         return [
-            f"{base} --name gof_{self.algorithm}",
-            f"{base} --name gof_{self.algorithm}_toys --toys {self.num_toys}",
+            f"{base} --name gof_{self.algorithm} --fixedSignalStrength=0",
+            f"{base} --name gof_{self.algorithm}_toys --toys {self.num_toys} --fixedSignalStrength=0",
         ]
 
 

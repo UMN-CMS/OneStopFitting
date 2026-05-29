@@ -21,6 +21,15 @@ def chi2TestStatistic(
     return float(jnp.sum((y_obs[mask] - y_pred[mask]) ** 2 / variance[mask]))
 
 
+# def chi2TestStatistic(
+#     y_obs: jnp.ndarray,
+#     y_pred: jnp.ndarray,
+#     variance: jnp.ndarray,
+# ) -> float:
+#     mask = variance > 0
+#     return float(jnp.sum((y_obs[mask] - y_pred[mask]) ** 2 / y_pred[mask]))
+
+
 def sumDiffTestStatistic(
     y_obs: jnp.ndarray,
     y_pred: jnp.ndarray,

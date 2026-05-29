@@ -117,7 +117,7 @@ from ..pipeline import PipelineStep
         "multidimfit",
         "significance",
         "gof-saturated",
-        "impacts",
+        # "impacts",
     ],
     help="Combine commands to run (e.g., 'fit', 'limits', 'significance', or full custom commands).",
 )
