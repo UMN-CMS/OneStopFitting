@@ -44,14 +44,14 @@ mplhep.style.use("CMS")
 class CombineConfig:
     """Configuration for combine command execution."""
 
-    combine_commands: list = attrs.Factory(
+    combine_commands: list[str] = attrs.Factory(
         lambda: [
             "limits",
             "fit-diagnostics",
             "multidimfit",
             "significance",
             "gof-saturated",
-            "impacts",
+            # "impacts",
         ]
     )
     eigenvar_threshold: float = 0.01
@@ -64,7 +64,6 @@ class CombineConfig:
 
     def resolvedCommands(self):
         from .combine.commands import CombineCommand, resolveCommand
-
 
         resolved = []
         for cmd in self.combine_commands:

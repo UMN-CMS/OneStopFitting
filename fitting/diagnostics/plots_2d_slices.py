@@ -385,7 +385,6 @@ def makeSlicePlots2D(
             if test_data.axis_names and len(test_data.axis_names) > slice_axis
             else f"axis{slice_axis}"
         )
-        axis_key = fixAxisKey(axis_name)
         for val in window_vals:
             val_key = f"{val:0.3g}".replace(".", "p").replace("-", "m")
             key = f"slice/{fixAxisKey(axis_name)}_{val_key}"
@@ -457,7 +456,6 @@ def makePostCombineSlice(
             if test_data.axis_names and len(test_data.axis_names) > slice_axis
             else f"axis{slice_axis}"
         )
-        axis_key = fixAxisKey(axis_name)
         for val in window_vals:
             val_key = f"{val:0.3g}".replace(".", "p").replace("-", "m")
             key = f"slice/{fixAxisKey(axis_name)}_{val_key}"

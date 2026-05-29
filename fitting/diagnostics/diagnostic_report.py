@@ -12,7 +12,7 @@ import mplhep
 import numpy as np
 
 from ..utils import getCategory
-from .aggregate_plots import computeStatistics
+from .aggregate_plots import computeBasicStatistics, computePValueStats
 from .plot_utils import CMS_COLORS, addCMSBits
 from .point_report import buildPdfFromLatex, renderLatex
 
@@ -114,7 +114,7 @@ def _inferCoupling(gathered: list[dict]) -> str:
 
 
 def _computePointDiagnosis(
-    mstop: float, mchi: float, toys: list[dict]
+    mstop: float, mchi: float, toys: list[dict], use_ppc_pval=True
 ) -> PointDiagnosis:
     r_vals = []
     r_err_vals = []
@@ -124,13 +124,18 @@ def _computePointDiagnosis(
         combine = toy.get("combine", {})
         tree_fit = combine.get("tree_fit_sb", {})
         r, r_err = tree_fit.get("r"), tree_fit.get("r_err")
-        gof = combine.get("gof_p_value")
+
+        if use_ppc_pval:
+            gof = toy["ppc"]["test_stats"]["chi2"]["blinded"]["pvalue"]
+        else:
+            gof = combine.get("gof_p_value")
 
         if r is not None and r_err is not None:
             r_vals.append(float(r))
             r_err_vals.append(float(r_err))
         if gof is not None:
             gof_pvals.append(float(gof))
+    gof_pvals = np.array(gof_pvals)
 
     r_arr = np.array(r_vals) if r_vals else np.array([0.0])
     r_err_arr = np.array(r_err_vals) if r_err_vals else np.array([1.0])
@@ -141,7 +146,8 @@ def _computePointDiagnosis(
     std_r = float(np.std(r_arr, ddof=1)) if len(r_arr) > 1 else 0.0
     coverage = float(np.mean(np.abs(r_arr) < r_err_arr))
 
-    gof_stats = computeStatistics(gof_pvals, is_pvalue=True) if gof_pvals else {}
+    gof_stats = computeBasicStatistics(gof_pvals)
+    gof_stats.update(computePValueStats(gof_pvals))
     gof_ks = gof_stats.get("ks_pvalue_uniform")
     gof_verdict = gof_stats.get("pvalue_skew_verdict", "UNKNOWN")
     gof_median = gof_stats.get("median")
@@ -640,8 +646,6 @@ def generateDiagnosticReport(
     plots_dir = output_pdf.parent / "diagnostic_plots"
     plot_paths = generateDiagnosticPlots(report, plots_dir)
 
-    # Sort points by verdict priority for the details table: DANGEROUS first, then CONSERVATIVE, then OK / other.
-    # Within each verdict, sort by stop mass then chargino mass.
     def verdictPriority(p: PointDiagnosis) -> tuple[int, float, float]:
         if p.gof_verdict == "DANGEROUS":
             priority = 0

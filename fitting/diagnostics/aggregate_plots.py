@@ -99,7 +99,6 @@ transform_registry = {
 
 
 def _handleOneSummary(
-    points,
     summary,
     path,
     metric_dotpath: str | tuple[str, ...],
@@ -108,40 +107,35 @@ def _handleOneSummary(
     chi_dotpath: str = "metadata.other_data.chargino_mass",
     transform_name: str | None = None,
 ) -> dict[tuple[tuple[str, Any], ...], list[AggregatePoint]]:
-    try:
-        dotted = dict(dictToDot(summary))
-        if group_by:
-            key = tuple((x, dotted[x]) for x in group_by)
-        else:
-            key = tuple()
+    dotted = dict(dictToDot(summary))
+    if group_by:
+        key = tuple((x, dotted[x]) for x in group_by)
+    else:
+        key = tuple()
 
-        mstop = float(getByDotpath(summary, stop_dotpath))
-        mchi = float(getByDotpath(summary, chi_dotpath))
+    mstop = float(getByDotpath(summary, stop_dotpath))
+    mchi = float(getByDotpath(summary, chi_dotpath))
 
-        if isinstance(metric_dotpath, str):
-            value_raw = getByDotpath(summary, metric_dotpath)
-            value = float(value_raw)
-        else:
-            value_raw = tuple(getByDotpath(summary, d) for d in metric_dotpath)
-            value = value_raw[0] if len(value_raw) == 1 else value_raw
+    if isinstance(metric_dotpath, str):
+        value_raw = getByDotpath(summary, metric_dotpath)
+        value = float(value_raw)
+    else:
+        value_raw = tuple(getByDotpath(summary, d) for d in metric_dotpath)
+        value = value_raw[0] if len(value_raw) == 1 else value_raw
 
-        if transform_name:
-            if transform_name not in transform_registry:
-                raise ValueError(f"Unknown transform '{transform_name}'")
-            value = transform_registry[transform_name](value, summary)
+    if transform_name:
+        if transform_name not in transform_registry:
+            raise ValueError(f"Unknown transform '{transform_name}'")
+        value = transform_registry[transform_name](value, summary)
 
-        points[key].append(
-            AggregatePoint(
-                mstop=mstop,
-                mchi=mchi,
-                value=value,
-                source=path,
-                groups=dict(key),
-                metadata=summary.get("metadata"),
-            )
-        )
-    except Exception as e:
-        logger.warning(f"Skipping {path}: {e}")
+    return AggregatePoint(
+        mstop=mstop,
+        mchi=mchi,
+        value=value,
+        source=path,
+        groups=dict(key),
+        metadata=summary.get("metadata"),
+    )
 
 
 def extractPoints(
@@ -154,13 +148,23 @@ def extractPoints(
     for path, summary in summaries:
         if isinstance(summary, list):
             for s in summary:
-                _handleOneSummary(
-                    points, s, path, *args, transform_name=transform_name, **kwargs
-                )
+                try:
+                    points.append(
+                        _handleOneSummary(
+                            s, path, *args, transform_name=transform_name, **kwargs
+                        )
+                    )
+                except Exception as e:
+                    logger.info(f"Skipping {path} due to {e}")
         else:
-            _handleOneSummary(
-                points, summary, path, *args, transform_name=transform_name, **kwargs
-            )
+            try:
+                points.append(
+                    _handleOneSummary(
+                        summary, path, *args, transform_name=transform_name, **kwargs
+                    )
+                )
+            except Exception as e:
+                logger.info(f"Skipping {path} due to {e}")
     return dict(points)
 
 
@@ -171,12 +175,73 @@ def collectPoints(
     return extractPoints(summaries, *args, transform_name=transform_name, **kwargs)
 
 
-def computeStatistics(values: list[float], is_pvalue: bool = False) -> dict[str, Any]:
-    if not values:
-        return {}
+def computePValueStats(arr):
+    from scipy.stats import kstest
 
+    stats = {}
+    ks_res = kstest(arr, "uniform")
+    stats["ks_pvalue_uniform"] = float(ks_res.pvalue)
+    stats["ks_stat_uniform"] = float(ks_res.statistic)
+
+    frac_below_half = float(np.mean(arr < 0.5))
+    stats["frac_below_half"] = frac_below_half
+
+    if ks_res.pvalue > 0.05:
+        verdict = "OK"
+    elif frac_below_half > 0.55:
+        verdict = "CONSERVATIVE"
+    elif frac_below_half < 0.45:
+        verdict = "DANGEROUS"
+    else:
+        verdict = "OK (marginal)"
+
+    stats["pvalue_skew_verdict"] = verdict
+    return stats
+
+
+def _computeFitStats(values):
+    statistics = {}
+    xy = np.array(values, dtype=float)
+    unique_x = np.unique(xy[:, 0])
+    if len(unique_x) >= 2:
+        median_y, sem_y, std_y = [], [], []
+        for ux in unique_x:
+            ys = xy[xy[:, 0] == ux, 1]
+            median_y.append(float(np.median(ys)))
+            std_val = float(np.std(ys, ddof=1)) if len(ys) > 1 else 0.0
+            std_y.append(std_val)
+            sem_y.append(std_val / np.sqrt(len(ys)) if len(ys) > 1 else 0.0)
+        x_fit, y_fit = np.array(unique_x), np.array(median_y)
+        sem_fit = np.array(sem_y)
+        weights = np.where(sem_fit > 0, 1.0 / sem_fit, 1.0)
+        coeffs, cov = np.polyfit(x_fit, y_fit, deg=1, w=weights, cov=True)
+        slope = float(coeffs[0])
+        intercept = float(coeffs[1])
+        statistics["slope"] = slope
+        statistics["intercept"] = intercept
+        statistics["slope_err"] = (
+            float(np.sqrt(cov[0, 0])) if np.isfinite(cov[0, 0]) else float("nan")
+        )
+        statistics["intercept_err"] = (
+            float(np.sqrt(cov[1, 1])) if np.isfinite(cov[1, 1]) else float("nan")
+        )
+        fitted = slope * x_fit + intercept
+        residuals = (y_fit - fitted) / np.where(sem_fit > 0, sem_fit, 1.0)
+        ndf = len(x_fit) - 2
+        statistics["line_fit_chi2_ndf"] = (
+            float(np.sum(residuals**2) / ndf) if ndf > 0 else float("nan")
+        )
+    statistics["line_fit_unique_x"] = unique_x.tolist()
+    statistics["line_fit_median_y"] = median_y
+    statistics["line_fit_sem_y"] = sem_y
+    statistics["line_fit_std_y"] = std_y
+    return statistics
+
+
+def computeBasicStatistics(
+    values: list[float], is_pvalue: bool = False
+) -> dict[str, Any]:
     arr = np.array(values, dtype=float)
-
     stats: dict[str, Any] = {
         "mean": float(np.mean(arr)),
         "std": float(np.std(arr, ddof=1)),
@@ -190,30 +255,6 @@ def computeStatistics(values: list[float], is_pvalue: bool = False) -> dict[str,
         "n": len(arr),
     }
 
-    if is_pvalue:
-        try:
-            from scipy.stats import kstest
-
-            ks_res = kstest(arr, "uniform")
-            stats["ks_pvalue_uniform"] = float(ks_res.pvalue)
-            stats["ks_stat_uniform"] = float(ks_res.statistic)
-
-            frac_below_half = float(np.mean(arr < 0.5))
-            stats["frac_below_half"] = frac_below_half
-
-            if ks_res.pvalue > 0.05:
-                verdict = "OK"
-            elif frac_below_half > 0.55:
-                verdict = "CONSERVATIVE"
-            elif frac_below_half < 0.45:
-                verdict = "DANGEROUS"
-            else:
-                verdict = "OK (marginal)"
-
-            stats["pvalue_skew_verdict"] = verdict
-        except Exception:
-            pass
-
     return stats
 
 
@@ -226,65 +267,13 @@ def makeMulti(points, is_pvalue: bool = False):
 
     ret = []
     for k, group in grouped.items():
-        values = ([x.value for x in group],)
-        statistics = {}
+        values = [x.value for x in group]
+        statistics = computeBasicStatistics(values, is_pvalue=is_pvalue)
+        if is_pvalue:
+            statistics.update(computePValueStats(values))
         try:
-            statistics = computeStatistics(
-                values[0] if isinstance(values[0], list) else values,
-                is_pvalue=is_pvalue,
-            )
-        except Exception:
-            pass
-
-        try:
-            vals = values[0]
-            if (
-                isinstance(vals, (list, tuple))
-                and vals
-                and isinstance(vals[0], (tuple, list))
-                and len(vals[0]) >= 2
-            ):
-                xy = np.array(vals, dtype=float)
-                unique_x = np.unique(xy[:, 0])
-                if len(unique_x) >= 2:
-                    median_y = []
-                    sem_y = []
-                    std_y = []
-                    for ux in unique_x:
-                        ys = xy[xy[:, 0] == ux, 1]
-                        median_y.append(float(np.median(ys)))
-                        std_val = float(np.std(ys, ddof=1)) if len(ys) > 1 else 0.0
-                        std_y.append(std_val)
-                        sem_y.append(std_val / np.sqrt(len(ys)) if len(ys) > 1 else 0.0)
-                    x_fit = np.array(unique_x)
-                    y_fit = np.array(median_y)
-                    sem_fit = np.array(sem_y)
-                    weights = np.where(sem_fit > 0, 1.0 / sem_fit, 1.0)
-                    coeffs, cov = np.polyfit(x_fit, y_fit, deg=1, w=weights, cov=True)
-                    slope = float(coeffs[0])
-                    intercept = float(coeffs[1])
-                    statistics["slope"] = slope
-                    statistics["intercept"] = intercept
-                    statistics["slope_err"] = (
-                        float(np.sqrt(cov[0, 0]))
-                        if np.isfinite(cov[0, 0])
-                        else float("nan")
-                    )
-                    statistics["intercept_err"] = (
-                        float(np.sqrt(cov[1, 1]))
-                        if np.isfinite(cov[1, 1])
-                        else float("nan")
-                    )
-                    fitted = slope * x_fit + intercept
-                    residuals = (y_fit - fitted) / np.where(sem_fit > 0, sem_fit, 1.0)
-                    ndf = len(x_fit) - 2
-                    statistics["line_fit_chi2_ndf"] = (
-                        float(np.sum(residuals**2) / ndf) if ndf > 0 else float("nan")
-                    )
-                statistics["line_fit_unique_x"] = unique_x.tolist()
-                statistics["line_fit_median_y"] = median_y
-                statistics["line_fit_sem_y"] = sem_y
-                statistics["line_fit_std_y"] = std_y
+            if isinstance(values[0], (tuple, list)):
+                statistics.update(_computeFitStats(values))
         except Exception:
             pass
 
@@ -455,9 +444,7 @@ def makeAggregateSmoothPlot(
     mesh = ax.pcolormesh(X, Y, Z, rasterized=rasterize_mesh, **plot_kwargs)
 
     if draw_contours:
-        # Levels must be strictly increasing for matplotlib
         cs = ax.contour(X, Y, Z, sorted(draw_contours), colors="k", linewidths=2)
-
         clabel_kwargs = {"inline": True, "fontsize": 10}
         if contour_fmt is not None:
             clabel_kwargs["fmt"] = contour_fmt
@@ -520,10 +507,6 @@ def makeAggregateViolinPlot(
     return {n: (fig, ax)}
 
 
-PVALUE_BOUNDARIES = [0, 0.05, 0.16, 0.84, 0.95, 1]
-PVALUE_COLORS = ["red", "yellow", "green", "yellow", "red"]
-
-
 def addPValBands(ax, alpha=0.2):
     for i in range(len(PVALUE_BOUNDARIES) - 1):
         low, high = PVALUE_BOUNDARIES[i], PVALUE_BOUNDARIES[i + 1]
@@ -555,7 +538,7 @@ def makeAggregateScatterPlot(
         for vline in vlines:
             ax.axvline(vline, color="red", linestyle="--", linewidth=1, zorder=0)
 
-    rng = np.random.default_rng(42)
+    rng = np.random.default_rng()
 
     labels = []
     for i, p in enumerate(sorted_points):
@@ -702,13 +685,6 @@ def makeInjectionLinePlot(
 
         ax.set_xlabel(x_label)
         ax.set_ylabel(y_label)
-
-        # title = (
-        #     title
-        #     or "{title}"  # $m_{{\\tilde{{t}}}}$ = {other_data.stop_mass} \\textrm{{GeV}}, $m_{{\\tilde{{\\chi}}^{{\\pm}}}}$ = {other_data.chargino_mass} \\textrm{{GeV}}"
-        # )
-        # title = dotFormat(title, **dict(dictToDot(p.metadata)))
-        # ax.set_title(title)
         ax.legend(loc="lower right", fontsize="small")
 
         if ylim is not None:
