@@ -1,12 +1,11 @@
 from __future__ import annotations
 from .base import main
-from .run import runCmd
+from .run import runCmd, resolveOutputCmd
 from .diagnostics import (
     printParamsCmd,
     smoothCmd,
     gatherCmd,
     reportCmd,
-    resolveOutputCmd,
     harvestCmd,
     windowFitCmd,
     checkDomainCmd,
@@ -22,7 +21,7 @@ main.add_command(aggregateGroup, name="aggregate")
 main.add_command(makecondorCmd, name="makecondor")
 main.add_command(makebatchCmd, name="makebatch")
 main.add_command(reportCmd, name="report")
-main.add_command(resolveOutputCmd, name="resolveOutput")
+main.add_command(resolveOutputCmd, name="resolve-output")
 main.add_command(harvestCmd, name="harvest")
 main.add_command(windowFitCmd, name="window-fit")
 main.add_command(checkDomainCmd, name="check-domain")

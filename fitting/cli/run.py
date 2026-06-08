@@ -1,13 +1,14 @@
 from __future__ import annotations
 from pathlib import Path
 import click
-from .base import _parseWindowParams
+from .base import _parseWindowParams, logger
 from ..inference.optimization import (
     InferenceMode,
     OptimizerType,
     ObjectiveType,
 )
 from ..pipeline import PipelineStep
+
 
 
 @click.command()
@@ -244,3 +245,67 @@ def runCmd(
         raise click.UsageError("Must specify either --config or --background.")
 
     runPipeline(pipeline_config, start_from=start_from_step, single_step=step)
+
+@click.command("resolve-output")
+@click.option(
+    "--background",
+    "-b",
+    type=click.Path(exists=True, path_type=Path),
+    required=True,
+    help="Background histogram file.",
+)
+@click.option(
+    "--signal",
+    "-s",
+    multiple=True,
+    type=click.Path(exists=True, path_type=Path),
+    help="Signal histogram file(s). Can be specified multiple times.",
+)
+@click.option(
+    "--config",
+    "-c",
+    type=click.Path(exists=True, path_type=Path),
+    required=True,
+    help="Config file containing pipeline parameters.",
+)
+@click.option(
+    "--output-format",
+    "-o",
+    type=str,
+    required=True,
+    help="Output format string with placeholders (e.g., 'output/{era.name}/{dataset_name}/{injection_rate}')",
+)
+@click.option(
+    "--injection-signal",
+    type=click.Path(exists=True, path_type=Path),
+    default=None,
+    help="Signal file to inject (for bias studies).",
+)
+def resolveOutputCmd(
+    background: Path,
+    signal: tuple[Path, ...],
+    config: Path,
+    output_format: str,
+    injection_signal: Path | None,
+) -> None:
+    from ..pipeline import PipelineConfig, loadData
+    import yaml
+    import attrs
+
+    signal_path_val = None
+    if signal:
+        signal_path_val = list(signal) if len(signal) > 1 else signal[0]
+
+    with open(config, "r") as f:
+        config_data = yaml.safe_load(f)
+    pipeline_config = PipelineConfig(
+        background_path=background,
+        signal_path=signal_path_val,
+        injection_signal_path=injection_signal,
+        output_dir_format=output_format,
+    )
+    pipeline_config = attrs.evolve(pipeline_config, **config_data)
+    state = loadData(pipeline_config)
+    output_path = state.getRealOutPath()
+    logger.info(f"Resolved output to '{str(output_path)}'")
+    print(output_path, flush=True)

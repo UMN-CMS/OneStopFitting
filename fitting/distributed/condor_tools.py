@@ -61,7 +61,7 @@ for s in "${SIG_ARRAY[@]}"; do
 done
 
 # Resolve output path
-ACTUAL_OUTPUT=$(run_fit "python3 -m fitting resolveoutput \
+ACTUAL_OUTPUT=$(run_fit "python3 -m fitting resolve-output \
     --background \"$BACKGROUND\" \
     $SIG_ARGS \
     --config \"$CONFIG\" \
@@ -286,7 +286,6 @@ def makeRunFitScript(
     files_to_unzip: list[str],
     container: str | None,
 ):
-
     env = Environment()
     template = env.from_string(RUN_FIT_TEMPLATE)
     run_fit_content = template.render(
