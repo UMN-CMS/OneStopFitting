@@ -72,7 +72,9 @@ def loadData(config: PipelineConfig) -> AnalysisState:
     loader = FileLoader.forPath(config.background_path)
     bkg_raw = loader.load(config.background_path)
     bkg_hist = extractHistogram(bkg_raw)
-    background = histToBinnedData(bkg_hist, rebin=config.rebin, variation="central")
+    background = histToBinnedData(bkg_hist,
+                                  #rebin=config.rebin,
+                                  variation="central")
 
     file_metadata = extractMetadata(bkg_raw)
     combined_metadata = {
