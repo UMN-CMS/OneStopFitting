@@ -1,5 +1,5 @@
 injection_rate: 0.0
-min_counts: 0
+min_counts: -1
 rebin: 2
 
 window:
@@ -25,6 +25,6 @@ model:
   likelihood:
     _type: FixedGaussianNoiseConfig
     variance_floor_quantile: 0.05
-    # pad_variance_quantile: 0.25
+    pad_variance_quantile: 0.5
   mean_function:
-    _type: ConstantMeanConfig
+    _type: ZeroMeanConfig
