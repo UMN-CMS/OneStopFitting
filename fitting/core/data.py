@@ -66,8 +66,9 @@ class BinnedData:
         """Total number of bins (flattened)."""
         return self.X.shape[0]
 
-    def masked(self, mask: jnp.ndarray) -> BinnedData:
-        """Return a new BinnedData with only the bins where mask is True."""
+    def masked(self, mask: jnp.ndarray | None) -> BinnedData:
+        if mask is None:
+            return self
         return BinnedData(
             X=self.X[mask],
             Y=self.Y[mask],
@@ -77,7 +78,6 @@ class BinnedData:
         )
 
     def toHist(self) -> NumPyPlottableHistogram:
-        """Convert back to a UHI-compatible plottable histogram."""
         return _pointsToPlottable(self.X, self.Y, self.edges, self.V)
 
     def __add__(self, other: BinnedData) -> BinnedData:
