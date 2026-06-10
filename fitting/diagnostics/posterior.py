@@ -63,7 +63,7 @@ def generateReplicatedData(
     posterior_samples: jnp.ndarray,
     obs_variance: jnp.ndarray,
     rng_key: jax.Array | None = None,
-    likelihood: str = "gaussian",
+    likelihood: str = "poisson",
 ) -> jnp.ndarray:
     """Generate replicated observations from posterior predictive samples.
 
@@ -98,7 +98,7 @@ def posteriorPredictiveCheck(
     test_statistics: dict[str, TestStatisticFn] | None = None,
     num_samples: int = 200,
     rng_key: jax.Array | None = None,
-    likelihood: str = "gaussian",
+    likelihood: str = "poisson",
     blind_mask: jnp.ndarray | None = None,
 ) -> dict[str, Any]:
     """Run a full Bayesian posterior predictive check.
