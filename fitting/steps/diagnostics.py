@@ -53,10 +53,11 @@ def runDiagnostics(state: AnalysisState, rng_key: jax.Array) -> AnalysisState:
     state = attrs.evolve(state, diagnostic_metrics=metrics)
 
     # Posterior predictive checks
-    likelihood_type = "gaussian"
-    likelihood_name = state.config.model.likelihood.__class__.__name__.lower()
-    if "poisson" in likelihood_name:
-        likelihood_type = "poisson"
+    # likelihood_type = "gaussian"
+    # likelihood_name = state.config.model.likelihood.__class__.__name__.lower()
+    # if "poisson" in likelihood_name:
+    #     likelihood_type = "poisson"
+    likelihood_type = "poisson"
 
     ppc_results = posteriorPredictiveCheck(
         pred_mean=pred_mean,
