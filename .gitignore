@@ -3,6 +3,7 @@ __pycache__/
 *$py.class
 *.so
 .*
+!.gitignore
 .Python
 build/
 develop-eggs/
@@ -68,3 +69,7 @@ aggregate*/
 /*DELETE*/
 /*example*/
 /gathering/
+/scratch/
+/combined*/
+/diagnostic*/
+
