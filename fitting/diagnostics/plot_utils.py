@@ -375,7 +375,7 @@ def addCMSBits(
     text_color="black",
     cms_text_pos=1,
 ):
-    lumis = set(str(x["era"]["lumi"]) for x in all_meta)
+    lumis = set(f'{x["era"]["lumi"]:0.2f}' for x in all_meta)
     energies = set(str(x["era"]["energy"]) for x in all_meta)
     era = set(str(x["era"]["name"]) for x in all_meta)
     era_text = f"{'/'.join(era)}"
