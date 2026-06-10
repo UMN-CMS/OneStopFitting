@@ -61,7 +61,7 @@ def smoothCmd(
     import jax
     from ..core.serialization import load
     from ..steps.generators import generateSmoothedBackground, generateAsimovSmoothed
-    from ..diagnostics.plot_utils import savePlots
+    from ..diagnostics.plot_utils import getPlotSaver
 
     jax.config.update("jax_enable_x64", True)
     rng_key = jax.random.key(seed)
@@ -69,14 +69,18 @@ def smoothCmd(
     logger.info(f"Loading state from {state}")
     analysis_state = load(state)
 
+    plot_dir = output_dir / "smoothing_diagnostics"
+
+    plot_saver = getPlotSaver(
+        plot_dir, [analysis_state.metadata], formats=analysis_state.config.image_formats
+    )
+
     logger.info("Generating smoothed background...")
-    hists, plots = generateSmoothedBackground(
-        analysis_state, rng_key, num_samples=num_samples
+    hists = generateSmoothedBackground(
+        analysis_state, rng_key, plot_saver=plot_saver, num_samples=num_samples
     )
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    plot_dir = output_dir / "smoothing_diagnostics"
-    savePlots(plots, plot_dir, [analysis_state.metadata])
     logger.info(f"Smoothing diagnostic plots saved to {plot_dir}")
 
     for idx, hist in enumerate(hists):
@@ -92,9 +96,15 @@ def smoothCmd(
 
     if include_smooth:
         pure_plot_dir = output_dir / "pure_smooth_diagnostics"
+        plot_saver = getPlotSaver(
+            pure_plot_dir,
+            [analysis_state.metadata],
+            formats=analysis_state.config.image_formats,
+        )
         pure_plot_dir.mkdir(exist_ok=True, parents=True)
-        hist_asimov, plots_asimov = generateAsimovSmoothed(analysis_state, rng_key)
-        savePlots(plots_asimov, pure_plot_dir, [analysis_state.metadata])
+        hist_asimov = generateAsimovSmoothed(
+            analysis_state, rng_key, plot_saver=plot_saver
+        )
         out_path = output_dir / "pure_smoothed.pklz4"
         metadata = copy.deepcopy(analysis_state.background_metadata)
         with lz4.frame.open(out_path, "wb") as f:
@@ -204,8 +214,6 @@ def reportCmd(
         config=config,
     )
     logger.info(f"Generated {len(output_paths)} report(s)")
-
-
 
 
 @click.command("harvest")

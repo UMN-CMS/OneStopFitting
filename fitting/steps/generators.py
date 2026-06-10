@@ -18,6 +18,7 @@ from ..diagnostics.plots import makeSmoothingPlots
 def generateAsimovSmoothed(
     state: AnalysisState,
     rng_key: jax.Array,
+    plot_saver,
 ) -> tuple[list[hist.Hist], dict[str, Any]]:
     assert state.test_data is not None
     assert state.transform is not None
@@ -59,19 +60,21 @@ def generateAsimovSmoothed(
     h.view().value = counts_grid
     h.view().variance = counts_grid
     b_data = histToBinnedData(h, rebin=1, variation=None)
-    plots = makeSmoothingPlots(
+    makeSmoothingPlots(
         smoothed_data=b_data,
         original_data=state.background,
         pred_mean=pred_mean,
+        plot_saver=plot_saver,
         pred_cov=pred_cov,
     )
 
-    return h, plots
+    return h
 
 
 def generateSmoothedBackground(
     state: AnalysisState,
     rng_key: jax.Array,
+    plot_saver,
     num_samples: int = 1,
 ) -> tuple[list[hist.Hist], dict[str, Any]]:
 
@@ -122,14 +125,15 @@ def generateSmoothedBackground(
         sample_hists.append(h)
         sample_binned_data.append(b_data)
 
-    plots = makeSmoothingPlots(
+    makeSmoothingPlots(
         smoothed_data=sample_binned_data[0],
         original_data=state.background,
         pred_mean=pred_mean,
+        plot_saver=plot_saver,
         pred_cov=pred_cov,
     )
 
-    return sample_hists, plots
+    return sample_hists
 
 
 def generateSmoothedBackgroundBinned(
