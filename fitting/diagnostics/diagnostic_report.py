@@ -633,15 +633,13 @@ def generateDiagnosticReport(
 
     if not gathered:
         return
-
     output_dir = Path(output_dir).resolve()
-
-    report = computeDiagnostics(gathered)
-
     fmt_ctx = dict(dictToDot(gathered[0])) | (name_ctx or {})
     output_name = dotFormat(name_format, **fmt_ctx).replace(".", "p")
     output_pdf = output_dir / f"{output_name}.pdf"
     output_pdf.parent.mkdir(parents=True, exist_ok=True)
+
+    report = computeDiagnostics(gathered)
 
     plots_dir = output_pdf.parent / "diagnostic_plots"
     plot_paths = generateDiagnosticPlots(report, plots_dir)
