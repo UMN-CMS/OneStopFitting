@@ -104,9 +104,9 @@ def loadData(config: PipelineConfig) -> AnalysisState:
     if first_sig_metadata is not None:
         reco_category = getRecoCategory(first_sig_metadata["name"])
         combined_metadata = {
+            **combined_metadata,
             **first_sig_metadata,
             "reco_category": reco_category,
-            **combined_metadata,
         }
 
     injection_signal = None
