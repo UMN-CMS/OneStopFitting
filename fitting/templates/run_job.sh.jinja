@@ -21,9 +21,11 @@ ls -alhtr
 export MPLCONFIGDIR=$_CONDOR_SCRATCH_DIR
 
 function resolve_output {
-    local sig_args="$1"
-    local resolved
-    resolved=$(run_fit "python3 -m fitting resolve-output \
+    IFS=',' read -ra sig_array <<< "$SIGNALS"
+    for s in "${sig_array[@]}"; do
+        sig_args="$sig_args --signal \"$s\""
+    done
+    local resolved=$(run_fit "python3 -m fitting resolve-output \
         --background \"$BACKGROUND\" \
         $sig_args \
         --config \"$CONFIG\" \
@@ -87,7 +89,9 @@ for i in "${!ERAS[@]}"; do
     export CONFIG="${CFG_ARRAY[$i]}"
     export OUTPUT_DIR_FORMAT="${OUT_ARRAY[$i]}"
 
-    actual_output=$(run_single_era "${ERAS[$i]}")
+    actual_output=$(resolve_output)
+    echo "ACTUAL OUTPUT IS '$actual_output'"
+    run_single_era "${ERAS[$i]}"
     ERA_OUTPUT_DIRS+=("$actual_output")
 done
 
@@ -107,8 +111,7 @@ if [ "${#ERAS[@]}" -gt 1 ] && [ -n "$COMBINED_OUTPUT" ]; then
             exit 1
         fi
         COMBINE_CARDS_ARGS="$COMBINE_CARDS_ARGS ${CARD_PATH}"
-        cp "${ERA_OUTPUT_DIRS[$i]}/combine/shapes*.root" \
-           "$COMBINED_DIR/shapes_${ERAS[$i]}.root" 2>/dev/null || true
+        cp "${ERA_OUTPUT_DIRS[$i]}/combine/shapes*.root"  "$COMBINED_DIR/shapes_${ERAS[$i]}.root" 
     done
 
     run_combine "combineCards.py $COMBINE_CARDS_ARGS > $COMBINED_DIR/datacard.txt"
@@ -119,7 +122,7 @@ if [ "${#ERAS[@]}" -gt 1 ] && [ -n "$COMBINED_OUTPUT" ]; then
     for i in "${!ERAS[@]}"; do
         SUMMARY_PATH="${ERA_OUTPUT_DIRS[$i]}/summary.json"
         if [ ! -f "$SUMMARY_PATH" ]; then
-            echo "ERROR: Summary JSON not found for era ${ERAS[$i]} at $SUMMARY_PATH" >&2
+            echo "ERROR: Summary JSON not found for era ${ERAS[$i]} at $SUMMARY_PATH" 
             exit 1
         fi
         SUMMARIES_ARGS="$SUMMARIES_ARGS ${SUMMARY_PATH}"
@@ -139,7 +142,7 @@ if [ "${#ERAS[@]}" -gt 1 ] && [ -n "$COMBINED_OUTPUT" ]; then
         echo "########## Harvesting GPR combined results ##########"
         run_fit "python3 -m fitting harvest '$COMBINED_OUTPUT/summary.json'"
     else
-        echo "WARNING: No combined combine script at: $COMBINED_SCRIPT" >&2
+        echo "WARNING: No combined combine script at: $COMBINED_SCRIPT" 
     fi
 
     echo ""
