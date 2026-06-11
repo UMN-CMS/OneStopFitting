@@ -1,57 +1,65 @@
 from __future__ import annotations
+
 from pathlib import Path
+
 import click
+import yaml
 
 
-@click.command("makecondor")
-@click.option(
-    "--signal",
-    required=True,
-    multiple=True,
-    help="Signal pattern (e.g. '**/signal_{year}_*.pklz4')",
-)
-@click.option(
-    "--background",
-    required=True,
-    help="Background pattern (e.g. '**/bkg_{year}.pklz4')",
-)
+@click.command("makesubmit")
+@click.option("--signal", required=True, multiple=True, help="Signal pattern")
+@click.option("--background", required=True, help="Background pattern")
 @click.option("--years", multiple=True, required=True, help="Years to process")
 @click.option("--pipelines", multiple=True, required=True, help="Pipelines to process")
-@click.option(
-    "--config-pattern",
-    "-c",
-    type=str,
-)
+@click.option("--config-pattern", "-c", type=str, help="Config file pattern")
 @click.option(
     "--output",
     "-o",
     type=click.Path(path_type=Path),
     default=Path("condor_output"),
-    help="Output directory for condor files",
+    help="Output directory",
 )
 @click.option(
-    "--subdir-format",
-    type=str,
-    required=True,
-    help="Format for subdirectory",
+    "--subdir-format", type=str, required=True, help="Format for output subdirectory"
 )
-@click.option("--venv", type=str, help="Path to virtual environment to pack")
-@click.option("--container", type=str, help="Container image to use")
-@click.option("--num-toys", type=int, default=None, help="Number of toys to run over")
-@click.option("--toy-offset", type=int, default=0, help="Offset for toy index.")
+@click.option("--venv", type=str, help="Path to virtual environment")
+@click.option("--container", type=str, help="Container image")
+@click.option("--num-toys", type=int, default=None, help="Number of toys")
+@click.option("--toy-offset", type=int, default=0, help="Toy index offset")
 @click.option(
-    "--combine-cmd",
-    "combine_cmds",
+    "--multi-signal", is_flag=True, default=False, help="Group signals by mass point"
+)
+@click.option(
+    "--combine-eras",
+    default=None,
+    help="Comma-separated eras to combine in a fat-job (e.g. '2016,2017,2018')",
+)
+@click.option(
+    "--group-by",
+    "group_by_str",
+    default=None,
+    help="Comma-separated grouping fields (default: mstop,mchi,category,pipeline,toy_index)",
+)
+@click.option(
+    "--param",
+    "extra_params",
     multiple=True,
-    help="Combine commands to run after the fit",
+    help="Parameter sweep: key=csv_values (e.g. 'injection_rate=0.0,0.5,1.0')",
 )
 @click.option(
-    "--multi-signal",
-    is_flag=True,
-    default=False,
-    help="Group signals by mass point into multi-signal jobs.",
+    "--match-rule",
+    "match_rules_cli",
+    multiple=True,
+    default=None,
+    help="Background→signal mapping, e.g. 'year:Run3=202*'",
 )
-def makecondorCmd(
+@click.option(
+    "--match-rule-config",
+    type=click.Path(exists=True, path_type=Path),
+    default=None,
+    help="YAML match rules file",
+)
+def makesubmitCmd(
     signal: tuple[str, ...],
     background: str,
     years: tuple[str, ...],
@@ -64,151 +72,147 @@ def makecondorCmd(
     num_toys: int | None,
     toy_offset: int,
     multi_signal: bool,
+    combine_eras: str | None,
+    group_by_str: str | None,
+    extra_params: tuple[str, ...],
+    match_rules_cli: tuple[str, ...] | None,
+    match_rule_config: Path | None,
 ) -> None:
-    """Generate HTCondor submit files for distributed processing."""
-    from ..distributed.condor_tools import generateCondorSubmit
+    """Generate HTCondor submit files."""
+    from ..utils import MatchRules
+    from ..distributed.condor_tools import (
+        makeEraJobs,
+        mergeSignals,
+        buildPlan,
+        generateFiles,
+    )
+    from ..distributed.batch_tools import expandParameters
 
-    generateCondorSubmit(
-        signal_pattern=signal,
-        background_pattern=background,
-        years=list(years),
-        pipelines=list(pipelines),
-        config_pattern=config_pattern,
-        output_dir=output,
-        subdir_format=subdir_format,
-        venv_path=venv,
-        container=container,
-        num_toys=num_toys,
-        toy_offset=toy_offset,
-        multi_signal=multi_signal,
+    if match_rules_cli:
+        match_rules = MatchRules.fromCLI(match_rules_cli)
+    elif match_rule_config:
+        match_rules = MatchRules.fromConfig(match_rule_config)
+    else:
+        match_rules = None
+
+    parsed_eras = [e.strip() for e in combine_eras.split(",")] if combine_eras else None
+    group_by_fields = (
+        tuple(f.strip() for f in group_by_str.split(",")) if group_by_str else None
     )
 
+    toys = range(num_toys) if num_toys else [0]
+    jobs = []
+    for t in toys:
+        jobs.extend(
+            makeEraJobs(
+                signal_pattern=signal,
+                background_pattern=background,
+                years=list(years),
+                pipelines=list(pipelines),
+                output_dir=str(output / subdir_format),
+                config_pattern=config_pattern,
+                toy_index=t + toy_offset,
+                match_rules=match_rules,
+            )
+        )
 
-@click.command("makebatch")
+    if not jobs:
+        print("No jobs found!")
+        return
+
+    print(f"Found {len(jobs)} era-jobs")
+
+    if multi_signal:
+        print("Merging {len(jobs)} into common signals")
+        jobs = mergeSignals(jobs)
+        print(f"Merged into {len(jobs)} multi-signal jobs")
+
+    if extra_params:
+        parsed_params = {}
+        for p in extra_params:
+            key, vals = p.split("=", 1)
+            parsed_params[key] = yaml.safe_load("[" + vals + "]")
+        jobs = expandParameters(jobs, parsed_params, output / "batch_configs")
+
+    plan = buildPlan(
+        jobs=jobs,
+        output_dir=output,
+        combine_eras=parsed_eras,
+        group_by_fields=group_by_fields,
+        venv_path=venv,
+        container=container,
+    )
+    submit_path = generateFiles(plan)
+    print(f"Generated {len(plan.job_groups)} jobs in {submit_path}")
+
+
+@click.command("generate-combine-script")
 @click.option(
-    "--signal",
+    "--datacard",
     required=True,
-    multiple=True,
-    help="Signal pattern (e.g. '**/signal_{year}_*.pklz4')",
+    type=click.Path(path_type=Path),
+    help="Path to datacard.txt",
 )
 @click.option(
-    "--background",
-    required=True,
-    help="Background pattern (e.g. '**/bkg_{year}.pklz4')",
-)
-@click.option("--years", multiple=True, required=True, help="Years to process")
-@click.option("--pipelines", multiple=True, required=True, help="Pipelines to process")
-@click.option(
-    "--config-base",
+    "--config",
     "-c",
-    type=str,
-    help="Base config file to use as template",
+    required=True,
+    type=click.Path(exists=True, path_type=Path),
+    help="Pipeline config YAML",
 )
 @click.option(
     "--output",
     "-o",
+    required=True,
     type=click.Path(path_type=Path),
-    default=Path("batch_output"),
-    help="Output directory for batch job files",
+    help="Output directory",
 )
-@click.option(
-    "--subdir-format",
-    type=str,
-    default="{era.name}/{dataset_name}/{injection_rate}",
-    show_default=True,
-    help="Base format for output subdirectory (will be extended with batch parameters)",
-)
-@click.option("--venv", type=str, help="Path to virtual environment to pack")
-@click.option("--container", type=str, help="Container image to use")
-@click.option(
-    "--rates",
-    type=str,
-    help="Comma-separated injection rates (e.g., '0.0,0.1,0.5')",
-)
-@click.option(
-    "--rebin",
-    type=str,
-    help="Comma-separated rebin factors (e.g., '1,2,4')",
-)
-@click.option(
-    "--min-counts",
-    type=str,
-    help="Comma-separated min counts values (e.g., '1.0,5.0')",
-)
-@click.option(
-    "--injection-rates",
-    type=str,
-    help="Comma-separated injection rates (e.g., '0.0,1.0,10.0')",
-)
-@click.option("--num-toys", type=int, default=None, help="Number of toys to run over")
-@click.option("--toy-offset", type=int, default=0, help="Offset for toy index.")
-@click.option(
-    "--param",
-    "extra_params",
-    multiple=True,
-    type=str,
-    help="Arbitrary dot-path parameter sweep: key=csv_values (e.g., 'model.likelihood.variance_floor_quantile=0.01,0.05,0.1')",
-)
-@click.option(
-    "--multi-signal",
-    is_flag=True,
-    default=False,
-    help="Group signals by mass point into multi-signal jobs.",
-)
-def makebatchCmd(
-    signal: tuple[str, ...],
-    background: str,
-    years: tuple[str, ...],
-    pipelines: tuple[str, ...],
-    config_base: Path | None,
+def generateCombineScriptCmd(
+    datacard: Path,
+    config: Path,
     output: Path,
-    subdir_format: str,
-    venv: str | None,
-    container: str | None,
-    rates: str | None,
-    rebin: str | None,
-    injection_rates: str | None,
-    min_counts: str | None,
-    num_toys: int | None,
-    toy_offset: int,
-    extra_params: tuple[str, ...],
-    multi_signal: bool,
 ) -> None:
-    """Generate HTCondor submit files for a batch of jobs with parameter sweeps."""
-    import yaml
-    from ..distributed.batch_tools import generateBatchSubmit
+    """Generate a run_combine_commands.sh from config settings."""
+    import os
+    from jinja2 import Environment, FileSystemLoader
+    from ..combine.commands import CombineContext, Text2Workspace, resolveCommands
 
-    parsed_extra = {}
-    for p in extra_params:
-        key, vals = p.split("=", 1)
-        parsed_extra[key] = yaml.safe_load("[" + vals + "]")
+    with open(config) as f:
+        cfg = yaml.safe_load(f)
 
-    generateBatchSubmit(
-        signal_pattern=signal,
-        background_pattern=background,
-        years=list(years),
-        pipelines=list(pipelines),
-        config_base=config_base,
-        output_dir=output,
-        subdir_format=subdir_format,
-        venv_path=venv,
-        container=container,
-        rates=parseCsvFloat(rates) if rates else None,
-        rebin=parseCsvInt(rebin) if rebin else None,
-        min_counts=parseCsvFloat(min_counts) if min_counts else None,
-        injection_rates=parseCsvFloat(injection_rates) if injection_rates else None,
-        num_toys=num_toys,
-        toy_offset=toy_offset,
-        extra_params=parsed_extra if parsed_extra else None,
-        multi_signal=multi_signal,
+    combine_cfg = cfg.get("combine", {})
+    cmd_names = combine_cfg.get(
+        "combine_commands",
+        [
+            "limits",
+            "fit-diagnostics",
+            "multidimfit",
+            "significance",
+            "gof-saturated",
+        ],
+    )
+    combine_container = combine_cfg.get(
+        "combine_container",
+        "/cvmfs/unpacked.cern.ch/gitlab-registry.cern.ch/cms-analysis/general/combine-container:latest",
     )
 
+    context = CombineContext(signal_labels=["signal"], channel_name="combined")
+    cmds = Text2Workspace().render(context)
+    for cmd in resolveCommands(cmd_names):
+        cmds.extend(cmd.render(context))
 
-def parseCsvFloat(s: str) -> list[float]:
-    """Parse comma-separated string to list of floats."""
-    return [float(x.strip()) for x in s.split(",") if x.strip()]
+    output.mkdir(parents=True, exist_ok=True)
+    template_dir = Path(__file__).parent.parent / "templates"
+    env = Environment(loader=FileSystemLoader(template_dir))
+    script = env.get_template("run_combine_commands.sh.jinja").render(
+        container=combine_container,
+        commands=cmds,
+        enumerate=enumerate,
+    )
 
+    script_path = output / "run_combine_commands.sh"
+    with open(script_path, "w") as f:
+        f.write(script)
+    os.chmod(script_path, 0o755)
 
-def parseCsvInt(s: str) -> list[int]:
-    """Parse comma-separated string to list of ints."""
-    return [int(x.strip()) for x in s.split(",") if x.strip()]
+    print(f"Combine script: {script_path} ({len(cmds)} commands)")

@@ -87,7 +87,9 @@ def prepareCombine(state: AnalysisState, rng_key: jax.Array) -> AnalysisState:
 
     model = buildCombineModel(state)
     out_dir = state.getRealOutPath() / "combine"
-    model.write(out_dir)
+    era_name = state.config.metadata["era"]["name"]
+    shapes_filename = f"shapes_{era_name}.root"
+    model.write(out_dir, shapes_filename=shapes_filename)
 
     if state.config.combine.export_systematics_table:
         csv_table = model.renderSystematicsTable("csv")

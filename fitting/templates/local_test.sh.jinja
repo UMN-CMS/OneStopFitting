@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# GENERATED AUTOMATICALLY on {{ timestamp }}
+# Simulates a single condor job execution locally.
+
+TEST_DIR=$(mktemp -d -t condor_test_XXXXXX)
+echo "Setting up local test in $TEST_DIR"
+
+echo "Copying transfer files..."
+{% for tf in transfer_files %}
+if [[ "{{ tf }}" == "{{ executable }}" ]]; then
+    cp "{{ tf }}" "$TEST_DIR/"
+else
+    cp --parents -r "{{ tf }}" "$TEST_DIR/"
+fi
+{% endfor %}
+
+echo "Copying job-specific files..."
+{% for f in job_files %}
+cp --parents -r "{{ f }}" "$TEST_DIR/"
+{% endfor %}
+
+cd "$TEST_DIR"
+
+export _CONDOR_SCRATCH_DIR="$PWD"
+export ERA_NAMES="{{ job.era_names }}"
+export ERA_BACKGROUNDS="{{ job.era_backgrounds }}"
+export ERA_SIGNALS="{{ job.era_signals }}"
+export ERA_CONFIGS="{{ job.era_configs }}"
+export ERA_OUTPUTS="{{ job.era_outputs }}"
+export COMBINED_OUTPUT="{{ job.combined_output }}"
+
+base_exec=$(basename "{{ executable }}")
+echo "Running $base_exec..."
+bash "$base_exec"
+
+echo "Test complete! Check $TEST_DIR for outputs."

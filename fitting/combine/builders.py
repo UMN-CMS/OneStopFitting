@@ -58,7 +58,10 @@ def buildBackgroundProcess(
     )
 
     proc = ProcessModel(
-        name="background", index=1, nominal=pred_mean_masked, allow_mc_stats=False
+        name="background" + postfix,
+        index=1,
+        nominal=pred_mean_masked,
+        allow_mc_stats=False,
     )
 
     for var in variations:
@@ -161,9 +164,18 @@ def _addShapeVariations(
         proc.addShape(name=cms_name, up=up, down=down, category_name=category)
 
 
+def buildChannelName(state: AnalysisState) -> str:
+    base = state.metadata.get("channel", "ch1")
+    era = state.background_metadata.get("era", {}).get("name", "")
+    if era:
+        safe_era = str(era).replace(" ", "_")
+        return f"{base}_{safe_era}"
+    return base
+
+
 def buildChannel(state: AnalysisState) -> ChannelModel:
     blind_mask = _applyBlindMask(state)
-    ch_name = state.metadata.get("channel", "ch1")
+    ch_name = buildChannelName(state)
     eigenvar_threshold = state.config.combine.eigenvar_threshold
     name_map = state.config.combine.name_map or DEFAULT_NAME_MAP
     rate_systematics = state.config.combine.rate_systematics

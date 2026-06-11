@@ -1,6 +1,9 @@
 from jax.numpy import isin
 import fnmatch
+import glob
 import itertools as it
+import cattrs
+import re
 from collections.abc import Mapping, MutableMapping, Generator
 import re
 from collections import OrderedDict, defaultdict
@@ -10,6 +13,10 @@ from pathlib import Path
 import string
 from typing import Any, TypeVar
 import copy
+import logging
+import yaml
+
+logger = logging.getLogger("fitting")
 
 T = TypeVar("T")
 
@@ -96,7 +103,9 @@ def getRecoCategory(name):
     found = next(
         (x for x in ["uncomp_", "verycomp_", "comp_"] if n.startswith(x)), None
     )
-    return found
+    if found:
+        return found.removesuffix("_")
+    return None
 
 
 def getCategory(mstop, mchi):
@@ -218,13 +227,67 @@ def getMatchingRules(d1, rules, right=True):
 def isMatch(m1, m2):
     return all(not m1[i].isdisjoint(m2[i]) for i in range(len(m1)))
 
-MatchRules = dict[str, list[tuple[str, str]]]
+
+@attrs.define
+class MatchRules:
+    rules: dict[str, dict[str, str]] = attrs.Factory(dict)
+
+    def resolve(self, value: str, field: str) -> list[str]:
+        """Return signal glob patterns that *value* matches for *field*.
+
+        If no rule is registered for *field*, returns ``[value]``
+        (identity / 1:1 mapping).
+        """
+        return self.rules.get(field, {}).get(value) or value
+
+    @classmethod
+    def fromCLI(cls, args: tuple[str, ...] | list[str]) -> "MatchRules":
+        match_pattern = re.compile(
+            r"(?P<field>[^:]+):(?P<bkg_val>[^=]+)=(?P<sig_glob>.*)"
+        )
+        rules: dict[str, dict[str, str]] = defaultdict(list)
+        for arg in args:
+            m = match_pattern.match(arg)
+            if not m:
+                raise ValueError(f"Invalid match-rule format '{arg}'")
+            rules[m.group("field")].append((m.group("bkg_val"), m.group("sig_glob")))
+        return cls(rules=dict(rules))
+
+    @classmethod
+    def fromConfig(cls, path: Path | str) -> "MatchRules":
+        path = Path(path)
+        with open(path, "r") as f:
+            raw = yaml.safe_load(f)
+        return cls(rules=cattrs.structure(raw, dict[str, dict[str, str]]))
+
+    @classmethod
+    def resolveFromSources(
+        cls,
+        cli_args: tuple[str, ...] | None = None,
+        config_path: Path | str | None = None,
+    ) -> "MatchRules | None":
+        """Build from optional CLI args and/or config file.
+
+        CLI args take precedence per field over the config file.
+        Returns ``None`` if neither source provides rules.
+        """
+        config_rules = cls.fromConfig(config_path) if config_path else None
+        cli_rules = cls.fromCLI(cli_args) if cli_args else None
+
+        if config_rules and cli_rules:
+            return config_rules.merge(cli_rules)
+        return cli_rules or config_rules
+
+
+_LegacyMatchRules = dict[str, list[tuple[str, str]]]
+
 
 def leftGroup(
     left: dict[str, dict[str, int | float | str]],
     right: dict[str, dict[str, int | float | str]],
-    match_rules: MatchRules,
+    match_rules: _LegacyMatchRules,
 ):
+    """Group left items (backgrounds) with matching right items (signals)."""
     matches_left = {
         path: getMatchingRules(data, match_rules, False) for path, data in left.items()
     }
@@ -244,32 +307,7 @@ def leftGroup(
             ret.append((path, g))
     return ret
 
-    # for x,matches in matches_left:
 
-
-#
-#     # jobs.append(
-#     #     {
-#     #         "signals": sig_file,
-#     #         "transfer_signals": sig_file,
-#     #         "background": bkg_file,
-#     #         "output_dir": output_dir,
-#     #         "category": category,
-#     #         "mstop": sig_params[1],
-#     #         "mchi": sig_params[2],
-#     #         "year": year,
-#     #         "config": config_pattern.format(
-#     #             pipeline=pipeline,
-#     #             category=category,
-#     #             reco_category=reco_category,
-#     #         ),
-#     #         "pipeline": pipeline,
-#     #         "reco_category": reco_category,
-#     #         "coupling": pipeline.removeprefix("Signal"),
-#     #     }
-#     # )
-#
-#
 if __name__ == "__main__":
     group_fields = ["pipeline", "year", "toy_index"]
     match_rules = {
@@ -281,7 +319,6 @@ if __name__ == "__main__":
         ],
         "category": [("comp", "comp"), ("uncomp", "uncomp"), ("verycomp", "verycomp")],
     }
-    import glob
     from rich import print
 
     s1 = "smoothed_combined/{year}/{pipeline}/qcd_inclusive_2018/{category}/{category}_{toy_index}.pklz4"
@@ -293,9 +330,3 @@ if __name__ == "__main__":
 
     r = leftGroup(b, s, match_rules)
     print(r)
-    # print(r)
-    # groups = buildGroups(
-    #     None, b, ["category", "toy_index", "pipeline", ("year", ("201.*", "201.*"))]
-    # )
-    # print(b)
-    # print(s)

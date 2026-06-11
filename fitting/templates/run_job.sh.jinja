@@ -1,0 +1,137 @@
+# GENERATED AUTOMATICALLY on {{ timestamp }}
+set -e
+
+echo "STARTING SETUP"
+
+function run_combine {
+    local cmd="$1"
+    echo $PWD
+    echo "RUNNING COMBINE: $cmd"
+    apptainer exec --home $_CONDOR_SCRATCH_DIR -B /cvmfs /cvmfs/unpacked.cern.ch/gitlab-registry.cern.ch/cms-analysis/general/combine-container:latest \
+        /bin/bash -c "source /cvmfs/cms.cern.ch/cmsset_default.sh && cd /home/cmsusr/CMSSW_14_1_0_pre4 && cmsenv && cd - && $cmd"
+}
+
+function run_fit {
+    local cmd="$1"
+    apptainer exec --home "$_CONDOR_SCRATCH_DIR" {{ container }} /bin/bash -c "source {{ venv_activate_path }} && $cmd"
+}
+
+ls -alhtr
+
+export MPLCONFIGDIR=$_CONDOR_SCRATCH_DIR
+
+function resolve_output {
+    local sig_args="$1"
+    local resolved
+    resolved=$(run_fit "python3 -m fitting resolve-output \
+        --background \"$BACKGROUND\" \
+        $sig_args \
+        --config \"$CONFIG\" \
+        --output-format \"$OUTPUT_DIR_FORMAT\"")
+    echo >&2 "ACTUAL OUTPUT: $resolved"
+    echo "$resolved"
+}
+
+function run_single_era {
+    local sig_args=""
+    IFS=',' read -ra sig_array <<< "$SIGNALS"
+    for s in "${sig_array[@]}"; do
+        sig_args="$sig_args --signal \"$s\""
+    done
+
+    local actual_output=$(resolve_output "$sig_args")
+    run_fit "python3 -m fitting run $sig_args --background \"$BACKGROUND\" --output \"$OUTPUT_DIR_FORMAT\" --config \"$CONFIG\""
+
+    local latex_script="${actual_output}/_latex_build/build_report.sh"
+    if [[ -f "$latex_script" ]]; then
+        bash "$latex_script"
+    fi
+
+    echo >&2 "Running combine in \"$PWD\""
+    local combine_script="$actual_output/combine/run_combine_commands.sh"
+    if [ -f "$combine_script" ]; then
+        echo >&2 "Running combine commands from: $combine_script"
+        bash "$combine_script"
+        run_fit "python3 -m fitting harvest $actual_output/summary.json"
+    else
+        echo >&2 "No combine script found at: $combine_script"
+    fi
+
+
+    echo "$actual_output"
+}
+
+
+{% for item in files_to_unzip %}
+echo "UNTARRING {{item}}"
+tar zxf {{ item }}
+{% endfor %}
+
+
+# Parse era arrays from environment variables
+IFS='@' read -ra ERAS <<< "$ERA_NAMES"
+IFS='@' read -ra BKG_ARRAY <<< "$ERA_BACKGROUNDS"
+IFS='@' read -ra SIG_ARRAY <<< "$ERA_SIGNALS"
+IFS='@' read -ra CFG_ARRAY <<< "$ERA_CONFIGS"
+IFS='@' read -ra OUT_ARRAY <<< "$ERA_OUTPUTS"
+
+declare -a ERA_OUTPUT_DIRS
+
+for i in "${!ERAS[@]}"; do
+    echo "=========================================="
+    echo "=== Era: ${ERAS[$i]}  ==="
+    echo "=========================================="
+
+    export SIGNALS="${SIG_ARRAY[$i]}"
+    export BACKGROUND="${BKG_ARRAY[$i]}"
+    export CONFIG="${CFG_ARRAY[$i]}"
+    export OUTPUT_DIR_FORMAT="${OUT_ARRAY[$i]}"
+
+    actual_output=$(run_single_era "${ERAS[$i]}")
+    ERA_OUTPUT_DIRS+=("$actual_output")
+done
+
+# Combined step: only when multiple eras and COMBINED_OUTPUT is set
+{% raw %}
+if [ "${#ERAS[@]}" -gt 1 ] && [ -n "$COMBINED_OUTPUT" ]; then
+{% endraw %}
+    echo "########## Merging datacards ##########"
+    COMBINED_DIR="$COMBINED_OUTPUT/combine"
+    mkdir -p "$COMBINED_DIR"
+
+    COMBINE_CARDS_ARGS=""
+    for i in "${!ERAS[@]}"; do
+        CARD_PATH="${ERA_OUTPUT_DIRS[$i]}/combine/datacard.txt"
+        if [ ! -f "$CARD_PATH" ]; then
+            echo "ERROR: Datacard not found for era ${ERAS[$i]} at $CARD_PATH" >&2
+            exit 1
+        fi
+        COMBINE_CARDS_ARGS="$COMBINE_CARDS_ARGS ${CARD_PATH}"
+        cp "${ERA_OUTPUT_DIRS[$i]}/combine/shapes*.root" \
+           "$COMBINED_DIR/shapes_${ERAS[$i]}.root" 2>/dev/null || true
+    done
+
+    run_combine "combineCards.py $COMBINE_CARDS_ARGS > $COMBINED_DIR/datacard.txt"
+    echo "Combined datacard written to $COMBINED_DIR/datacard.txt"
+
+    echo "########## Running combined fit ##########"
+    run_fit "python3 -m fitting generate-combine-script \
+        --datacard '$COMBINED_DIR/datacard.txt' \
+        --config '$CONFIG' \
+        --output '$COMBINED_DIR'"
+
+    COMBINED_SCRIPT="$COMBINED_DIR/run_combine_commands.sh"
+    if [ -f "$COMBINED_SCRIPT" ]; then
+        echo "Running combined combine commands"
+        bash "$COMBINED_SCRIPT"
+    else
+        echo "WARNING: No combined combine script at: $COMBINED_SCRIPT" >&2
+    fi
+
+    echo ""
+    echo "=== Combined-era job complete ==="
+    for i in "${!ERAS[@]}"; do
+        echo "  ${ERAS[$i]}: ${ERA_OUTPUT_DIRS[$i]}"
+    done
+    echo "  Combined: $COMBINED_DIR"
+fi

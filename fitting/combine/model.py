@@ -100,34 +100,6 @@ class ChannelModel:
         return len(self.data_obs)
 
 
-# def computeShapeMetrics(
-#     nominal: np.ndarray, ups: list[np.ndarray], down: list[np.ndarray]
-# ) -> str:
-#     nominal = np.concatenate([nominal] * len(ups))
-#     up, down = np.concatenate(ups), np.concatenate(down)
-#     mask = nominal > 0
-#     if not np.any(mask):
-#         return "0.0% [0.0%, 0.0%]"
-
-#     rel_up = np.zeros_like(nominal)
-#     rel_down = np.zeros_like(nominal)
-
-#     rel_up[mask] = (up[mask] - nominal[mask]) / nominal[mask]
-#     rel_down[mask] = (down[mask] - nominal[mask]) / nominal[mask]
-
-#     all_changes = np.concatenate([rel_up[mask], rel_down[mask]])
-#     if len(all_changes) == 0:
-#         return "0.0% [0.0%, 0.0%]"
-
-#     median_dev = np.median(np.abs(all_changes))
-#     min_change = np.min(all_changes)
-#     max_change = np.max(all_changes)
-
-#     return (
-#         f"{median_dev * 100:.1f}% [{min_change * 100:+.1f}%, {max_change * 100:+.1f}%]"
-#     )
-
-
 def computeShapeMetrics(
     nominal: np.ndarray, ups: list[np.ndarray], down: list[np.ndarray]
 ) -> str:
@@ -158,7 +130,6 @@ def computeRateMetrics(nominal: float, values: list[float], dists: list[str]) ->
 class CombineModel:
     channels: list[ChannelModel]
     rate_params: list[RateParam] = attrs.Factory(list)
-    shapes_file: str = "shapes.root"
 
     def _collectSystematics(self, gather_by=lambda x: x.name) -> OrderedDict[Any, str]:
         """Collect unique systematic names and their distribution types."""
@@ -217,7 +188,7 @@ class CombineModel:
 
         logger.info(f"Exported {len(histograms)} histograms to {path}")
 
-    def renderDatacard(self) -> str:
+    def renderDatacard(self, shapes_filename: str) -> str:
         lines = []
 
         lines.append("imax * # number of channels")
@@ -232,7 +203,7 @@ class CombineModel:
                     "shapes",
                     "*",
                     ch.name,
-                    self.shapes_file,
+                    shapes_filename,
                     "$PROCESS",
                     "$PROCESS_$SYSTEMATIC",
                 ]
@@ -285,11 +256,11 @@ class CombineModel:
 
         return "\n".join(lines) + "\n"
 
-    def write(self, out_dir: Path) -> None:
+    def write(self, out_dir: Path, shapes_filename="shapes.root") -> None:
         out_dir = Path(out_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
-        self.writeShapes(out_dir / self.shapes_file)
-        (out_dir / "datacard.txt").write_text(self.renderDatacard())
+        self.writeShapes(out_dir / shapes_filename)
+        (out_dir / "datacard.txt").write_text(self.renderDatacard(shapes_filename))
         logger.info(f"Wrote datacard to {out_dir / 'datacard.txt'}")
 
     def getSystematicsSummary(self) -> tuple[list[str], list[list[str]]]:
