@@ -68,13 +68,24 @@ def _loadSignals(config):
 def loadData(config: PipelineConfig) -> AnalysisState:
     """Load background and optional signal data."""
 
+    (
+        signals,
+        signal_hists,
+        signal_metadata,
+        first_signal,
+        first_signal_hist,
+        first_sig_metadata,
+    ) = _loadSignals(config)
+
     logger.info(f"Loading background from {config.background_path}")
     loader = FileLoader.forPath(config.background_path)
     bkg_raw = loader.load(config.background_path)
     bkg_hist = extractHistogram(bkg_raw)
-    background = histToBinnedData(bkg_hist,
-                                  #rebin=config.rebin,
-                                  variation="central")
+    background = histToBinnedData(
+        bkg_hist,
+        rebin=config.rebin if not signals else 1,
+        variation="central",
+    )
 
     file_metadata = extractMetadata(bkg_raw)
     combined_metadata = {
@@ -86,15 +97,6 @@ def loadData(config: PipelineConfig) -> AnalysisState:
         "min_counts": config.min_counts,
     }
 
-    (
-        signals,
-        signal_hists,
-        signal_metadata,
-        first_signal,
-        first_signal_hist,
-        first_sig_metadata,
-    ) = _loadSignals(config)
-
     logger.info(f"Loaded {len(signals)} signals")
     for signal in signals:
         logger.info(f"  {signal}: {jnp.sum(signals[signal].Y)} events")
@@ -102,9 +104,9 @@ def loadData(config: PipelineConfig) -> AnalysisState:
     if first_sig_metadata is not None:
         reco_category = getRecoCategory(first_sig_metadata["name"])
         combined_metadata = {
-            **combined_metadata,
             **first_sig_metadata,
             "reco_category": reco_category,
+            **combined_metadata,
         }
 
     injection_signal = None
@@ -117,7 +119,9 @@ def loadData(config: PipelineConfig) -> AnalysisState:
         if config.signal_pre_scale != 1.0:
             logger.info(f"Pre-scaling injection signal by {config.signal_pre_scale}")
             inj_hist = inj_hist * config.signal_pre_scale
-        injection_signal = histToBinnedData(inj_hist, rebin=config.rebin, variation="central")
+        injection_signal = histToBinnedData(
+            inj_hist, rebin=config.rebin, variation="central"
+        )
         injection_signal_metadata = extractMetadata(inj_raw)
         logger.info(
             f"Loaded injection signal, total events = {float(injection_signal.Y.sum())}"
