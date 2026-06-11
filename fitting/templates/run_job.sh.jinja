@@ -114,6 +114,18 @@ if [ "${#ERAS[@]}" -gt 1 ] && [ -n "$COMBINED_OUTPUT" ]; then
     run_combine "combineCards.py $COMBINE_CARDS_ARGS > $COMBINED_DIR/datacard.txt"
     echo "Combined datacard written to $COMBINED_DIR/datacard.txt"
 
+    echo "########## Merging GPR summaries ##########"
+    SUMMARIES_ARGS=""
+    for i in "${!ERAS[@]}"; do
+        SUMMARY_PATH="${ERA_OUTPUT_DIRS[$i]}/summary.json"
+        if [ ! -f "$SUMMARY_PATH" ]; then
+            echo "ERROR: Summary JSON not found for era ${ERAS[$i]} at $SUMMARY_PATH" >&2
+            exit 1
+        fi
+        SUMMARIES_ARGS="$SUMMARIES_ARGS ${SUMMARY_PATH}"
+    done
+    run_fit "python3 -m fitting merge-summaries $SUMMARIES_ARGS --output '$COMBINED_OUTPUT/summary.json' --era-name '$ERA_NAMES'"
+
     echo "########## Running combined fit ##########"
     run_fit "python3 -m fitting generate-combine-script \
         --datacard '$COMBINED_DIR/datacard.txt' \
@@ -124,6 +136,8 @@ if [ "${#ERAS[@]}" -gt 1 ] && [ -n "$COMBINED_OUTPUT" ]; then
     if [ -f "$COMBINED_SCRIPT" ]; then
         echo "Running combined combine commands"
         bash "$COMBINED_SCRIPT"
+        echo "########## Harvesting GPR combined results ##########"
+        run_fit "python3 -m fitting harvest '$COMBINED_OUTPUT/summary.json'"
     else
         echo "WARNING: No combined combine script at: $COMBINED_SCRIPT" >&2
     fi

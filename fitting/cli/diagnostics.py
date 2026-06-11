@@ -514,3 +514,90 @@ def checkDomainCmd(
     logger.info(
         f"Domain check plot saved to {output.parent}/{output.stem}{output.suffix}"
     )
+
+
+@click.command("merge-summaries")
+@click.argument(
+    "inputs",
+    nargs=-1,
+    type=click.Path(exists=True, path_type=Path),
+)
+@click.option(
+    "-o",
+    "--output",
+    type=click.Path(path_type=Path),
+    required=True,
+    help="Output summary JSON file.",
+)
+@click.option(
+    "--era-name",
+    type=str,
+    default="combined",
+    help="New era name for the combined summary.",
+)
+def mergeSummariesCmd(inputs: tuple[Path, ...], output: Path, era_name: str) -> None:
+    """Merge GPR summary JSON files from multiple eras."""
+    import json
+
+    if not inputs:
+        raise click.UsageError("At least one input summary JSON must be provided.")
+
+    cleaned_era_name = era_name.replace("@", "+")
+    logger.info(f"Merging {len(inputs)} GPR summaries into {output} with era name {cleaned_era_name}")
+
+    summaries = []
+    for path in inputs:
+        with open(path, "r") as f:
+            summaries.append(json.load(f))
+
+    merged = copy.deepcopy(summaries[0])
+
+    total_lumi = 0.0
+    energies = set()
+    for s in summaries:
+        metadata = s.get("metadata", {})
+        era_info = metadata.get("era", {})
+        
+        lumi = era_info.get("lumi")
+        if lumi is not None:
+            try:
+                total_lumi += float(lumi)
+            except ValueError:
+                pass
+                
+        energy = era_info.get("energy")
+        if energy is not None:
+            energies.add(energy)
+
+    if "metadata" not in merged:
+        merged["metadata"] = {}
+    if "era" not in merged["metadata"]:
+        merged["metadata"]["era"] = {}
+
+    merged["metadata"]["era"]["name"] = cleaned_era_name
+    merged["metadata"]["era"]["lumi"] = total_lumi
+    
+    if len(energies) == 1:
+        merged["metadata"]["era"]["energy"] = list(energies)[0]
+    elif len(energies) > 1:
+        sorted_energies = sorted(list(energies), key=lambda x: str(x))
+        merged["metadata"]["era"]["energy"] = "/".join(str(e) for e in sorted_energies)
+
+    # Sum blind_mask_size if it exists in inputs
+    blind_mask_sizes = [s.get("blind_mask_size") for s in summaries if "blind_mask_size" in s]
+    if blind_mask_sizes:
+        merged["blind_mask_size"] = sum(blind_mask_sizes)
+    else:
+        merged.pop("blind_mask_size", None)
+
+    # Remove single-era specific metrics/training results
+    merged.pop("training", None)
+    merged.pop("metrics", None)
+    merged.pop("ppc", None)
+
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with open(output, "w") as f:
+        json.dump(merged, f, indent=2)
+
+    logger.info(f"Successfully wrote merged summary to {output}")
+

@@ -9,6 +9,7 @@ from .diagnostics import (
     harvestCmd,
     windowFitCmd,
     checkDomainCmd,
+    mergeSummariesCmd,
 )
 from .aggregate import aggregateGroup
 from .distributed import makesubmitCmd, generateCombineScriptCmd
@@ -25,5 +26,6 @@ main.add_command(resolveOutputCmd, name="resolve-output")
 main.add_command(harvestCmd, name="harvest")
 main.add_command(windowFitCmd, name="window-fit")
 main.add_command(checkDomainCmd, name="check-domain")
+main.add_command(mergeSummariesCmd, name="merge-summaries")
 
 __all__ = ["main"]
