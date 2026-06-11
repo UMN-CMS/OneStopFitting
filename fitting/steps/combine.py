@@ -87,7 +87,9 @@ def prepareCombine(state: AnalysisState, rng_key: jax.Array) -> AnalysisState:
 
     model = buildCombineModel(state)
     out_dir = state.getRealOutPath() / "combine"
-    era_name = state.config.metadata["era"]["name"]
+
+    era_name = state.background_metadata["era"]["name"]
+
     shapes_filename = f"shapes_{era_name}.root"
     model.write(out_dir, shapes_filename=shapes_filename)
 
