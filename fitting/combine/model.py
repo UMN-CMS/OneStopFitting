@@ -106,8 +106,8 @@ def computeShapeMetrics(
     nominal = np.concatenate([nominal] * len(ups))
     up, down = np.concatenate(ups), np.concatenate(down)
 
-    up_change = (up - nominal) / nominal
-    down_change = (down - nominal) / nominal
+    up_change = np.nan_to_num((up - nominal) / nominal, nan=0)
+    down_change = np.nan_to_num((down - nominal) / nominal, nan=0)
     all_changes = abs(np.concatenate([up_change, down_change]))
 
     percentile_16 = np.percentile(all_changes, 16)

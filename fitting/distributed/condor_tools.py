@@ -320,10 +320,10 @@ def _renderJobGroup(group: JobGroup) -> dict:
         all_files.update(j.signals)
         all_files.add(j.background)
     return {
-        "transfer_files": ", ".join(sorted(all_files)),
+        "transfer_files": "$(COMMA)".join(sorted(all_files)),
         "era_names": d.join(j.era for j in group.era_jobs),
         "era_backgrounds": d.join(j.background for j in group.era_jobs),
-        "era_signals": d.join(",".join(j.signals) for j in group.era_jobs),
+        "era_signals": d.join("|".join(j.signals) for j in group.era_jobs),
         "era_configs": d.join(j.config for j in group.era_jobs),
         "era_outputs": d.join(j.output_dir for j in group.era_jobs),
         "combined_output": group.combined_output or "",

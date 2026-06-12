@@ -47,6 +47,8 @@ def buildBackgroundProcess(
     pred_cov_masked = np.asarray(state.pred_cov[blind_mask, :][:, blind_mask])
 
     year = state.background_metadata["era"]["name"]
+    if year:
+        year = year.replace(" ", "_")
     postfix = f"_{year}" if year else ""
 
     signal_size = _maxSignalSize(state, blind_mask)
@@ -207,26 +209,26 @@ def buildChannel(state: AnalysisState) -> ChannelModel:
 
 def _buildRateParams(state: AnalysisState, channel: ChannelModel) -> list[RateParam]:
     rate_params = []
-    bg_rate_unc = state.config.combine.bg_rate_uncertainty
+    # bg_rate_unc = state.config.combine.bg_rate_uncertainty
 
-    if bg_rate_unc == "rateParam" and state.pred_cov is not None:
-        blind_mask = _applyBlindMask(state)
-        pred_cov_masked = state.pred_cov[blind_mask, :][:, blind_mask]
-        bg_proc = next(p for p in channel.processes if p.name == "background")
-        ones = jnp.ones(pred_cov_masked.shape[0])
-        rate_unc = float(
-            jnp.sqrt(ones @ pred_cov_masked @ ones) / jnp.maximum(bg_proc.rate, 1.0)
-        )
-        lo = max(1.0 - rate_unc, 0.01)
-        hi = 1.0 + rate_unc
-        rate_params.append(
-            RateParam(
-                channel=channel.name,
-                process="background",
-                init_value=1.0,
-                bounds=[lo, hi],
-            )
-        )
+    # if bg_rate_unc == "rateParam" and state.pred_cov is not None:
+    #     blind_mask = _applyBlindMask(state)
+    #     pred_cov_masked = state.pred_cov[blind_mask, :][:, blind_mask]
+    #     bg_proc = next(p for p in channel.processes if p.name == "background")
+    #     ones = jnp.ones(pred_cov_masked.shape[0])
+    #     rate_unc = float(
+    #         jnp.sqrt(ones @ pred_cov_masked @ ones) / jnp.maximum(bg_proc.rate, 1.0)
+    #     )
+    #     lo = max(1.0 - rate_unc, 0.01)
+    #     hi = 1.0 + rate_unc
+    #     rate_params.append(
+    #         RateParam(
+    #             channel=channel.name,
+    #             process="background",
+    #             init_value=1.0,
+    #             bounds=[lo, hi],
+    #         )
+    #     )
 
     return rate_params
 

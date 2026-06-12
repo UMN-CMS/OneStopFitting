@@ -21,7 +21,7 @@ ls -alhtr
 export MPLCONFIGDIR=$_CONDOR_SCRATCH_DIR
 
 function resolve_output {
-    IFS=',' read -ra sig_array <<< "$SIGNALS"
+    IFS='|' read -ra sig_array <<< "$SIGNALS"
     for s in "${sig_array[@]}"; do
         sig_args="$sig_args --signal \"$s\""
     done
@@ -36,7 +36,7 @@ function resolve_output {
 
 function run_single_era {
     local sig_args=""
-    IFS=',' read -ra sig_array <<< "$SIGNALS"
+    IFS='|' read -ra sig_array <<< "$SIGNALS"
     for s in "${sig_array[@]}"; do
         sig_args="$sig_args --signal \"$s\""
     done
