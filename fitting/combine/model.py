@@ -106,21 +106,19 @@ def computeShapeMetrics(
     nominal = np.concatenate([nominal] * len(ups))
     up, down = np.concatenate(ups), np.concatenate(down)
 
-    up_change = up - nominal
-    down_change = down - nominal
-
+    up_change = (up - nominal) / nominal
+    down_change = (down - nominal) / nominal
     all_changes = abs(np.concatenate([up_change, down_change]))
 
     percentile_16 = np.percentile(all_changes, 16)
     percentile_84 = np.percentile(all_changes, 84)
-    median_dev = np.median(all_changes)
     max_dev = np.max(all_changes)
 
     return f"{int(percentile_16)}-{int(percentile_84)} ({int(max_dev)})"
 
 
 def computeRateMetrics(nominal: float, values: list[float], dists: list[str]) -> str:
-    changes = [nominal * (float(value) - 1) for value in values]
+    changes = [(float(value) - 1) for value in values]
     med = np.median(changes)
 
     return f"{int(med)}"
@@ -132,7 +130,6 @@ class CombineModel:
     rate_params: list[RateParam] = attrs.Factory(list)
 
     def _collectSystematics(self, gather_by=lambda x: x.name) -> OrderedDict[Any, str]:
-        """Collect unique systematic names and their distribution types."""
         syst_order: OrderedDict[Any, str] = OrderedDict()
         for ch in self.channels:
             for proc in ch.processes:

@@ -406,14 +406,14 @@ def generateFiles(plan: SubmissionPlan) -> Path:
     )
 
     if plan.job_groups:
-        first = plan.job_groups[0]
+        first = plan.job_groups[-1]
         job_files = [f for j in first.era_jobs for f in j.signals + [j.background]]
         _renderTemplate(
             "local_test.sh.jinja",
             plan.output_dir / "local_test.sh",
             transfer_files=plan.transfer_files,
             job_files=job_files,
-            job=render_jobs[0],
+            job=render_jobs[-1],
             executable=plan.run_script,
         )
 

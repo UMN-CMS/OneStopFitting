@@ -199,7 +199,10 @@ class AnalysisState:
 
     def getRealOutPath(self):
         replace_floats = {k: floatToStr(v) for k, v in dictToDot(self.metadata)}
-        config_dotted = {k: floatToStr(v) for k, v in dictToDot({"config": attrs.asdict(self.config)})}
+        config_dotted = {
+            k: floatToStr(v)
+            for k, v in dictToDot({"config": attrs.asdict(self.config)})
+        }
         replace_floats.update(config_dotted)
 
         return Path(dotFormat(self.config.output_dir_format, **replace_floats))

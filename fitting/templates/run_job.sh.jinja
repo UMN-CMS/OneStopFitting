@@ -103,19 +103,16 @@ if [ "${#ERAS[@]}" -gt 1 ] && [ -n "$COMBINED_OUTPUT" ]; then
     COMBINED_DIR="$COMBINED_OUTPUT/combine"
     mkdir -p "$COMBINED_DIR"
 
-    COMBINE_CARDS_ARGS=""
     for i in "${!ERAS[@]}"; do
-        CARD_PATH="${ERA_OUTPUT_DIRS[$i]}/combine/datacard.txt"
-        if [ ! -f "$CARD_PATH" ]; then
-            echo "ERROR: Datacard not found for era ${ERAS[$i]} at $CARD_PATH" >&2
-            exit 1
-        fi
-        COMBINE_CARDS_ARGS="$COMBINE_CARDS_ARGS ${CARD_PATH}"
-        cp "${ERA_OUTPUT_DIRS[$i]}/combine/shapes*.root"  "$COMBINED_DIR/shapes_${ERAS[$i]}.root" 
+        cp ${ERA_OUTPUT_DIRS[$i]}/combine/shapes*.root  "$COMBINED_DIR/shapes_${ERAS[$i]}.root" 
+        cp ${ERA_OUTPUT_DIRS[$i]}/combine/datacard*.txt  "$COMBINED_DIR/datacard_${ERAS[$i]}.txt" 
     done
 
-    run_combine "combineCards.py $COMBINE_CARDS_ARGS > $COMBINED_DIR/datacard.txt"
-    echo "Combined datacard written to $COMBINED_DIR/datacard.txt"
+    (
+        cd "$COMBINED_DIR"
+        run_combine "find . -name 'datacard_*.txt' -print0 | xargs -0 combineCards.py > datacard.txt"
+        echo "Combined datacard written to $COMBINED_DIR/datacard.txt"
+    )
 
     echo "########## Merging GPR summaries ##########"
     SUMMARIES_ARGS=""
