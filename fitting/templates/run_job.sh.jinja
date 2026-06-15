@@ -1,5 +1,6 @@
+#!/usr/bin/env bash
 # GENERATED AUTOMATICALLY on {{ timestamp }}
-set -e
+#set -e
 
 echo "STARTING SETUP"
 
@@ -77,7 +78,16 @@ IFS='@' read -ra SIG_ARRAY <<< "$ERA_SIGNALS"
 IFS='@' read -ra CFG_ARRAY <<< "$ERA_CONFIGS"
 IFS='@' read -ra OUT_ARRAY <<< "$ERA_OUTPUTS"
 
+
+
+echo "$ERA_NAMES"
+echo "$ERA_BACKGROUNDS"
+echo "$ERA_SIGNALS"
+echo "$ERA_CONFIGS"
+echo "$ERA_OUTPUTS"
+
 declare -a ERA_OUTPUT_DIRS
+
 
 for i in "${!ERAS[@]}"; do
     echo "=========================================="
