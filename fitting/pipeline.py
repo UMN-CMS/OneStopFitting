@@ -96,6 +96,7 @@ class PipelineConfig:
     image_formats: list[str] = attrs.Factory(lambda: ["pdf"])
     metadata: dict[str, Any] = attrs.Factory(dict)
     window_variance_inflation: float = 1.0
+    window_variance_increase: float | None  = None
     signal_pre_scale: float = 16.0
 
     @property

@@ -39,6 +39,16 @@ def runDiagnostics(state: AnalysisState, rng_key: jax.Array) -> AnalysisState:
 
         pred_cov = pred_cov.at[diag_idx, diag_idx].multiply(inflation_factors)
 
+    flat_variance_scale = state.config.window_variance_increase
+    if flat_variance_scale is not None and state.blind_mask is not None:
+        diag_idx = jnp.arange(pred_cov.shape[0])
+        increase = jnp.where(state.blind_mask, flat_variance_scale, 0.0)
+        logger.info(
+            f"Adding a constant variance in blinded window of {flat_variance_scale}"
+        )
+
+        pred_cov = pred_cov.at[diag_idx, diag_idx].add(increase)
+
     pred_var = jnp.diag(pred_cov)
     state = attrs.evolve(state, pred_mean=pred_mean, pred_cov=pred_cov)
 
