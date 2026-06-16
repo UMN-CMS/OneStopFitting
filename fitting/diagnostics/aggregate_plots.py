@@ -128,7 +128,7 @@ def _handleOneSummary(
             raise ValueError(f"Unknown transform '{transform_name}'")
         value = transform_registry[transform_name](value, summary)
 
-    return AggregatePoint(
+    return key, AggregatePoint(
         mstop=mstop,
         mchi=mchi,
         value=value,
@@ -149,20 +149,18 @@ def extractPoints(
         if isinstance(summary, list):
             for s in summary:
                 try:
-                    points.append(
-                        _handleOneSummary(
-                            s, path, *args, transform_name=transform_name, **kwargs
-                        )
+                    k, v = _handleOneSummary(
+                        s, path, *args, transform_name=transform_name, **kwargs
                     )
+                    points[k].append(v)
                 except Exception as e:
                     logger.info(f"Skipping {path} due to {e}")
         else:
             try:
-                points.append(
-                    _handleOneSummary(
-                        summary, path, *args, transform_name=transform_name, **kwargs
-                    )
+                k, v = _handleOneSummary(
+                    summary, path, *args, transform_name=transform_name, **kwargs
                 )
+                points[k].append(v)
             except Exception as e:
                 logger.info(f"Skipping {path} due to {e}")
     return dict(points)
