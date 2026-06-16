@@ -326,7 +326,7 @@ def _renderJobGroup(group: JobGroup) -> dict:
         "era_signals": d.join("|".join(j.signals) for j in group.era_jobs),
         "era_configs": d.join(j.config for j in group.era_jobs),
         "era_outputs": d.join(j.output_dir for j in group.era_jobs),
-        "combined_output": group.combined_output or "",
+        "combined_output": group.combined_output or '$(BLANK)',
     }
 
 
@@ -354,7 +354,8 @@ def buildPlan(
         if g.isCombined:
             m = g.era_jobs[0].metadata
             g.combined_output = str(
-                output_dir / f"combined/{m['pipeline']}/{m['mstop']}_{m['mchi']}"
+                output_dir
+                / f"combined/{m['pipeline']}/{m['mstop']}_{m['mchi']}/{m['toy_index']}"
             )
 
     if not venv_path:
