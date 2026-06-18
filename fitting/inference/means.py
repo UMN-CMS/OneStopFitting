@@ -29,6 +29,14 @@ class DeepMeanFunction(gpjax.mean_functions.AbstractMeanFunction):
         return self.base_mean(xt)
 
 
+@attrs.define(slots=False)
+class NeuralMeanFunction(gpjax.mean_functions.AbstractMeanFunction):
+    network: nnx.Module
+
+    def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
+        return self.network(x).reshape(-1, 1)
+
+
 class DoubleSidedCrystalBallMean(gpjax.mean_functions.AbstractMeanFunction):
     def __init__(self, ndim: int, init_mu: jnp.ndarray):
         super().__init__()
@@ -370,6 +378,38 @@ class DeepMeanFunctionConfig(MeanFunctionConfig):
         return DeepMeanFunction(
             self.base_mean.buildMeanFunction(ndim, kernel, **kwargs), network
         )
+
+
+@attrs.define
+class NeuralMeanConfig(MeanFunctionConfig):
+    input_dim: int = 2
+    hidden_shapes: list[int] = attrs.Factory(lambda: [20, 20])
+    activation: str = "silu"
+    weight_prior: PriorConfig | None = None
+    bias_prior: PriorConfig | None = None
+
+    def buildMeanFunction(
+        self, ndim: int, kernel: gpjax.kernels.AbstractKernel, **kwargs
+    ) -> gpjax.mean_functions.AbstractMeanFunction:
+        from .kernels.nn import Network
+
+        rngs = kwargs.get("rngs")
+        if rngs is None:
+            raise ValueError(
+                "NeuralMeanConfig requires rngs for network initialization"
+            )
+
+        network = Network(
+            rngs=rngs,
+            input_dim=self.input_dim,
+            output_dim=1,
+            shape=self.hidden_shapes,
+            activation_name=self.activation,
+            weight_prior=self.weight_prior,
+            bias_prior=self.bias_prior,
+            output_residual=False,
+        )
+        return NeuralMeanFunction(network=network)
 
 
 @attrs.define
