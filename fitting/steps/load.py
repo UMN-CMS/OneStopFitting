@@ -11,7 +11,9 @@ from ..data.loading import (
     extractHistogram,
     extractMetadata,
     histToBinnedData,
+    sliceVariation,
 )
+
 
 if TYPE_CHECKING:
     from ..pipeline import PipelineConfig
@@ -65,6 +67,22 @@ def _loadSignals(config):
     )
 
 
+def _haveDifferentBinning(h1, h2) -> bool:
+    h1_sliced = sliceVariation(h1, "central")
+    h2_sliced = sliceVariation(h2, "central")
+    if len(h1_sliced.axes) != len(h2_sliced.axes):
+        return True
+    for ax1, ax2 in zip(h1_sliced.axes, h2_sliced.axes):
+        if len(ax1) != len(ax2):
+            return True
+        if hasattr(ax1, "edges") and hasattr(ax2, "edges"):
+            if not jnp.allclose(jnp.array(ax1.edges), jnp.array(ax2.edges)):
+                return True
+        elif hasattr(ax1, "edges") != hasattr(ax2, "edges"):
+            return True
+    return False
+
+
 def loadData(config: PipelineConfig) -> AnalysisState:
     """Load background and optional signal data."""
 
@@ -81,9 +99,20 @@ def loadData(config: PipelineConfig) -> AnalysisState:
     loader = FileLoader.forPath(config.background_path)
     bkg_raw = loader.load(config.background_path)
     bkg_hist = extractHistogram(bkg_raw)
+
+    if signals and first_signal_hist is not None:
+        if _haveDifferentBinning(first_signal_hist, bkg_hist):
+            logger.info("Signal and background have different binning. Rebinning signal only.")
+            bkg_rebin = 1
+        else:
+            logger.info("Signal and background have the same binning. Rebinning both.")
+            bkg_rebin = config.rebin
+    else:
+        bkg_rebin = config.rebin
+
     background = histToBinnedData(
         bkg_hist,
-        rebin=config.rebin if not signals else 1,
+        rebin=bkg_rebin,
         variation="central",
     )
 
