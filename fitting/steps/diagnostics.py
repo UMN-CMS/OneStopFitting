@@ -22,14 +22,22 @@ def runDiagnostics(state: AnalysisState, rng_key: jax.Array) -> AnalysisState:
         raise ValueError("Cannot run diagnostics without training result and dataset.")
 
     pred_key, ppc_key = random.split(rng_key)
-    pred_mean, pred_cov = predictInRealSpace(
-        posterior=state.training_result.posterior,
-        dataset_train=state.dataset,
-        test_data=state.test_data,
-        transform=state.transform,
-        samples=state.training_result.samples,
-        rng_key=pred_key,
-    )
+
+    # Check if ensemble posteriors are available
+    tr = state.training_result
+    if tr.all_posteriors is not None and len(tr.all_posteriors) > 1:
+        pred_mean, pred_cov = _ensemblePrediction(
+            state, pred_key, tr.all_posteriors, tr.all_losses, tr.ensemble_mode
+        )
+    else:
+        pred_mean, pred_cov = predictInRealSpace(
+            posterior=tr.posterior,
+            dataset_train=state.dataset,
+            test_data=state.test_data,
+            transform=state.transform,
+            samples=tr.samples,
+            rng_key=pred_key,
+        )
 
     inflation = state.config.window_variance_inflation
     if inflation != 1.0 and state.blind_mask is not None:
@@ -81,3 +89,43 @@ def runDiagnostics(state: AnalysisState, rng_key: jax.Array) -> AnalysisState:
 
     state = attrs.evolve(state, ppc_results=ppc_results)
     return state
+
+
+def _ensemblePrediction(
+    state: AnalysisState,
+    rng_key: jax.Array,
+    posteriors: list,
+    losses: list[float] | None,
+    mode: str | None,
+) -> tuple[jnp.ndarray, jnp.ndarray]:
+    from ..inference.ensemble_prediction import (
+        computeEnsemblePrediction,
+        EnsembleMode,
+    )
+
+    ensemble_mode = EnsembleMode(mode or "average")
+    num_seeds = len(posteriors)
+    logger.info(
+        f"=== Ensemble prediction: {num_seeds} seeds, mode={ensemble_mode.value} ==="
+    )
+
+    ensemble_mean, ensemble_cov, seed_means = computeEnsemblePrediction(
+        posteriors=posteriors,
+        datasets=[state.dataset],  # same dataset for all seeds
+        test_data=state.test_data,
+        transform=state.transform,
+        mode=ensemble_mode,
+        rng_key=rng_key,
+        losses=losses,
+    )
+
+    # Log per-seed loss spread
+    if losses:
+        losses_arr = jnp.array(losses)
+        logger.info(
+            f"  Per-seed MLL: mean={float(jnp.mean(losses_arr)):.4f}, "
+            f"std={float(jnp.std(losses_arr)):.4f}, "
+            f"range=[{float(jnp.min(losses_arr)):.4f}, {float(jnp.max(losses_arr)):.4f}]"
+        )
+
+    return ensemble_mean, ensemble_cov

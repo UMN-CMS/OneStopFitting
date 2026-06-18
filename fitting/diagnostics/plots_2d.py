@@ -59,13 +59,13 @@ def makeDiagnosticPlots2D(
             ax.set_ylabel(test_data.axis_names[1])
         plotBlinding2D(ax, edges, X, blind_mask)
 
-    # with makePlot("prior_mean") as ax:
-    #     plotRaw(ax, edges, X, prior_mean, cbar_title="Events")
-    #     ax.set_title("Prior Mean")
-    #     if test_data.axis_names and len(test_data.axis_names) >= 2:
-    #         ax.set_xlabel(test_data.axis_names[0])
-    #         ax.set_ylabel(test_data.axis_names[1])
-    #     plotBlinding2D(ax, edges, X, blind_mask)
+    with makePlot("prior_mean") as ax:
+        plotRaw(ax, edges, X, prior_mean, cbar_title="Events")
+        ax.set_title("Prior Mean")
+        if test_data.axis_names and len(test_data.axis_names) >= 2:
+            ax.set_xlabel(test_data.axis_names[0])
+            ax.set_ylabel(test_data.axis_names[1])
+        plotBlinding2D(ax, edges, X, blind_mask)
 
     # --- Observed ---
     with makePlot("observed_outputs") as ax:

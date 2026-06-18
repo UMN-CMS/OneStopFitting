@@ -312,6 +312,16 @@ class BlindedChi2Config(SelectionStrategy):
 
 
 @attrs.define
+class EnsembleAverageConfig(SelectionStrategy):
+    mode: str = "average"
+
+    def score(
+        self, result: TrainingResult, context: dict[str, Any] | None = None
+    ) -> float:
+        return result.final_loss
+
+
+@attrs.define
 class PPCCriteria(RestartCriterion):
     num_samples: int = 200
     min_val: float = float("-inf")
@@ -664,6 +674,17 @@ def runWithRestarts(
     all_histories = [r.loss_history for r in all_results]
     best.loss_histories = all_histories
     best.best_restart = best_idx
+
+    # When using ensemble selection, store all posteriors for BMA at prediction time
+    if isinstance(restart_cfg.selection, EnsembleAverageConfig):
+        best.all_posteriors = [r.posterior for r in all_results]
+        best.all_losses = [r.final_loss for r in all_results]
+        best.ensemble_mode = restart_cfg.selection.mode
+        logger.info(
+            f"Ensemble mode active: stored {len(all_results)} posteriors "
+            f"(mode={restart_cfg.selection.mode})"
+        )
+
     return best
 
 

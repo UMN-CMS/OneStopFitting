@@ -155,6 +155,10 @@ class TrainingResult:
     loss_histories: list[list[float]] | None = None
     best_restart: int | None = None
 
+    all_posteriors: list[Any] | None = None
+    all_losses: list[float] | None = None
+    ensemble_mode: str | None = None
+
 
 def floatToStr(f):
     if isinstance(f, float):
