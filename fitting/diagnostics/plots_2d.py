@@ -59,6 +59,14 @@ def makeDiagnosticPlots2D(
             ax.set_ylabel(test_data.axis_names[1])
         plotBlinding2D(ax, edges, X, blind_mask)
 
+    # with makePlot("prior_mean") as ax:
+    #     plotRaw(ax, edges, X, prior_mean, cbar_title="Events")
+    #     ax.set_title("Prior Mean")
+    #     if test_data.axis_names and len(test_data.axis_names) >= 2:
+    #         ax.set_xlabel(test_data.axis_names[0])
+    #         ax.set_ylabel(test_data.axis_names[1])
+    #     plotBlinding2D(ax, edges, X, blind_mask)
+
     # --- Observed ---
     with makePlot("observed_outputs") as ax:
         plotRaw(ax, edges, X, obs_Y, cbar_title="Events")
@@ -242,7 +250,7 @@ def makeDiagnosticPlots2D(
     _plotSinglePullHist(pulls, "Stat", "Statistical Pull", "stat_pulls_hist")
     _plotSinglePullHist(total_pulls, "Total", "Total Pull", "total_pulls_hist")
 
-    if transform is not None:
+    if transform is not None and False:
         norm_data = transform.applyToBinnedData(test_data)
         norm_pred_mean = transform.applyY(pred_mean)
         norm_edges = norm_data.edges
