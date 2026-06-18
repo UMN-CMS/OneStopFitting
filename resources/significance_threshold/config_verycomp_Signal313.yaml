@@ -1,0 +1,36 @@
+injection_rate: 0.0
+min_counts: 0
+rebin: 2
+window:
+  core_threshold_fraction: 0.3
+  smooth_sigma: 1.5
+  dilation_margin: 0.1
+  background_expression: +2.6182872 * 1 + +0.34118675 * y - 1.8019769 * y**2 - 1.6031953
+    * y**3 - 0.26962968 * y**4 - 1.5737439 * x + +1.5364397 * x * y + +0.62665384
+    * x * y**2 - 0.49819591 * x * y**3 - 0.5880329 * x**2 + +0.41150434 * x**2 * y
+    + +0.97132552 * x**2 * y**2 + +1.1279531 * x**3 - 0.66075658 * x**3 * y - 1.1977557
+    * x**4
+  background_x_lo:
+  - 750.0
+  - 0.85
+  background_x_hi:
+  - 2500.0
+  - 1.0
+  _type: SignificanceThresholdWindowConfig
+optimization:
+  mode: optimization
+  objective: mll
+  num_iters: 250
+  lr: 0.025
+model:
+  _type: ExactGPConfig
+  kernel:
+    _type: NNWarpingKernelConfig
+    hidden_shapes:
+    - 20
+    - 20
+  likelihood:
+    _type: FixedGaussianNoiseConfig
+    variance_floor_quantile: 0.05
+  mean_function:
+    _type: ConstantMeanConfig

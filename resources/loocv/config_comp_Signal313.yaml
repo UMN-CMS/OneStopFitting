@@ -10,9 +10,9 @@ window:
 
 optimization:
   mode: optimization
-  objective: mll
+  objective: loocv
   num_iters: 250
-  lr: 0.025
+  lr: 0.01
 
 model: 
   _type: ExactGPConfig
@@ -23,6 +23,5 @@ model:
     _type: FixedGaussianNoiseConfig
     variance_floor_quantile: 0.05
     #pad_variance_quantile: 0.5
-    scale_variance_value: 1.0
   mean_function:
     _type: ZeroMeanConfig

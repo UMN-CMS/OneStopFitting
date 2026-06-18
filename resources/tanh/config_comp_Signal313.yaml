@@ -19,10 +19,10 @@ model:
   kernel: 
     _type: NNWarpingKernelConfig
     hidden_shapes: [20,20]
+    activation: tanh
   likelihood:
     _type: FixedGaussianNoiseConfig
     variance_floor_quantile: 0.05
     #pad_variance_quantile: 0.5
-    scale_variance_value: 1.0
   mean_function:
     _type: ZeroMeanConfig

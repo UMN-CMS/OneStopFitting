@@ -5,7 +5,10 @@ rebin: 2
 window:
   _type: CoreDilatedWindowConfig
   core_threshold_fraction: 0.5
-  dilation_margin: 0.2
+  dilation_margin: 0.15
+
+transform:
+  _type: StandardizationConfig
 
 
 optimization:
@@ -19,10 +22,10 @@ model:
   kernel: 
     _type: NNWarpingKernelConfig
     hidden_shapes: [20,20]
+    activation: tanh
   likelihood:
     _type: FixedGaussianNoiseConfig
     variance_floor_quantile: 0.05
     #pad_variance_quantile: 0.5
-    scale_variance_value: 1.0
   mean_function:
     _type: ZeroMeanConfig
