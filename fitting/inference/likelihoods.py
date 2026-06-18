@@ -60,6 +60,7 @@ class FixedGaussianNoiseConfig(LikelihoodConfig):
 
     variance_floor_quantile: float = 0.05
     pad_variance_quantile: float | None = None
+    scale_variance_value: float | None = None
 
     def buildLikelihood(self, **kwargs) -> gpl.AbstractLikelihood:
         if "obs_variance" not in kwargs or kwargs["obs_variance"] is None:
@@ -91,6 +92,10 @@ class FixedGaussianNoiseConfig(LikelihoodConfig):
                 f"Padding variance with {float(pad_val):.6f} "
                 f"(quantile={self.pad_variance_quantile})"
             )
+
+        if self.scale_variance_value is not None:
+            variances *= self.scale_variance_value
+            logger.info(f"Scaling variance by {float(self.scale_variance_value):.6f}")
 
         likelihood = gpl.Gaussian(
             num_datapoints=kwargs["num_datapoints"],
