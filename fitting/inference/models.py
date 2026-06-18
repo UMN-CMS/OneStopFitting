@@ -64,9 +64,11 @@ class ExactGPConfig(GPModelConfig):
     ) -> tuple[Any, Any, Any]:
         kernel = self.kernel.buildKernel(ndim, rngs=rngs, dataset=dataset, **kwargs)
         if mean_function is not None:
-            mean_fn = mean_function.buildMeanFunction(ndim, kernel, **kwargs)
+            mean_fn = mean_function.buildMeanFunction(ndim, kernel, rngs=rngs, **kwargs)
         else:
-            mean_fn = self.mean_function.buildMeanFunction(ndim, kernel, **kwargs)
+            mean_fn = self.mean_function.buildMeanFunction(
+                ndim, kernel, rngs=rngs, **kwargs
+            )
 
         likelihood_kwargs = {"num_datapoints": dataset.n}
         if obs_variance is not None:
@@ -408,7 +410,7 @@ class MultiFidelityGPConfig(GPModelConfig):
         mc_dataset: gpjax.Dataset,
         mc_norm_V: jnp.ndarray | None,
         ndim: int,
-        rngs: nnx.Rngs ,
+        rngs: nnx.Rngs,
     ) -> Any:
         mc_stage_kernel = self.mc_kernel.buildKernel(ndim, rngs=rngs)
 
