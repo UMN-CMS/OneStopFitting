@@ -2,7 +2,7 @@
 
 # Default values
 OUTPUT_BASE=${1:-"smoothed_complete_backgrounds/{era.name}/{pipeline}/"}
-YEARS=${2:-"2016,2017,2018,run3"}  # Comma-separated or space-separated years
+YEARS=${2:-"2016,2017,2018,Run3"}  # Comma-separated or space-separated years
 PYTHON=".venv/bin/python"
 
 # Signal versions and categories
@@ -20,8 +20,8 @@ for YEAR in "${YEAR_ARRAY[@]}"; do
         for CATEGORY in "${CATEGORIES[@]}"; do
             echo "Processing year: $YEAR, version: $VERSION, category: $CATEGORY"
             
-            BG_FILE="combined_backgrounds/$VERSION/${YEAR}_${CATEGORY}_mStop_vs_mChiRatio.pklz4"
-            CONFIG="resources/smoothing_configs/$VERSION/${CATEGORY}.yaml"
+            BG_FILE="combined_backgrounds/$VERSION/${YEAR}/${CATEGORY}_mStop_vs_mChiRatio.pklz4"
+            CONFIG="resources/smoothing_configs/config_${CATEGORY}_${VERSION}.yaml"
             OUT_DIR="${OUTPUT_BASE}/${CATEGORY}"
             
             if [ ! -f "$BG_FILE" ]; then
