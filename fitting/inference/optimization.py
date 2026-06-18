@@ -203,12 +203,12 @@ class PerturbationConfig(RestartStrategy):
 @attrs.define
 class RestartCriterion(ABC):
     @abstractmethod
-    def shouldContinue(self, run_result: TrainingResult) -> bool: ...
+    def shouldContinue(self, run_result: TrainingResult, score: float) -> bool: ...
 
 
 @attrs.define
 class AlwaysContinueConfig(RestartCriterion):
-    def shouldContinue(self, run_result: TrainingResult) -> bool:
+    def shouldContinue(self, run_result: TrainingResult, score: float) -> bool:
         return True
 
 
@@ -216,8 +216,16 @@ class AlwaysContinueConfig(RestartCriterion):
 class LossThresholdConfig(RestartCriterion):
     max_loss: float = float("inf")
 
-    def shouldContinue(self, run_result: TrainingResult) -> bool:
+    def shouldContinue(self, run_result: TrainingResult, score: float) -> bool:
         return run_result.final_loss < self.max_loss
+
+
+@attrs.define
+class ScoreThresholdConfig(RestartCriterion):
+    min_score: float = float("-inf")
+
+    def shouldContinue(self, run_result: TrainingResult, score: float) -> bool:
+        return score > self.min_score
 
 
 @attrs.define
@@ -279,7 +287,7 @@ class BlindedChi2Config(SelectionStrategy):
         dataset = context["dataset"]
         test_data = context.get("test_data")
         transform = context.get("transform")
-        blind_mask = context.get("blind_mask")
+        blind_mask = context["blind_mask"]
         rng_key = context.get("rng_key")
 
         if test_data is None or transform is None:
@@ -296,13 +304,11 @@ class BlindedChi2Config(SelectionStrategy):
             rng_key=rng_key,
         )
 
-        mask = None
-        if blind_mask is not None:
-            mask = ~blind_mask
-
-        return chi2PerBin(
-            test_data.Y.ravel(), pred_mean.ravel(), test_data.V.ravel(), mask=mask
+        chi2 = chi2PerBin(
+            test_data.Y.ravel(), pred_mean.ravel(), test_data.V.ravel(), mask=blind_mask
         )
+        logger.info(f"BlindedChi2Selection: found chi2={chi2:0.3f}")
+        return abs(1 - chi2)
 
 
 @attrs.define
@@ -421,9 +427,11 @@ def _buildOptimizer(config: OptimizationConfig) -> optax.GradientTransformation:
         OptimizerType.ADAM: optax.adam,
         OptimizerType.ADAMW: optax.adamw,
         OptimizerType.SGD: optax.sgd,
-    }[config.optimizer](learning_rate=schedule)
-
-    return base_opt
+    }[config.optimizer]
+    if config.optimizer == OptimizerType.ADAMW:
+        return base_opt(learning_rate=schedule)
+    else:
+        return base_opt(learning_rate=schedule)
 
 
 def _buildObjective(config: OptimizationConfig) -> Any:
@@ -637,8 +645,12 @@ def runWithRestarts(
             run_posterior, run_likelihood, dataset, config, run_key, metric_fns
         )
         all_results.append(result)
+        score = scoring_fn(result)
+        logger.info(f"Score is: {score:0.2f}")
 
-        if i < num_restarts - 1 and not restart_cfg.criterion.shouldContinue(result):
+        if i < num_restarts - 1 and not restart_cfg.criterion.shouldContinue(
+            result, score
+        ):
             logger.info(f"  Restart criterion met after run {i}, stopping early")
             break
 
