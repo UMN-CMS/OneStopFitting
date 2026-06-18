@@ -29,6 +29,7 @@ class Network(nnx.Module):
         bias_prior: PriorConfig | None = None,
         out_kernel_init=nnx.initializers.zeros,
         out_bias_init=nnx.initializers.zeros,
+        output_residual: bool = True,
     ) -> None:
         def wrap_layer(layer: nnx.Linear):
             if weight_prior:
@@ -70,7 +71,9 @@ class Network(nnx.Module):
 
         self.activation_name = activation_name
         self.rngs = rngs
-        self.scale = gpp.PositiveReal(jnp.ones(input_dim))
+        self.output_residual = output_residual
+        if self.output_residual:
+            self.scale = 0.01 * gpp.PositiveReal(jnp.ones(input_dim))
 
     def __call__(self, x: jax.Array) -> jax.Array:
         activation = getattr(jax.nn, self.activation_name)
@@ -78,7 +81,9 @@ class Network(nnx.Module):
         for layer in self.layers:
             z = activation(layer(z))
         delta = self.out_layer(z)
-        return x + self.scale[...] * delta  # per-dim gated residual
+        if self.output_residual:
+            return x + self.scale[...] * delta  # per-dim gated residual
+        return delta
 
 
 class AxisDecoupledNetwork(nnx.Module):
