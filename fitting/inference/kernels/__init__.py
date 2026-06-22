@@ -39,6 +39,12 @@ from .spectral import (
     SpectralMixtureKernel,
     SpectralMixtureConfig,
 )
+from .integration import (
+    BinIntegratedKernel,
+    BinIntegratedMeanFunction,
+    BinIntegratedKernelConfig,
+    computeQuadratureGrid,
+)
 
 __all__ = [
     "KernelConfig",
@@ -68,4 +74,8 @@ __all__ = [
     "HeteroscedasticWhiteConfig",
     "SpectralMixtureKernel",
     "SpectralMixtureConfig",
+    "BinIntegratedKernel",
+    "BinIntegratedMeanFunction",
+    "BinIntegratedKernelConfig",
+    "computeQuadratureGrid",
 ]

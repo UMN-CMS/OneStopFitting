@@ -70,6 +70,17 @@ class ExactGPConfig(GPModelConfig):
                 ndim, kernel, rngs=rngs, **kwargs
             )
 
+        from .kernels.integration import BinIntegratedKernel, BinIntegratedMeanFunction
+
+        if isinstance(kernel, BinIntegratedKernel):
+            mean_fn = BinIntegratedMeanFunction(base_mean_fn=mean_fn)
+            for key, (pts, wts) in kernel._quad_registry.items():
+                mean_fn.registerQuadrature(key, pts, wts)
+            logger.info(
+                f"Auto-wrapped mean function in BinIntegratedMeanFunction "
+                f"(registry keys: {list(kernel._quad_registry.keys())})"
+            )
+
         likelihood_kwargs = {"num_datapoints": dataset.n}
         if obs_variance is not None:
             likelihood_kwargs["obs_variance"] = obs_variance

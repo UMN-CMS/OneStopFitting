@@ -38,6 +38,8 @@ def predictInRealSpace(
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
     norm_test_X = transform.applyX(test_data.X)
 
+    _registerTestQuadrature(posterior, test_data, transform, norm_test_X)
+
     if samples is not None and len(samples) > 0:
         norm_mean, norm_cov = predictWithSamples(
             posterior, dataset_train, norm_test_X, samples, rng_key
@@ -53,6 +55,47 @@ def predictInRealSpace(
     )
 
     return real_mean, real_cov
+
+
+def _registerTestQuadrature(
+    posterior: Any,
+    test_data: BinnedData,
+    transform: DataTransformation,
+    norm_test_X: jnp.ndarray,
+) -> None:
+    from .kernels.integration import (
+        BinIntegratedKernel,
+        BinIntegratedMeanFunction,
+        computeQuadratureGrid,
+    )
+
+    kernel = None
+    mean_fn = None
+    if hasattr(posterior, "prior"):
+        kernel = posterior.prior.kernel
+        mean_fn = posterior.prior.mean_function
+    elif hasattr(posterior, "posterior") and hasattr(posterior.posterior, "prior"):
+        kernel = posterior.posterior.prior.kernel
+        mean_fn = posterior.posterior.prior.mean_function
+
+    if not isinstance(kernel, BinIntegratedKernel):
+        return
+
+    n_test = norm_test_X.shape[0]
+    if kernel._lookupQuadrature(n_test) is not None:
+        return
+
+    norm_test_edges = transform.applyEdges(test_data.edges)
+    quad_points, quad_weights = computeQuadratureGrid(
+        norm_test_X, norm_test_edges, n_quad=kernel.n_quad
+    )
+    kernel.registerQuadrature(n_test, quad_points, quad_weights)
+    logger.info(
+        f"Registered test quadrature: {n_test} bins × {quad_points.shape[1]} sub-points"
+    )
+
+    if isinstance(mean_fn, BinIntegratedMeanFunction):
+        mean_fn.registerQuadrature(n_test, quad_points, quad_weights)
 
 
 def predictWithSamples(

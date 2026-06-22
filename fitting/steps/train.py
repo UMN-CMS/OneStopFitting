@@ -84,7 +84,9 @@ def _buildStage1Mean(
     return mean_cfg.buildStage1Mean(stage1_posterior, full_dataset)
 
 
-def _buildScoringFn(restart_cfg, dataset, test_data, transform, rng_key, blind_mask=None):
+def _buildScoringFn(
+    restart_cfg, dataset, test_data, transform, rng_key, blind_mask=None
+):
 
     ctx = {
         "dataset": dataset,
@@ -141,6 +143,23 @@ def trainModel(state: AnalysisState, rng_key: jax.Array) -> AnalysisState:
         else None,
         transform=transform,
     )
+
+    from ..inference.kernels.integration import (
+        BinIntegratedKernelConfig,
+        computeQuadratureGrid,
+    )
+
+    if isinstance(state.config.model.kernel, BinIntegratedKernelConfig):
+        n_quad = state.config.model.kernel.n_quad
+        quad_points, quad_weights = computeQuadratureGrid(
+            norm_train.X, norm_train.edges, n_quad=n_quad
+        )
+        build_kwargs["quad_points"] = quad_points
+        build_kwargs["quad_weights"] = quad_weights
+        logger.info(
+            f"Computed train quadrature: {quad_points.shape[0]} bins × "
+            f"{quad_points.shape[1]} sub-points, n_quad={n_quad}"
+        )
 
     posterior, likelihood, prior = state.config.model.buildModel(**build_kwargs)
 
