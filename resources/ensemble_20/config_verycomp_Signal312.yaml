@@ -1,0 +1,30 @@
+injection_rate: 0.0
+min_counts: -1.0
+
+window:
+  _type: CoreDilatedWindowConfig
+  core_threshold_fraction: 0.5
+  dilation_margin: 0.15
+
+
+optimization:
+  mode: optimization
+  objective: mll
+  num_iters: 250
+  lr: 0.025
+  restart:
+    num_restarts: 10
+    selection:
+      _type: EnsembleAverageConfig
+model: 
+  _type: ExactGPConfig
+  kernel: 
+    _type: NNWarpingKernelConfig
+    hidden_shapes: [20,20]
+  likelihood:
+    _type: FixedGaussianNoiseConfig
+    variance_floor_quantile: 0.05
+  mean_function:
+    _type: ConstantMeanConfig
+
+

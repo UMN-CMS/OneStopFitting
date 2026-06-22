@@ -8,7 +8,7 @@ window:
 
 
 optimization:
-  mode: optimization
+  mode: sampling
   # objective: loocv
   objective: mll
   num_iters: 250
@@ -20,7 +20,8 @@ optimization:
   # restart:
   #   num_restarts: 10
   #   selection:
-  #     _type: BestLossConfig
+  #     _type: EnsembleAverageConfig
+
       
     
 # model: 
@@ -46,17 +47,76 @@ optimization:
 #     _type: NeuralMeanConfig
 #     hidden_shapes: [20,20]
 
-model: 
+# model: 
+#   _type: ExactGPConfig
+#   kernel: 
+#     _type: NNWarpingKernelConfig
+#     hidden_shapes: [5,5]
+#     #activation: tanh
+#   likelihood:
+#     _type: FixedGaussianNoiseConfig
+#     variance_floor_quantile: 0.05
+#     #scale_variance_value: 2
+#     # pad_variance_quantile: 0.25
+#   # mean_function:
+#   #   _type: ConstantMeanConfig
+#   mean_function:
+#     _type: NeuralMeanConfig
+#     hidden_shapes: [5,5]
+
+# model: 
+#   _type: ExactGPConfig
+#   kernel: 
+#     _type: BinIntegratedKernelConfig
+#     n_quad: 3
+#     base_kernel:
+#       _type: NNWarpingKernelConfig
+#       hidden_shapes: [5,5]
+#     #activation: tanh
+#   likelihood:
+#     _type: FixedGaussianNoiseConfig
+#     variance_floor_quantile: 0.05
+#     #scale_variance_value: 2
+#     # pad_variance_quantile: 0.25
+#   # mean_function:
+#   #   _type: ConstantMeanConfig
+#   mean_function:
+#     _type: NeuralMeanConfig
+#     hidden_shapes: [5,5]
+
+
+model:
   _type: ExactGPConfig
-  kernel: 
+  kernel:
     _type: NNWarpingKernelConfig
     hidden_shapes: [5,5]
-    #activation: tanh
-  likelihood:
-    _type: FixedGaussianNoiseConfig
-    variance_floor_quantile: 0.05
-    scale_variance_value: 2
-    # pad_variance_quantile: 0.25
+    weight_prior:
+      _type: NormalPriorConfig
+      loc: 0.0
+      scale: 1.0
+    bias_prior:
+      _type: NormalPriorConfig
+      loc: 0.0
+      scale: 1.0
+    base_kernel_config:
+      _type: RBFConfig
+      lengthscale_prior:
+        _type: LogNormalPriorConfig
+        loc: -2.3
+        scale: 1.0
+      variance_prior:
+        _type: LogNormalPriorConfig
+        loc: -0.7
+        scale: 1.0
   mean_function:
-    _type: NeuralMeanConfig
-    hidden_shapes: [5,5]
+    _type: ConstantMeanConfig
+    # _type: NeuralMeanConfig
+    # hidden_shapes: [5,5]
+    # weight_prior:
+    #   _type: NormalPriorConfig
+    #   loc: 0.0
+    #   scale: 1.0
+    # bias_prior:
+    #   _type: NormalPriorConfig
+    #   loc: 0.0
+    #   scale: 1.0
