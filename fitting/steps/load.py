@@ -102,7 +102,9 @@ def loadData(config: PipelineConfig) -> AnalysisState:
 
     if signals and first_signal_hist is not None:
         if _haveDifferentBinning(first_signal_hist, bkg_hist):
-            logger.info("Signal and background have different binning. Rebinning signal only.")
+            logger.info(
+                "Signal and background have different binning. Rebinning signal only."
+            )
             bkg_rebin = 1
         else:
             logger.info("Signal and background have the same binning. Rebinning both.")
