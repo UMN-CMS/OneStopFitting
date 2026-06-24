@@ -1,0 +1,46 @@
+injection_rate: 0.0
+min_counts: -1.0
+
+window:
+  _type: CoreDilatedWindowConfig
+  core_threshold_fraction: 0.5
+  dilation_margin: 0.15
+
+
+
+optimization:
+  mode: sampling
+  mcmc:
+    num_samples: 200
+    num_warmup: 100
+
+model:
+  _type: ExactGPConfig
+  kernel:
+    _type: NNWarpingKernelConfig
+    hidden_shapes: [10,10]
+    weight_prior:
+      _type: NormalPriorConfig
+      loc: 0.0
+      scale: 0.1
+    bias_prior:
+      _type: NormalPriorConfig
+      loc: 0.0
+      scale: 0.1
+    base_kernel_config:
+      _type: RBFConfig
+      lengthscale_prior:
+        _type: LogNormalPriorConfig
+        loc: -2.3
+        scale: 1.0
+      variance_prior:
+        _type: LogNormalPriorConfig
+        loc: -0.7
+        scale: 1.0
+  mean_function:
+    _type: ConstantMeanConfig
+  likelihood:
+    _type: FixedGaussianNoiseConfig
+    variance_floor_quantile: 0.05
+
+
