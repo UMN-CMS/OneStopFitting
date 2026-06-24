@@ -62,7 +62,7 @@ def smoothCmd(
     seed: int,
     include_smooth: bool,
     num_samples: int,
-        scale_to: Path,
+    scale_to: Path,
 ) -> None:
     import lz4.frame
     import pickle
@@ -73,9 +73,7 @@ def smoothCmd(
     from ..data.loading import (
         FileLoader,
         extractHistogram,
-        extractMetadata,
         histToBinnedData,
-        sliceVariation,
     )
 
     jax.config.update("jax_enable_x64", True)
@@ -89,7 +87,7 @@ def smoothCmd(
     plot_saver = getPlotSaver(
         plot_dir, [analysis_state.metadata], formats=analysis_state.config.image_formats
     )
-    
+
     if scale_to:
         bkg_raw = FileLoader.forPath(scale_to).load(scale_to)
         bkg_hist = extractHistogram(bkg_raw)
@@ -101,7 +99,11 @@ def smoothCmd(
 
     logger.info("Generating smoothed background...")
     hists = generateSmoothedBackground(
-        analysis_state, rng_key, plot_saver=plot_saver, num_samples=num_samples, scale_to=scale_to
+        analysis_state,
+        rng_key,
+        plot_saver=plot_saver,
+        num_samples=num_samples,
+        scale_to=scale_to,
     )
 
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -567,7 +569,9 @@ def mergeSummariesCmd(inputs: tuple[Path, ...], output: Path, era_name: str) -> 
         raise click.UsageError("At least one input summary JSON must be provided.")
 
     cleaned_era_name = era_name.replace("@", "+")
-    logger.info(f"Merging {len(inputs)} GPR summaries into {output} with era name {cleaned_era_name}")
+    logger.info(
+        f"Merging {len(inputs)} GPR summaries into {output} with era name {cleaned_era_name}"
+    )
 
     summaries = []
     for path in inputs:
@@ -581,14 +585,14 @@ def mergeSummariesCmd(inputs: tuple[Path, ...], output: Path, era_name: str) -> 
     for s in summaries:
         metadata = s.get("metadata", {})
         era_info = metadata.get("era", {})
-        
+
         lumi = era_info.get("lumi")
         if lumi is not None:
             try:
                 total_lumi += float(lumi)
             except ValueError:
                 pass
-                
+
         energy = era_info.get("energy")
         if energy is not None:
             energies.add(energy)
@@ -600,7 +604,7 @@ def mergeSummariesCmd(inputs: tuple[Path, ...], output: Path, era_name: str) -> 
 
     merged["metadata"]["era"]["name"] = cleaned_era_name
     merged["metadata"]["era"]["lumi"] = total_lumi
-    
+
     if len(energies) == 1:
         merged["metadata"]["era"]["energy"] = list(energies)[0]
     elif len(energies) > 1:
@@ -608,7 +612,9 @@ def mergeSummariesCmd(inputs: tuple[Path, ...], output: Path, era_name: str) -> 
         merged["metadata"]["era"]["energy"] = "/".join(str(e) for e in sorted_energies)
 
     # Sum blind_mask_size if it exists in inputs
-    blind_mask_sizes = [s.get("blind_mask_size") for s in summaries if "blind_mask_size" in s]
+    blind_mask_sizes = [
+        s.get("blind_mask_size") for s in summaries if "blind_mask_size" in s
+    ]
     if blind_mask_sizes:
         merged["blind_mask_size"] = sum(blind_mask_sizes)
     else:
@@ -624,4 +630,3 @@ def mergeSummariesCmd(inputs: tuple[Path, ...], output: Path, era_name: str) -> 
         json.dump(merged, f, indent=2)
 
     logger.info(f"Successfully wrote merged summary to {output}")
-
