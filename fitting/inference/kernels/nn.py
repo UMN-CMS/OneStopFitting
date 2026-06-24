@@ -134,6 +134,19 @@ class DeepWarpingKernel(AbstractKernel):
         ret = self.base_kernel(xt, yt)
         return ret
 
+    def cross_covariance(self, x: jax.Array, y: jax.Array) -> jax.Array:
+        xt = self.network(x)
+        yt = self.network(y)
+        return self.base_kernel.cross_covariance(xt, yt)
+
+    def gram(self, x: jax.Array):
+        xt = self.network(x)
+        return self.base_kernel.gram(xt)
+
+    def diagonal(self, x: jax.Array):
+        xt = self.network(x)
+        return self.base_kernel.diagonal(xt)
+
 
 @attrs.define(slots=False)
 class DeepTransformKernel(AbstractKernel):
@@ -153,6 +166,14 @@ class DeepTransformKernel(AbstractKernel):
         xt = self.network(x)
         yt = self.network(y)
         return self.base_kernel.cross_covariance(xt, yt)
+
+    def gram(self, x: jax.Array):
+        xt = self.network(x)
+        return self.base_kernel.gram(xt)
+
+    def diagonal(self, x: jax.Array):
+        xt = self.network(x)
+        return self.base_kernel.diagonal(xt)
 
 
 @attrs.define

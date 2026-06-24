@@ -12,6 +12,7 @@ environment = "ERA_NAMES='$(era_names)' ERA_BACKGROUNDS='$(era_backgrounds)' ERA
 should_transfer_files = YES
 when_to_transfer_output = ON_EXIT
 COMMA= , 
+BLANK=""#
 
 queue transfer_files, era_names, era_backgrounds, era_signals, era_configs, era_outputs, combined_output from (
 {%- for job in jobs %}
