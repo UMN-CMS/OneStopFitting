@@ -33,6 +33,7 @@ class PointDiagnosis:
     mean_r: float
     std_r: float
     coverage: float
+    significance: float
     gof_pvalues: list[float]
     gof_ks_pvalue: float | None
     gof_median_pvalue: float | None
@@ -114,11 +115,12 @@ def _inferCoupling(gathered: list[dict]) -> str:
 
 
 def _computePointDiagnosis(
-    mstop: float, mchi: float, toys: list[dict], use_ppc_pval=True
+    mstop: float, mchi: float, toys: list[dict], use_ppc_pval=False
 ) -> PointDiagnosis:
     r_vals = []
     r_err_vals = []
     gof_pvals = []
+    significances = []
 
     for toy in toys:
         combine = toy.get("combine", {})
@@ -135,6 +137,9 @@ def _computePointDiagnosis(
             r_err_vals.append(float(r_err))
         if gof is not None:
             gof_pvals.append(float(gof))
+        significance = combine.get("significance")
+        if significance is not None:
+            significances.append(float(significance))
     gof_pvals = np.array(gof_pvals)
 
     r_arr = np.array(r_vals) if r_vals else np.array([0.0])
@@ -151,6 +156,7 @@ def _computePointDiagnosis(
     gof_ks = gof_stats.get("ks_pvalue_uniform")
     gof_verdict = gof_stats.get("pvalue_skew_verdict", "UNKNOWN")
     gof_median = gof_stats.get("median")
+    significance = np.median(significances)
 
     coupling = (
         str(
@@ -173,6 +179,7 @@ def _computePointDiagnosis(
         coverage=coverage,
         gof_pvalues=gof_pvals,
         gof_ks_pvalue=gof_ks,
+        significance=significance,
         gof_median_pvalue=gof_median,
         gof_verdict=gof_verdict,
         r_values=r_vals,

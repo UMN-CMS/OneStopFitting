@@ -205,14 +205,14 @@ Category & Points & Toys & Avg Cov. & Med Cov. & Avg Med $r$ & OK & Cons. & Dang
 
 \section*{Per-Point Details}
 
-\begin{longtable}{rrllrrrrcc}
+\begin{longtable}{rrllrrrrrcc}
 \toprule
-$m_{\tilde{t}}$ & $m_{\tilde{\chi}^{\pm}}$ & Cat. & Toys & Med $r$ & Med $r_{err}$ & Coverage & Med GOF $p$ & KS $p$ & Verdict \\
+$m_{\tilde{t}}$ & $m_{\tilde{\chi}^{\pm}}$ & Cat. & Toys & Med $r$ & Med $r_{err}$ & Sig. & Coverage & Med GOF $p$ & KS $p$ & Verdict \\
 \midrule
 \endfirsthead
 
 \toprule
-$m_{\tilde{t}}$ & $m_{\tilde{\chi}^{\pm}}$ & Cat. & Toys & Med $r$ & Med $r_{err}$ & Coverage & Med GOF $p$ & KS $p$ & Verdict \\
+$m_{\tilde{t}}$ & $m_{\tilde{\chi}^{\pm}}$ & Cat. & Toys & Med $r$ & Med $r_{err}$ & Sig. & Coverage & Med GOF $p$ & KS $p$ & Verdict \\
 \midrule
 \endhead
 
@@ -223,7 +223,7 @@ $m_{\tilde{t}}$ & $m_{\tilde{\chi}^{\pm}}$ & Cat. & Toys & Med $r$ & Med $r_{err
 \endlastfoot
 
 [- for p in points -]
-[[ "%d"|format(p.mstop|int) ]] & [[ "%d"|format(p.mchi|int) ]] & [[ p.category ]] & [[ p.n_toys ]] & [[ "%.2f"|format(p.median_r) ]] & [[ "%.2f"|format(p.median_r_err) ]] & [[ "%.1f"|format(p.coverage * 100) ]]\% & [[ "%.2f"|format(p.gof_median_pvalue) if p.gof_median_pvalue is not none else "-" ]] & [[ "%.3f"|format(p.gof_ks_pvalue) if p.gof_ks_pvalue is not none else "-" ]] &
+[[ "%d"|format(p.mstop|int) ]] & [[ "%d"|format(p.mchi|int) ]] & [[ p.category ]] & [[ p.n_toys ]] & [[ "%.2f"|format(p.median_r) ]] & [[ "%.2f"|format(p.median_r_err) ]] & [[ "%.1f"|format(p.significance) ]] &  [[ "%.1f"|format(p.coverage * 100) ]]\% & [[ "%.2f"|format(p.gof_median_pvalue) if p.gof_median_pvalue is not none else "-" ]] & [[ "%.3f"|format(p.gof_ks_pvalue) if p.gof_ks_pvalue is not none else "-" ]] &
 \verdictbadge{[[ p.gof_verdict ]]} \\
 [- endfor -]
 
