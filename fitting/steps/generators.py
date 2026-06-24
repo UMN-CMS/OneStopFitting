@@ -13,6 +13,10 @@ import jax.numpy as jnp
 from ..core.data import AnalysisState, BinnedData
 from ..inference.prediction import predictInRealSpace
 from ..diagnostics.plots import makeSmoothingPlots
+import logging
+
+
+logger=logging.getLogger(__name__)
 
 
 def generateAsimovSmoothed(
@@ -76,6 +80,7 @@ def generateSmoothedBackground(
     rng_key: jax.Array,
     plot_saver,
     num_samples: int = 1,
+    scale_to: float | None = None,
 ) -> tuple[list[hist.Hist], dict[str, Any]]:
 
     if state.training_result is None or state.dataset is None:
@@ -91,6 +96,11 @@ def generateSmoothedBackground(
         samples=state.training_result.samples,
         rng_key=pred_key,
     )
+    if scale_to:
+        scale = scale_to / jnp.sum(pred_mean) 
+        logger.info(f"Scaling to {scale_to:0.2f}, a factor of {scale:0.2f}")
+        pred_mean = scale *  pred_mean
+        pred_cov = scale**2 *  pred_cov
 
     counts_samples = drawPoissonSamples(
         mean=pred_mean,

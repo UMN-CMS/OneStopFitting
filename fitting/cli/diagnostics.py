@@ -48,6 +48,13 @@ def printParamsCmd(input):
 @click.option("--seed", type=int, default=42, help="RNG seed.")
 @click.option("--include-smooth", default=True, is_flag=True)
 @click.option("--num-samples", type=int, default=1, help="Number of samples to draw.")
+@click.option(
+    "--scale-to",
+    type=click.Path(exists=True, path_type=Path),
+    required=False,
+    default=None,
+    help="Path to histogram whose yield will be matched",
+)
 def smoothCmd(
     state: Path,
     output_dir: Path,
@@ -55,6 +62,7 @@ def smoothCmd(
     seed: int,
     include_smooth: bool,
     num_samples: int,
+        scale_to: Path,
 ) -> None:
     import lz4.frame
     import pickle
@@ -62,6 +70,13 @@ def smoothCmd(
     from ..core.serialization import load
     from ..steps.generators import generateSmoothedBackground, generateAsimovSmoothed
     from ..diagnostics.plot_utils import getPlotSaver
+    from ..data.loading import (
+        FileLoader,
+        extractHistogram,
+        extractMetadata,
+        histToBinnedData,
+        sliceVariation,
+    )
 
     jax.config.update("jax_enable_x64", True)
     rng_key = jax.random.key(seed)
@@ -74,10 +89,19 @@ def smoothCmd(
     plot_saver = getPlotSaver(
         plot_dir, [analysis_state.metadata], formats=analysis_state.config.image_formats
     )
+    
+    if scale_to:
+        bkg_raw = FileLoader.forPath(scale_to).load(scale_to)
+        bkg_hist = extractHistogram(bkg_raw)
+        bkg_hist = histToBinnedData(
+            bkg_hist,
+            variation="central",
+        )
+        scale_to = bkg_hist.Y.sum()
 
     logger.info("Generating smoothed background...")
     hists = generateSmoothedBackground(
-        analysis_state, rng_key, plot_saver=plot_saver, num_samples=num_samples
+        analysis_state, rng_key, plot_saver=plot_saver, num_samples=num_samples, scale_to=scale_to
     )
 
     output_dir.mkdir(parents=True, exist_ok=True)
