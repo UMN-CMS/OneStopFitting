@@ -16,10 +16,9 @@ from .kernels import (
     NNWarpingKernelConfig,
     MCEnsembleKernel,
     RBFConfig,
-    Matern32Config,
     MultiFidelityResidualKernelConfig,
 )
-from .likelihoods import FixedGaussianNoiseConfig, LikelihoodConfig
+from .likelihoods import FixedGaussianNoiseConfig, LikelihoodConfig, PoissonConfig
 from .means import (
     MeanFunctionConfig,
     ZeroMeanConfig,
@@ -29,7 +28,7 @@ from .means import (
 from .priors import PriorConfig, SoftplusNormalPriorConfig, NormalPriorConfig
 from ..data.loading import FileLoader, extractHistogram, histToBinnedData
 from .optimization import setAtPath, runMLE, OptimizationConfig
-import jax
+
 
 logger = logging.getLogger(__name__)
 
@@ -144,6 +143,7 @@ class SparseGPConfig(GPModelConfig):
 @attrs.define
 class VariationalGPConfig(GPModelConfig):
     num_inducing: int = 500
+    whitened: bool = True
 
     def buildModel(
         self,
@@ -154,6 +154,10 @@ class VariationalGPConfig(GPModelConfig):
         mean_function: MeanFunctionConfig | None = None,
         **kwargs,
     ) -> tuple[Any, Any, Any]:
+        if isinstance(self.likelihood, PoissonConfig):
+            log_rate_init = float(jnp.log(jnp.clip(jnp.mean(dataset.y), 1.0, None)))
+            kwargs["poisson_log_rate"] = log_rate_init
+
         kernel = self.kernel.buildKernel(ndim, rngs=rngs, **kwargs)
         if mean_function is not None:
             mean_fn = mean_function.buildMeanFunction(ndim, kernel, **kwargs)
@@ -170,13 +174,21 @@ class VariationalGPConfig(GPModelConfig):
 
         z = _selectInducingPoints(dataset, self.num_inducing)
 
-        q = gpjax.variational_families.VariationalGaussian(
-            posterior=posterior,
-            inducing_inputs=z,
-        )
+        if self.whitened:
+            q = gpjax.variational_families.WhitenedVariationalGaussian(
+                posterior=posterior,
+                inducing_inputs=z,
+            )
+            variant = "whitened"
+        else:
+            q = gpjax.variational_families.VariationalGaussian(
+                posterior=posterior,
+                inducing_inputs=z,
+            )
+            variant = "uncollapsed"
 
         logger.info(
-            f"Built VariationalGP (uncollapsed): kernel={type(kernel).__name__}, "
+            f"Built VariationalGP ({variant}): kernel={type(kernel).__name__}, "
             f"n_inducing={len(z)}, n_train={dataset.n}"
         )
 

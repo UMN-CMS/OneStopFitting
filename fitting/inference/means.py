@@ -361,10 +361,17 @@ class ZeroMeanConfig(MeanFunctionConfig):
 
 @attrs.define
 class ConstantMeanConfig(MeanFunctionConfig):
+    init_val: float | None = None
+
     def buildMeanFunction(
         self, ndim: int, kernel: gpjax.kernels.AbstractKernel, **kwargs
     ) -> gpjax.mean_functions.AbstractMeanFunction:
-        return gpjax.mean_functions.Constant()
+        val = self.init_val
+        if val is None:
+            val = kwargs.get("poisson_log_rate", 0.0)
+        return gpjax.mean_functions.Constant(
+            gpjax.parameters.Real(jnp.array(val))
+        )
 
 
 @attrs.define

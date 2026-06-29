@@ -10,6 +10,7 @@ from numpyro.infer import Predictive
 from ..core.data import BinnedData
 from ..core.transforms import DataTransformation
 from gpjax.variational_families import VariationalGaussian
+import gpjax.likelihoods as gpl
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +47,20 @@ def predictInRealSpace(
         )
     else:
         norm_mean, norm_cov = computePrediction(posterior, dataset_train, norm_test_X)
+
+    likelihood = None
+    if hasattr(posterior, "posterior"):
+        likelihood = getattr(posterior.posterior, "likelihood", None)
+    else:
+        likelihood = getattr(posterior, "likelihood", None)
+
+    if isinstance(likelihood, gpl.Poisson):
+        variance = jnp.diag(norm_cov)
+        rate_mean = jnp.exp(norm_mean + 0.5 * variance)
+        rate_cov = (rate_mean[:, None] * rate_mean[None, :]) * (jnp.exp(norm_cov) - 1.0)
+
+        norm_mean, norm_cov = rate_mean, rate_cov
+
     real_mean, real_cov = transform.invertMVN(norm_mean, norm_cov)
     real_cov = fixCovarianceMatrix(real_cov)
 
