@@ -20,6 +20,7 @@ from .core.transforms import (
 from .data.windowing import (
     WindowConfig,
     GaussianWindowConfig,
+    CutWindowConfig,
     BlindingStrategy,
     UnionBlinding,
 )
@@ -85,7 +86,9 @@ class PipelineConfig:
     rebin: int = 1
     min_counts: float = 0.0
     rng_seed: int = 0xBEEFBEEF
-    domain_window: WindowConfig | None = None
+    domain_window: WindowConfig | None = attrs.Factory(
+        lambda: CutWindowConfig(axis=1, lower=0.1)
+    )
     window: WindowConfig | None = attrs.Factory(GaussianWindowConfig)
     blinding_strategy: BlindingStrategy = attrs.Factory(UnionBlinding)
     transform: TransformConfig = attrs.Factory(StandardizationConfig)
@@ -96,7 +99,7 @@ class PipelineConfig:
     image_formats: list[str] = attrs.Factory(lambda: ["pdf"])
     metadata: dict[str, Any] = attrs.Factory(dict)
     window_variance_inflation: float = 1.0
-    window_variance_increase: float | None  = None
+    window_variance_increase: float | None = None
     signal_pre_scale: float = 16.0
 
     @property
@@ -172,12 +175,9 @@ def runPipeline(
         if s in [PipelineStep.TRAIN, PipelineStep.DIAGNOSTICS]:
             state = func(state, key)
             save(state, state.getRealOutPath())
-        elif s == PipelineStep.PLOT:
-            func(state, key)
         else:
             func(state, key)
 
-    # Echo the actual output path for scripts to capture
     print(f"FITTING_OUTPUT_PATH: {state.getRealOutPath()}")
 
     return state
