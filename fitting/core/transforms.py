@@ -234,7 +234,7 @@ class StandardizationConfig(TransformConfig):
 
 
 @attrs.define
-class NormalizeAxes(TransformConfig):
+class NormalizeAxesConfig(TransformConfig):
     def buildTransform(self, data: BinnedData) -> DataTransformation:
         X = data.X
         x_min = jnp.min(X, axis=0)
@@ -429,6 +429,7 @@ class IdentityTransformConfig(TransformConfig):
         transform_x = AffineTransform(loc=jnp.zeros(ndim), scale=jnp.ones(ndim))
         transform_y = ComposeTransform([AffineTransform(loc=0.0, scale=1.0)])
         return DataTransformation(transform_x=transform_x, transform_y=transform_y)
+
 
 
 def computeNormalization(
