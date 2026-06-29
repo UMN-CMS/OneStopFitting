@@ -118,6 +118,8 @@ def loadData(config: PipelineConfig) -> AnalysisState:
         variation="central",
     )
 
+    logger.info(f"Background yield is {background.Y.sum():0.2f}.")
+
     file_metadata = extractMetadata(bkg_raw)
     combined_metadata = {
         **config.metadata,
