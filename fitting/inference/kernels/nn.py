@@ -30,6 +30,7 @@ class Network(nnx.Module):
         out_kernel_init=nnx.initializers.zeros,
         out_bias_init=nnx.initializers.zeros,
         output_scale_prior: PriorConfig | None = None,
+        output_scale_init: float = 0.01,
         output_residual: bool = True,
     ) -> None:
         def wrap_layer(layer: nnx.Linear):
@@ -76,9 +77,9 @@ class Network(nnx.Module):
         if self.output_residual:
             if output_scale_prior:
                 prior = output_scale_prior.buildPrior()
-                self.scale = gpp.PositiveReal(0.01, prior=prior)
+                self.scale = gpp.PositiveReal(output_scale_init, prior=prior)
             else:
-                self.scale = gpp.PositiveReal(0.01)
+                self.scale = gpp.PositiveReal(output_scale_init)
 
     def __call__(self, x: jax.Array) -> jax.Array:
         activation = getattr(jax.nn, self.activation_name)
@@ -191,6 +192,7 @@ class NNWarpingKernelConfig(KernelConfig):
     weight_prior: PriorConfig | None = None
     bias_prior: PriorConfig | None = None
     output_scale_prior: PriorConfig | None = None
+    output_scale_init: float = 0.01
     axis_decoupled: bool = False
 
     def buildKernel(
@@ -218,6 +220,7 @@ class NNWarpingKernelConfig(KernelConfig):
                 weight_prior=self.weight_prior,
                 bias_prior=self.bias_prior,
                 output_scale_prior=self.output_scale_prior,
+                output_scale_init=self.output_scale_init,
             )
 
         return DeepWarpingKernel(
