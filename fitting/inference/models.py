@@ -113,9 +113,11 @@ class SparseGPConfig(GPModelConfig):
     ) -> tuple[Any, Any, Any]:
         kernel = self.kernel.buildKernel(ndim, rngs=rngs, **kwargs)
         if mean_function is not None:
-            mean_fn = mean_function.buildMeanFunction(ndim, kernel, **kwargs)
+            mean_fn = mean_function.buildMeanFunction(ndim, kernel, rngs=rngs, **kwargs)
         else:
-            mean_fn = self.mean_function.buildMeanFunction(ndim, kernel, **kwargs)
+            mean_fn = self.mean_function.buildMeanFunction(
+                ndim, kernel, rngs=rngs, **kwargs
+            )
         likelihood_kwargs = {"num_datapoints": dataset.n}
         if obs_variance is not None:
             likelihood_kwargs["obs_variance"] = obs_variance
@@ -160,9 +162,11 @@ class VariationalGPConfig(GPModelConfig):
 
         kernel = self.kernel.buildKernel(ndim, rngs=rngs, **kwargs)
         if mean_function is not None:
-            mean_fn = mean_function.buildMeanFunction(ndim, kernel, **kwargs)
+            mean_fn = mean_function.buildMeanFunction(ndim, kernel, rngs=rngs, **kwargs)
         else:
-            mean_fn = self.mean_function.buildMeanFunction(ndim, kernel, **kwargs)
+            mean_fn = self.mean_function.buildMeanFunction(
+                ndim, kernel, rngs=rngs, **kwargs
+            )
         likelihood_kwargs = {"num_datapoints": dataset.n}
         if obs_variance is not None:
             likelihood_kwargs["obs_variance"] = obs_variance
