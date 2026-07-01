@@ -424,6 +424,7 @@ class OptimizationConfig:
     map_prior_strength: float = 1.0
     log_interval: int = 50
     weight_decay: float = 1e-4
+    grad_clip_norm: float | None = None
 
     schedule: ScheduleConfig = attrs.Factory(ConstantScheduleConfig)
     restart: RestartConfig | None = None
@@ -433,15 +434,21 @@ def _buildOptimizer(config: OptimizationConfig) -> optax.GradientTransformation:
     schedule = config.schedule.build(config.lr, config.num_iters)
 
     logger.info(f"Learning rate schedule: {config.schedule}")
-    base_opt = {
-        OptimizerType.ADAM: optax.adam,
-        OptimizerType.ADAMW: optax.adamw,
-        OptimizerType.SGD: optax.sgd,
-    }[config.optimizer]
-    if config.optimizer == OptimizerType.ADAMW:
-        return base_opt(learning_rate=schedule)
-    else:
-        return base_opt(learning_rate=schedule)
+    base_opt_factories = {
+        OptimizerType.ADAM: lambda: optax.adam(learning_rate=schedule),
+        OptimizerType.ADAMW: lambda: optax.adamw(
+            learning_rate=schedule, weight_decay=config.weight_decay
+        ),
+        OptimizerType.SGD: lambda: optax.sgd(learning_rate=schedule),
+    }
+    base_opt = base_opt_factories[config.optimizer]()
+
+    if config.grad_clip_norm is not None:
+        logger.info(f"Gradient clipping by global norm: {config.grad_clip_norm}")
+        return optax.chain(
+            optax.clip_by_global_norm(config.grad_clip_norm), base_opt
+        )
+    return base_opt
 
 
 def _buildObjective(config: OptimizationConfig) -> Any:
