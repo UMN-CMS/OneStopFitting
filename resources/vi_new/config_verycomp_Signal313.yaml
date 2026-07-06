@@ -1,0 +1,64 @@
+injection_rate: 0.0
+min_counts: 0
+rebin: 2
+
+window:
+  _type: CoreDilatedWindowConfig
+  core_threshold_fraction: 0.5
+  dilation_margin: 0.15
+
+
+
+domain_window:
+  _type: CutWindowConfig
+  axis: 1
+  lower: 0.1
+
+transform:
+  _type: NormalizeAxesConfig
+
+optimization:
+  mode: optimization
+  objective: elbo
+  num_iters: 3000
+  optimizer: adam
+  lr: 0.005
+  weight_decay: 0.0001
+  grad_clip_norm: 0.5
+  schedule:
+    _type: WarmupCosineScheduleConfig
+    warmup_steps: 200
+
+model:
+  _type: VariationalGPConfig
+  num_inducing: 625
+  kernel:
+    _type: NNWarpingKernelConfig
+    hidden_shapes: [20,20]
+    output_scale_init: 1.0
+    weight_prior:
+      _type: NormalPriorConfig
+      loc: 0.0
+      scale: 5.0
+    bias_prior:
+      _type: NormalPriorConfig
+      loc: 0.0
+      scale: 5.0
+    output_scale_prior:
+      _type: LogNormalPriorConfig
+      loc: -2.3
+      scale: 1.0
+    base_kernel_config:
+      _type: RBFConfig
+      lengthscale_prior:
+        _type: LogNormalPriorConfig
+        loc: -2.3
+        scale: 1.0
+      variance_prior:
+        _type: LogNormalPriorConfig
+        loc: -0.7
+        scale: 1.0
+  mean_function:
+    _type: ConstantMeanConfig
+  likelihood:
+    _type: PoissonConfig
