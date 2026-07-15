@@ -18,10 +18,10 @@ model:
   _type: ExactGPConfig
   kernel: 
     _type: NNWarpingKernelConfig
-    hidden_shapes: [20,20]
+    hidden_shapes: [4]
   likelihood:
     _type: FixedGaussianNoiseConfig
     variance_floor_quantile: 0.2
-    scale_variance_value: 2
+    scale_variance_value: 3
   mean_function:
-    _type: ZeroMeanConfig
+    _type: ConstantMeanConfig
