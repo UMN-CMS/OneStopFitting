@@ -128,6 +128,29 @@ def commonDict(items):
     return ret
 
 
+def _deepCommonDict(a: dict, b: dict):
+    ret = {}
+    ka, kb = set(a), set(b)
+    common, a_not_b, b_not_a = ka & kb, a - b, b - a
+    for k in a_not_b:
+        ret[k] = a[k]
+    for k in b_not_a:
+        ret[k] = b[k]
+    for k in common:
+        if isinstance(a[k], dict) and isinstance(b[k], dict):
+            ret[k] = _deepCommonDict(a[k], b[k])
+        elif a[k] == b[k]:
+            ret[k] = a[k]
+    return ret
+
+
+def deepCommonDict(a, b, *args):
+    ret = _deepCommonDict(a, b)
+    for d in args:
+        ret = deepCommonDict(ret, d)
+    return ret
+
+
 def formatLines(elems: list[list[str]], separator: str = "  ") -> list[str]:
     if not elems:
         return []
@@ -330,3 +353,8 @@ if __name__ == "__main__":
 
     r = leftGroup(b, s, match_rules)
     print(r)
+
+def floatToStr(f):
+    if isinstance(f, float):
+        return str(f).replace(".", "p")
+    return f

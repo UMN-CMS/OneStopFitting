@@ -35,6 +35,11 @@ import yaml
     help="Comma-separated eras to combine in a fat-job (e.g. '2016,2017,2018')",
 )
 @click.option(
+    "--combined-subdir-format",
+    default=None,
+    type=str,
+)
+@click.option(
     "--group-by",
     "group_by_str",
     default=None,
@@ -73,6 +78,7 @@ def makesubmitCmd(
     toy_offset: int,
     multi_signal: bool,
     combine_eras: str | None,
+    combined_subdir_format: str | None,
     group_by_str: str | None,
     extra_params: tuple[str, ...],
     match_rules_cli: tuple[str, ...] | None,
@@ -94,6 +100,9 @@ def makesubmitCmd(
         match_rules = MatchRules.fromConfig(match_rule_config)
     else:
         match_rules = None
+
+    if bool(combined_subdir_format) != bool(combine_eras):
+        raise click.UsageError("Must specify either both or neither of combined_subdir_format and combine_eras")
 
     parsed_eras = [e.strip() for e in combine_eras.split(",")] if combine_eras else None
     group_by_fields = (
@@ -138,6 +147,7 @@ def makesubmitCmd(
         jobs=jobs,
         output_dir=output,
         combine_eras=parsed_eras,
+        combined_dir_format=str(output / combined_subdir_format),
         group_by_fields=group_by_fields,
         venv_path=venv,
         container=container,

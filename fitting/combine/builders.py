@@ -46,7 +46,7 @@ def buildBackgroundProcess(
     pred_mean_masked = np.asarray(state.pred_mean[blind_mask])
     pred_cov_masked = np.asarray(state.pred_cov[blind_mask, :][:, blind_mask])
 
-    year = state.background_metadata["era"]["name"]
+    year = state.metadata["bkg"]["era"]["name"]
     if year:
         year = year.replace(" ", "_")
     postfix = f"_{year}" if year else ""
@@ -113,7 +113,7 @@ def buildSignalProcess(
     if hasVariationAxis(sig_hist):
         _addShapeVariations(state, proc, sig_hist, blind_mask, name_map)
 
-    meta = state.signal_metadata.get(label, {})
+    meta = state.metadata["all_sig"].get(label, {})
     for rs in rate_systematics:
         if rs.appliesTo(meta):
             proc.addRate(
@@ -168,7 +168,7 @@ def _addShapeVariations(
 
 def buildChannelName(state: AnalysisState) -> str:
     base = state.metadata.get("channel", "ch1")
-    era = state.background_metadata.get("era", {}).get("name", "")
+    era = state.metadata["bkg"].get("era", {}).get("name", "")
     if era:
         safe_era = str(era).replace(" ", "_")
         return f"{base}_{safe_era}"

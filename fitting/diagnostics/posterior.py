@@ -87,6 +87,9 @@ def generateReplicatedData(
     elif likelihood == "poisson":
         rates = jnp.clip(posterior_samples, a_min=0.0)
         return jax.random.poisson(rng_key, rates).astype(posterior_samples.dtype)
+    elif likelihood == "latent":
+        rates = jnp.clip(posterior_samples, a_min=0.0)
+        return rates
     else:
         raise ValueError(f"Unsupported likelihood: {likelihood}")
 

@@ -15,7 +15,7 @@ from jinja2 import Environment, FileSystemLoader
 
 import fitting
 from .file_tools import tarDirectory, tarFiles
-from ..utils import getSignal, getCategory, getRecoCategory, MatchRules
+from ..utils import getSignal, getCategory, getRecoCategory, MatchRules, deepCommonDict
 
 logger = logging.getLogger("fitting")
 
@@ -49,16 +49,24 @@ class EraJob:
         return self.metadata | {"era": self.era} | {"config": self.config}
 
 
+
+
 @define
 class JobGroup:
     """Single Condor Job"""
 
     era_jobs: list[EraJob]
-    combined_output: str | None = None
+    combined_output_format: str | None = None
 
     @property
-    def isCombined(self) -> bool:
+    def is_combined(self) -> bool:
         return len(self.era_jobs) > 1
+
+    @property
+    def common_meta(self):
+        return deepCommonDict(*(x.all_meta for x in self.era_jobs))
+        
+        
 
 
 @define
@@ -132,7 +140,9 @@ def groupIntoJobs(
                 f"missing eras {era_set - set(by_era.keys())}"
             )
             continue
-        result.append(JobGroup(era_jobs=[by_era[e] for e in combine_eras]))
+        g= JobGroup(era_jobs=[by_era[e] for e in combine_eras])
+        result.append(g)
+
 
     logger.info(
         f"Grouped {len(jobs)} era-jobs into {len(result)} job groups "
@@ -326,7 +336,7 @@ def _renderJobGroup(group: JobGroup) -> dict:
         "era_signals": d.join("|".join(j.signals) for j in group.era_jobs),
         "era_configs": d.join(j.config for j in group.era_jobs),
         "era_outputs": d.join(j.output_dir for j in group.era_jobs),
-        "combined_output": group.combined_output or '$(BLANK)',
+        "combined_output_format": group.combined_output_format or "$(BLANK)",
     }
 
 
@@ -334,6 +344,7 @@ def buildPlan(
     jobs: list[EraJob],
     output_dir: Path,
     combine_eras: list[str] | None = None,
+    combined_dir_format: str | None = None,
     group_by_fields: tuple[str, ...] | None = None,
     venv_path: str | None = None,
     container: str | None = None,
@@ -351,12 +362,8 @@ def buildPlan(
         raise ValueError("No job groups created — check patterns and eras")
 
     for g in job_groups:
-        if g.isCombined:
-            m = g.era_jobs[0].metadata
-            g.combined_output = str(
-                output_dir
-                / f"combined/{m['pipeline']}/{m['mstop']}_{m['mchi']}/{m['toy_index']}"
-            )
+        if g.is_combined:
+            g.combined_output_format = combined_dir_format
 
     if not venv_path:
         venv_path = os.environ.get("VIRTUAL_ENV")

@@ -8,7 +8,7 @@ import attrs
 import jax.numpy as jnp
 import numpy as np
 from uhi.numpy_plottable import NumPyPlottableHistogram
-from ..utils import dictToDot, dotFormat
+from ..utils import dictToDot, dotFormat, floatToStr
 
 logger = logging.getLogger(__name__)
 
@@ -160,10 +160,6 @@ class TrainingResult:
     ensemble_mode: str | None = None
 
 
-def floatToStr(f):
-    if isinstance(f, float):
-        return str(f).replace(".", "p")
-    return f
 
 
 @attrs.define
@@ -179,8 +175,6 @@ class AnalysisState:
     signal_hist: Any | None = None
     signals: dict[str, BinnedData] = attrs.field(factory=dict)
     signal_hists: dict[str, Any] = attrs.field(factory=dict)
-    signal_metadata: dict[str, dict] = attrs.field(factory=dict)
-    injection_signal_metadata: dict[str, Any] = attrs.field(factory=dict)
 
     train_data: BinnedData | None = None
     test_data: BinnedData | None = None
@@ -198,15 +192,13 @@ class AnalysisState:
     ppc_results: dict[str, Any] | None = None
     diagnostic_metrics: dict[str, float] | None = None
 
-    metadata: dict[str, Any] = attrs.field(factory=dict)
-    background_metadata: dict[str, Any] = attrs.field(factory=dict)
+    all_metadata: dict[str, Any] = attrs.field(factory=dict)
+
+    @property
+    def metadata(self):
+        return self.all_metadata | {"config": attrs.asdict(self.config)}
 
     def getRealOutPath(self):
         replace_floats = {k: floatToStr(v) for k, v in dictToDot(self.metadata)}
-        config_dotted = {
-            k: floatToStr(v)
-            for k, v in dictToDot({"config": attrs.asdict(self.config)})
-        }
-        replace_floats.update(config_dotted)
 
         return Path(dotFormat(self.config.output_dir_format, **replace_floats))

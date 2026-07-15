@@ -3,6 +3,7 @@ import copy
 from pathlib import Path
 import click
 from fitting.cli.base import logger, _parseWindowParams
+from ..utils import dictToDot, dotFormat, floatToStr
 
 
 @click.command("print-params")
@@ -111,7 +112,7 @@ def smoothCmd(
 
     for idx, hist in enumerate(hists):
         out_path = output_dir / f"{name}_{idx}.pklz4"
-        metadata = copy.deepcopy(analysis_state.background_metadata)
+        metadata = copy.deepcopy(analysis_state.metadata["bkg"])
         metadata["toy_index"] = idx
         with lz4.frame.open(out_path, "wb") as f:
             to_save = {
@@ -132,7 +133,7 @@ def smoothCmd(
             analysis_state, rng_key, plot_saver=plot_saver
         )
         out_path = output_dir / "pure_smoothed.pklz4"
-        metadata = copy.deepcopy(analysis_state.background_metadata)
+        metadata = copy.deepcopy(analysis_state.metadata["bkg"])
         with lz4.frame.open(out_path, "wb") as f:
             to_save = {
                 "item": hist_asimov,
@@ -550,8 +551,8 @@ def checkDomainCmd(
 )
 @click.option(
     "-o",
-    "--output",
-    type=click.Path(path_type=Path),
+    "--output-dir-format",
+    type=str,
     required=True,
     help="Output summary JSON file.",
 )
@@ -561,7 +562,9 @@ def checkDomainCmd(
     default="combined",
     help="New era name for the combined summary.",
 )
-def mergeSummariesCmd(inputs: tuple[Path, ...], output: Path, era_name: str) -> None:
+def mergeSummariesCmd(
+    inputs: tuple[Path, ...], output_dir_format: Path, era_name: str
+) -> None:
     """Merge GPR summary JSON files from multiple eras."""
     import json
 
@@ -569,64 +572,50 @@ def mergeSummariesCmd(inputs: tuple[Path, ...], output: Path, era_name: str) -> 
         raise click.UsageError("At least one input summary JSON must be provided.")
 
     cleaned_era_name = era_name.replace("@", "+")
-    logger.info(
-        f"Merging {len(inputs)} GPR summaries into {output} with era name {cleaned_era_name}"
-    )
+    logger.info(f"Merging {len(inputs)} GPR summaries with era name {cleaned_era_name}")
 
     summaries = []
     for path in inputs:
         with open(path, "r") as f:
             summaries.append(json.load(f))
 
-    merged = copy.deepcopy(summaries[0])
+    summaries = iter(summaries)
+    merged = copy.deepcopy(next(summaries))
 
     total_lumi = 0.0
     energies = set()
     for s in summaries:
-        metadata = s.get("metadata", {})
+        metadata = s["metadata"]["bkg"]
         era_info = metadata.get("era", {})
 
         lumi = era_info.get("lumi")
         if lumi is not None:
-            try:
-                total_lumi += float(lumi)
-            except ValueError:
-                pass
+            total_lumi += float(lumi)
 
         energy = era_info.get("energy")
-        if energy is not None:
-            energies.add(energy)
+        energies.add(energy)
 
-    if "metadata" not in merged:
-        merged["metadata"] = {}
-    if "era" not in merged["metadata"]:
-        merged["metadata"]["era"] = {}
-
-    merged["metadata"]["era"]["name"] = cleaned_era_name
-    merged["metadata"]["era"]["lumi"] = total_lumi
+    merged["metadata"]["bkg"]["era"]["name"] = cleaned_era_name
+    merged["metadata"]["bkg"]["era"]["lumi"] = total_lumi
 
     if len(energies) == 1:
-        merged["metadata"]["era"]["energy"] = list(energies)[0]
+        merged["metadata"]["bkg"]["era"]["energy"] = list(energies)[0]
     elif len(energies) > 1:
         sorted_energies = sorted(list(energies), key=lambda x: str(x))
-        merged["metadata"]["era"]["energy"] = "/".join(str(e) for e in sorted_energies)
+        merged["metadata"]["bkg"]["era"]["energy"] = "/".join(
+            str(e) for e in sorted_energies
+        )
 
-    # Sum blind_mask_size if it exists in inputs
-    blind_mask_sizes = [
-        s.get("blind_mask_size") for s in summaries if "blind_mask_size" in s
-    ]
-    if blind_mask_sizes:
-        merged["blind_mask_size"] = sum(blind_mask_sizes)
-    else:
-        merged.pop("blind_mask_size", None)
-
-    # Remove single-era specific metrics/training results
     merged.pop("training", None)
     merged.pop("metrics", None)
     merged.pop("ppc", None)
-
-    output.parent.mkdir(parents=True, exist_ok=True)
+    merged.pop("blind_mask_size", None)
+    float_dot = {k: floatToStr(v) for k, v in dictToDot(merged["metadata"])}
+    output_dir = Path(dotFormat(output_dir_format, **float_dot))
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output = output_dir / "summary.json"
     with open(output, "w") as f:
         json.dump(merged, f, indent=2)
 
     logger.info(f"Successfully wrote merged summary to {output}")
+    print(str(output_dir))

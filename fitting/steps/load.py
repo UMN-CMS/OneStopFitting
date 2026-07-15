@@ -117,17 +117,11 @@ def loadData(config: PipelineConfig) -> AnalysisState:
         rebin=bkg_rebin,
         variation="central",
     )
-
     logger.info(f"Background yield is {background.Y.sum():0.2f}.")
 
     file_metadata = extractMetadata(bkg_raw)
     combined_metadata = {
-        **config.metadata,
-        **file_metadata,
-        "injection_rate": config.injection_rate,
-        "window_type": type(config.window).__name__ if config.window else "none",
-        "rebin": config.rebin,
-        "min_counts": config.min_counts,
+        "bkg": file_metadata,
     }
 
     logger.info(f"Loaded {len(signals)} signals")
@@ -136,11 +130,9 @@ def loadData(config: PipelineConfig) -> AnalysisState:
 
     if first_sig_metadata is not None:
         reco_category = getRecoCategory(first_sig_metadata["name"])
-        combined_metadata = {
-            **combined_metadata,
-            **first_sig_metadata,
-            "reco_category": reco_category,
-        }
+        combined_metadata["reco_category"] = reco_category
+        combined_metadata["sig"] = first_sig_metadata
+        combined_metadata["all_sig"] = signal_metadata
 
     injection_signal = None
     injection_signal_metadata = {}
@@ -169,12 +161,9 @@ def loadData(config: PipelineConfig) -> AnalysisState:
         signal=first_signal,
         injection_rate=config.injection_rate,
         injection_signal=injection_signal,
-        injection_signal_metadata=injection_signal_metadata,
         background_hist=bkg_hist,
         signal_hist=first_signal_hist,
         signals=signals,
         signal_hists=signal_hists,
-        signal_metadata=signal_metadata,
-        metadata=combined_metadata,
-        background_metadata=file_metadata,
+        all_metadata=combined_metadata,
     )

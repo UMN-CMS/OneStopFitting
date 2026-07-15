@@ -100,28 +100,43 @@ class ChannelModel:
         return len(self.data_obs)
 
 
+
+
+
 def computeShapeMetrics(
     nominal: np.ndarray, ups: list[np.ndarray], down: list[np.ndarray]
 ) -> str:
     nominal = np.concatenate([nominal] * len(ups))
     up, down = np.concatenate(ups), np.concatenate(down)
 
-    up_change = np.nan_to_num((up - nominal) / nominal, nan=0)
-    down_change = np.nan_to_num((down - nominal) / nominal, nan=0)
+    up_change = 100 * np.nan_to_num((up - nominal) / nominal, nan=0)
+    down_change = 100 * np.nan_to_num((down - nominal) / nominal, nan=0)
     all_changes = abs(np.concatenate([up_change, down_change]))
 
     percentile_16 = np.percentile(all_changes, 16)
     percentile_84 = np.percentile(all_changes, 84)
     max_dev = np.max(all_changes)
 
-    return f"{int(percentile_16)}-{int(percentile_84)} ({int(max_dev)})"
+    p16_small = percentile_16 < 0.5
+    p84_small = percentile_84 < 0.5
+    max_small = max_dev < 0.5
+    if p16_small and p84_small and max_small:
+        return f"<0.5%"
+    if p16_small and p84_small:
+        return f"<0.5% ({max_dev:0.1f}%)"
+    if p16_small:
+        return f"<0.5%-{percentile_84:0.1f}% ({max_dev:0.1f}%)"
+
+    return f"{percentile_16:0.1f}%-{percentile_84:0.1f}% ({max_dev:0.1f}%)"
 
 
 def computeRateMetrics(nominal: float, values: list[float], dists: list[str]) -> str:
     changes = [(float(value) - 1) for value in values]
-    med = np.median(changes)
+    med = 100 * np.median(changes)
+    if med<0.1:
+        return "<0.5%"
 
-    return f"{int(med)}"
+    return f"{med:0.1f}%"
 
 
 @attrs.define

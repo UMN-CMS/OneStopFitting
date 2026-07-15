@@ -8,14 +8,14 @@ request_cpus = 1
 transfer_input_files = {{ transfer_input_files | join(', ') }}, $(transfer_files)
 transfer_output_files = {{ output_dir }}
 preserve_relative_paths = True
-environment = "ERA_NAMES='$(era_names)' ERA_BACKGROUNDS='$(era_backgrounds)' ERA_SIGNALS='$(era_signals)' ERA_CONFIGS='$(era_configs)' ERA_OUTPUTS='$(era_outputs)' COMBINED_OUTPUT='$(combined_output)'"
+environment = "ERA_NAMES='$(era_names)' ERA_BACKGROUNDS='$(era_backgrounds)' ERA_SIGNALS='$(era_signals)' ERA_CONFIGS='$(era_configs)' ERA_OUTPUTS='$(era_outputs)' COMBINED_OUTPUT_FORMAT='$(combined_output_format)'"
 should_transfer_files = YES
 when_to_transfer_output = ON_EXIT
 COMMA= , 
 BLANK=""#
 
-queue transfer_files, era_names, era_backgrounds, era_signals, era_configs, era_outputs, combined_output from (
+queue transfer_files, era_names, era_backgrounds, era_signals, era_configs, era_outputs, combined_output_format from (
 {%- for job in jobs %}
-    {{ job.transfer_files }}, {{ job.era_names }}, {{ job.era_backgrounds }}, {{ job.era_signals }}, {{ job.era_configs }}, {{ job.era_outputs }}, {{ job.combined_output }}
+    {{ job.transfer_files }}, {{ job.era_names }}, {{ job.era_backgrounds }}, {{ job.era_signals }}, {{ job.era_configs }}, {{ job.era_outputs }}, {{ job.combined_output_format }}
 {%- endfor %}
 )

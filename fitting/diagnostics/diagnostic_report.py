@@ -251,7 +251,6 @@ def computeDiagnostics(gathered: list[dict]) -> DiagnosticReport:
     coupling = _inferCoupling(gathered)
 
     all_meta = [e.get("metadata", {}) for e in gathered[:1]]
-
     points = []
     for (mstop, mchi), toys in sorted(grouped.items()):
         points.append(_computePointDiagnosis(mstop, mchi, toys))

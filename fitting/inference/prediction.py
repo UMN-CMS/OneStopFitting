@@ -55,9 +55,12 @@ def predictInRealSpace(
         likelihood = getattr(posterior, "likelihood", None)
 
     if isinstance(likelihood, gpl.Poisson):
-        variance = jnp.diag(norm_cov)
-        rate_mean = jnp.exp(norm_mean + 0.5 * variance)
-        rate_cov = (rate_mean[:, None] * rate_mean[None, :]) * (jnp.exp(norm_cov) - 1.0)
+        # variance = jnp.diag(norm_cov)
+        # rate_mean = jnp.exp(norm_mean + 0.5 * variance)
+        # rate_cov = (rate_mean[:, None] * rate_mean[None, :]) * (jnp.exp(norm_cov) - 1.0)
+        clipped_norm_mean = jnp.clip(norm_mean, -30.0, 30.0)
+        rate_mean = jnp.exp(clipped_norm_mean)
+        rate_cov = (rate_mean[:, None] * rate_mean[None, :]) * jnp.expm1(norm_cov)
 
         norm_mean, norm_cov = rate_mean, rate_cov
 

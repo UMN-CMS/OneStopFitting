@@ -60,7 +60,6 @@ function run_single_era {
         echo >&2 "No combine script found at: $combine_script"
     fi
 
-
     echo "$actual_output"
 }
 
@@ -107,8 +106,23 @@ done
 
 # Combined step: only when multiple eras and COMBINED_OUTPUT is set
 {% raw %}
-if [ "${#ERAS[@]}" -gt 1 ] && [ -n "$COMBINED_OUTPUT" ]; then
+if [ "${#ERAS[@]}" -gt 1 ] && [ -n "$COMBINED_OUTPUT_FORMAT" ]; then
 {% endraw %}
+
+    echo "########## Merging GPR summaries ##########"
+    SUMMARIES_ARGS=""
+    for i in "${!ERAS[@]}"; do
+        SUMMARY_PATH="${ERA_OUTPUT_DIRS[$i]}/summary.json"
+        if [ ! -f "$SUMMARY_PATH" ]; then
+            echo "ERROR: Summary JSON not found for era ${ERAS[$i]} at $SUMMARY_PATH" 
+            exit 1
+        fi
+        SUMMARIES_ARGS="$SUMMARIES_ARGS ${SUMMARY_PATH}"
+    done
+
+    COMBINED_OUTPUT=$(run_fit "python3 -m fitting merge-summaries $SUMMARIES_ARGS --output-dir-format '$COMBINED_OUTPUT_FORMAT' --era-name '2016-2023'")
+
+
     echo "########## Merging datacards ##########"
     COMBINED_DIR="$COMBINED_OUTPUT/combine"
     mkdir -p "$COMBINED_DIR"
@@ -123,18 +137,6 @@ if [ "${#ERAS[@]}" -gt 1 ] && [ -n "$COMBINED_OUTPUT" ]; then
         run_combine "find . -name 'datacard_*.txt' -print0 | xargs -0 combineCards.py > datacard.txt"
         echo "Combined datacard written to $COMBINED_DIR/datacard.txt"
     )
-
-    echo "########## Merging GPR summaries ##########"
-    SUMMARIES_ARGS=""
-    for i in "${!ERAS[@]}"; do
-        SUMMARY_PATH="${ERA_OUTPUT_DIRS[$i]}/summary.json"
-        if [ ! -f "$SUMMARY_PATH" ]; then
-            echo "ERROR: Summary JSON not found for era ${ERAS[$i]} at $SUMMARY_PATH" 
-            exit 1
-        fi
-        SUMMARIES_ARGS="$SUMMARIES_ARGS ${SUMMARY_PATH}"
-    done
-    run_fit "python3 -m fitting merge-summaries $SUMMARIES_ARGS --output '$COMBINED_OUTPUT/summary.json' --era-name '$ERA_NAMES'"
 
     echo "########## Running combined fit ##########"
     run_fit "python3 -m fitting generate-combine-script \

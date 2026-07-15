@@ -76,6 +76,7 @@ def runDiagnostics(state: AnalysisState, rng_key: jax.Array) -> AnalysisState:
     # if "poisson" in likelihood_name:
     #     likelihood_type = "poisson"
     likelihood_type = "poisson"
+    # likelihood_type = "latent"
 
     ppc_results = posteriorPredictiveCheck(
         pred_mean=pred_mean,
