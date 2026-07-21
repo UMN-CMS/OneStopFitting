@@ -97,7 +97,7 @@ class DiagnosticReport:
 def _extractByMassPoint(gathered: list[dict]) -> dict[tuple[float, float], list[dict]]:
     by_mass: dict[tuple[float, float], list[dict]] = defaultdict(list)
     for entry in gathered:
-        meta = entry.get("metadata", {}).get("other_data", {})
+        meta = entry.get("metadata", {}).get("sig", {}).get("other_data", {})
         mstop = meta.get("stop_mass")
         mchi = meta.get("chargino_mass")
         if mstop is None or mchi is None:
@@ -108,7 +108,7 @@ def _extractByMassPoint(gathered: list[dict]) -> dict[tuple[float, float], list[
 
 def _inferCoupling(gathered: list[dict]) -> str:
     for entry in gathered:
-        c = entry.get("metadata", {}).get("other_data", {}).get("coupling")
+        c = entry.get("metadata", {}).get("sig", {}).get("other_data", {}).get("coupling")
         if c is not None:
             return str(c)
     return "unknown"
@@ -160,7 +160,7 @@ def _computePointDiagnosis(
 
     coupling = (
         str(
-            toys[0].get("metadata", {}).get("other_data", {}).get("coupling", "unknown")
+            toys[0].get("metadata", {}).get("sig", {}).get("other_data", {}).get("coupling", "unknown")
         )
         if toys
         else "unknown"
@@ -619,7 +619,7 @@ def loadGathered(path: str | Path) -> list[dict]:
 def discoverCouplings(gathered: list[dict]) -> list[str]:
     couplings: set[str] = set()
     for entry in gathered:
-        c = entry.get("metadata", {}).get("other_data", {}).get("coupling")
+        c = entry.get("metadata", {}).get("sig", {}).get("other_data", {}).get("coupling")
         if c is not None:
             couplings.add(str(c))
     return sorted(couplings)
