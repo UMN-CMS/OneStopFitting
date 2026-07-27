@@ -253,7 +253,10 @@ def computeDiagnostics(gathered: list[dict]) -> DiagnosticReport:
     all_meta = [e.get("metadata", {}) for e in gathered[:1]]
     points = []
     for (mstop, mchi), toys in sorted(grouped.items()):
-        points.append(_computePointDiagnosis(mstop, mchi, toys))
+        try:
+            points.append(_computePointDiagnosis(mstop, mchi, toys))
+        except:
+            pass
 
     cat_groups: dict[str, list[PointDiagnosis]] = defaultdict(list)
     for p in points:
