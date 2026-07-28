@@ -41,7 +41,7 @@ class MCEnsembleKernel(gpk.AbstractKernel):
         self._ensemble_cov = jax.lax.stop_gradient(emp_cov)
         self.log_amplitude = gpp.Real(jnp.array(0.0))
 
-    def _interpolate_cov(self, x1, x2):
+    def interpCov(self, x1, x2):
         diffs1 = x1[:, None, :] - self._ensemble_X[None, :, :]
         i1 = jnp.argmin(jnp.sum(diffs1**2, axis=-1), axis=-1)
         diffs2 = x2[:, None, :] - self._ensemble_X[None, :, :]
@@ -50,11 +50,11 @@ class MCEnsembleKernel(gpk.AbstractKernel):
 
     def __call__(self, x, y):
         amp = jnp.exp(self.log_amplitude.value)
-        return amp * self._interpolate_cov(x.reshape(1, -1), y.reshape(1, -1))[0, 0]
+        return amp * self.interpCov(x.reshape(1, -1), y.reshape(1, -1))[0, 0]
 
     def cross_covariance(self, x, y):
         amp = jnp.exp(self.log_amplitude.value)
-        return amp * self._interpolate_cov(x, y)
+        return amp * self.interpCov(x, y)
 
 
 @attrs.define

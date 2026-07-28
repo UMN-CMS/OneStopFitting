@@ -10,8 +10,6 @@ from ..priors import PriorConfig
 
 @attrs.define
 class RBFConfig(KernelConfig):
-    """Radial Basis Function (squared exponential) kernel."""
-
     ard: bool = True
     lengthscale_prior: PriorConfig | None = None
     variance_prior: PriorConfig | None = None
@@ -73,8 +71,6 @@ class Matern52Config(KernelConfig):
 
 @attrs.define
 class RationalQuadraticConfig(KernelConfig):
-    """Rational Quadratic kernel."""
-
     ard: bool = True
     lengthscale_prior: PriorConfig | None = None
     variance_prior: PriorConfig | None = None
@@ -94,8 +90,6 @@ class RationalQuadraticConfig(KernelConfig):
 
 @attrs.define
 class PeriodicConfig(KernelConfig):
-    """Periodic kernel."""
-
     lengthscale_prior: PriorConfig | None = None
     variance_prior: PriorConfig | None = None
     period_prior: PriorConfig | None = None
@@ -111,8 +105,6 @@ class PeriodicConfig(KernelConfig):
 
 @attrs.define
 class WhiteConfig(KernelConfig):
-    """White noise kernel."""
-
     variance: float = 1e-6
     variance_prior: PriorConfig | None = None
 
@@ -125,8 +117,6 @@ class WhiteConfig(KernelConfig):
 
 @attrs.define
 class LinearConfig(KernelConfig):
-    """Linear kernel."""
-
     variance_prior: PriorConfig | None = None
 
     def buildKernel(
@@ -138,8 +128,6 @@ class LinearConfig(KernelConfig):
 
 @attrs.define
 class PolynomialConfig(KernelConfig):
-    """Polynomial kernel."""
-
     degree: int = 2
     variance_prior: PriorConfig | None = None
     shift_prior: PriorConfig | None = None

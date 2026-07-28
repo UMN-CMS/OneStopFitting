@@ -18,17 +18,8 @@ from .standard import Matern32Config
 
 
 class MultiFidelityResidualKernel(gpk.AbstractKernel):
-    """Kernel for multi-fidelity residual: K(x,x') = ρ² · Σ_MC(x,x') + K_δ(x,x').
-
-    Combines the frozen low-fidelity (MC) GP posterior covariance with a
-    learnable residual kernel that captures data-MC discrepancy.
-
-    Args:
-        mc_kernel: Prior kernel of the MC GP.
-        mc_L: Precomputed Cholesky factor of the MC training covariance (Kxx + σ²I).
-        mc_dataset: Training dataset of the MC posterior (X_mc).
-        residual_kernel: Base kernel for the δ(x) residual.
-        rho: PositiveReal parameter.
+    """
+    Combines the frozen low-fidelity (MC) GP posterior covariance with a learnable residual kernel that captures data-MC discrepancy.
     """
 
     _mc_dataset: Any = nnx.data()
@@ -53,7 +44,7 @@ class MultiFidelityResidualKernel(gpk.AbstractKernel):
         self.residual_kernel = residual_kernel
         self.rho = rho
 
-    def _computeMcCovariance(self, x: jax.Array, y: jax.Array) -> jax.Array:
+    def computeMcCov(self, x: jax.Array, y: jax.Array) -> jax.Array:
         """Compute frozen MC posterior covariance between x and y."""
         K_xy = self.mc_kernel.cross_covariance(x, y)
         K_Xx = self.mc_kernel.cross_covariance(self._mc_dataset.X, x)
@@ -71,7 +62,7 @@ class MultiFidelityResidualKernel(gpk.AbstractKernel):
             rho = self.rho[...]
             x_r = x.reshape(1, -1)
             y_r = y.reshape(1, -1)
-            mc_cov = self._computeMcCovariance(x_r, y_r)
+            mc_cov = self.computeMcCov(x_r, y_r)
             return rho**2 * mc_cov[0, 0] + residual_val
         return residual_val
 
@@ -79,7 +70,7 @@ class MultiFidelityResidualKernel(gpk.AbstractKernel):
         residual_cov = self.residual_kernel.cross_covariance(x, y)
         if self.rho is not None:
             rho = self.rho[...]
-            mc_cov = self._computeMcCovariance(x, y)
+            mc_cov = self.computeMcCov(x, y)
             return rho**2 * mc_cov + residual_cov
         return residual_cov
 

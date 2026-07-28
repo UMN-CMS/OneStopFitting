@@ -14,7 +14,6 @@ logger = logging.getLogger(__name__)
 
 
 def _jnpArrayValidator(instance, attribute, value):
-    """Validate that the value is a JAX or numpy array."""
     if not isinstance(value, (jnp.ndarray, np.ndarray)):
         raise TypeError(
             f"{attribute.name} must be a JAX or numpy array, got {type(value)}"
@@ -22,7 +21,6 @@ def _jnpArrayValidator(instance, attribute, value):
 
 
 def _edgesValidator(instance, attribute, value):
-    """Validate edges is a tuple of arrays."""
     if not isinstance(value, tuple):
         raise TypeError(
             f"{attribute.name} must be a tuple of arrays, got {type(value)}"
@@ -36,20 +34,6 @@ def _edgesValidator(instance, attribute, value):
 
 @attrs.define
 class BinnedData:
-    """N-dimensional binned histogram data container.
-
-    This is the fundamental data structure passed through the pipeline.
-    It holds flattened bin centers, values, and variances alongside
-    the original bin edges for reconstruction.
-
-    Attributes:
-        X: Bin centers, shape (N, D) where N is the number of bins
-           and D is the dimensionality.
-        Y: Bin values (counts or weighted counts), shape (N,).
-        V: Bin variances (for weighted histograms, sum of weights²), shape (N,).
-        edges: Tuple of bin edge arrays, one per axis.
-    """
-
     X: jnp.ndarray = attrs.field(validator=_jnpArrayValidator)
     Y: jnp.ndarray = attrs.field(validator=_jnpArrayValidator)
     V: jnp.ndarray = attrs.field(validator=_jnpArrayValidator)
@@ -58,12 +42,10 @@ class BinnedData:
 
     @property
     def ndim(self) -> int:
-        """Number of histogram dimensions."""
         return len(self.edges)
 
     @property
     def nbins(self) -> int:
-        """Total number of bins (flattened)."""
         return self.X.shape[0]
 
     def masked(self, mask: jnp.ndarray | None) -> BinnedData:
@@ -113,7 +95,6 @@ def _pointsToPlottable(
     edges: tuple[jnp.ndarray, ...],
     V: jnp.ndarray | None = None,
 ) -> NumPyPlottableHistogram:
-    """Reconstruct a plottable histogram from flattened bin data."""
     np_edges = tuple(np.asarray(e) for e in edges)
     np_X = np.asarray(X)
     np_Y = np.asarray(Y)

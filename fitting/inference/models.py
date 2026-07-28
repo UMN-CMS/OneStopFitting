@@ -229,14 +229,8 @@ def _selectInducingPoints(dataset: gpjax.Dataset, num_inducing: int) -> jnp.ndar
 @attrs.define
 class QCDPriorGPConfig:
     """
-    Full Bayesian GP using QCD MC as a robust physics prior.
-
-    - Mean function: QCD MC prediction (with learnable scale + tilt)
+    - Mean function: QCD MC prediction 
     - Kernel: empirical MC ensemble covariance + stationary residual kernel
-    - Prior on scale: log-normal centred on theory prediction (controlled by theory_scale_uncertainty)
-
-    The posterior represents beliefs about the background after seeing data,
-    given that QCD MC is the best physics prior.
     """
 
     residual_lengthscale: float = 0.3
@@ -281,18 +275,9 @@ class QCDPriorGPConfig:
 @attrs.define
 class MultiFidelityGPConfig(GPModelConfig):
     """Multi-fidelity GP: linear autoregressive model combining QCD MC and data, see https://arxiv.org/abs/2006.16728.
-    Model is fit in a recursive fashion.
-    Note requires  D_{n-1} is a superset of D_n
 
-        f_data(x) = rho * f_MC(x) + delta(x)
-
-    Stage 1: Fit a GP to QCD MC data (low-fidelity).
-    Stage 2: Fit a GP to observed data using the frozen MC GP posterior
-             as the mean function (high-fidelity).
-
-
-    TODO:
-    Also implement linear model coregionalization approach and non-linear autoregression.
+    1 Fit a GP to QCD MC data (low-fidelity).
+    2 Fit a GP to observed data using the frozen MC GP posterior as the mean function (high-fidelity).
     """
 
     mc_path: str = attrs.Factory(lambda: "")

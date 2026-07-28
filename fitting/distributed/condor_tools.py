@@ -119,8 +119,7 @@ def groupIntoJobs(
     """Convert EraJobs into JobGroups.
 
     Without combine_eras each EraJob becomes its own single-era JobGroup.
-    With combine_eras, jobs are grouped across eras; incomplete groups
-    (missing eras) are dropped with a warning.
+    With combine_eras, jobs are grouped across eras; incomplete groups (missing eras) are dropped with a warning.
     """
     logger.info(f"Combining eras: {combine_eras}")
     if not combine_eras:

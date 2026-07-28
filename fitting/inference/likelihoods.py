@@ -1,8 +1,3 @@
-"""Likelihood configuration hierarchy.
-
-Each LikelihoodConfig subclass wraps a gpjax likelihood type.
-"""
-
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -20,12 +15,6 @@ class LikelihoodConfig(ABC):
 
     @abstractmethod
     def buildLikelihood(self, **kwargs) -> gpl.AbstractLikelihood:
-        """Construct the gpjax likelihood.
-
-        Keyword args typically include:
-            num_datapoints: Length of the dataset.
-            obs_variance: Array of variances for each bin (optional).
-        """
         ...
 
     def _get_param(

@@ -108,7 +108,7 @@ class AsymmetricGaussianBumpMean(gpjax.mean_functions.AbstractMeanFunction):
         n_orthants = 2**ndim
         self.L_raw = gpjax.parameters.Real(jnp.zeros((n_orthants, n_ltri)))
 
-    def _cholesky_precision(self, L_raw_row: jnp.ndarray) -> jnp.ndarray:
+    def choleskyPred(self, L_raw_row: jnp.ndarray) -> jnp.ndarray:
         L = jnp.zeros((self.ndim, self.ndim))
         rows, cols = jnp.tril_indices(self.ndim)
         L = L.at[rows, cols].set(L_raw_row)
@@ -116,7 +116,7 @@ class AsymmetricGaussianBumpMean(gpjax.mean_functions.AbstractMeanFunction):
         L = L.at[diag_idx, diag_idx].set(jnp.exp(jnp.diag(L)))
         return L
 
-    def _orthant_index(self, delta: jnp.ndarray) -> jnp.ndarray:
+    def orthantIdx(self, delta: jnp.ndarray) -> jnp.ndarray:
         signs = (delta >= 0).astype(jnp.int32)  # (n, ndim)
         powers = 2 ** jnp.arange(self.ndim)  # (ndim,)
         return jnp.einsum("nd,d->n", signs, powers)  # (n,)
@@ -125,12 +125,10 @@ class AsymmetricGaussianBumpMean(gpjax.mean_functions.AbstractMeanFunction):
         sigma = jnp.exp(self.log_sigma.value)
         delta = (x - self.mu.value) / sigma  # (n, ndim)
 
-        orthant_idx = self._orthant_index(delta)  # (n,)
+        orthant_idx = self.orthantIdx(delta)  # (n,)
 
         # Precompute all Cholesky factors
-        all_L = jax.vmap(self._cholesky_precision)(
-            self.L_raw.value
-        )  # (2^ndim, ndim, ndim)
+        all_L = jax.vmap(self.choleskyPred)(self.L_raw.value)  # (2^ndim, ndim, ndim)
 
         L_per_point = all_L[orthant_idx]  # (n, ndim, ndim)
         Lt_delta = jnp.einsum(
@@ -243,7 +241,7 @@ class AsymmetricLaplaceMean(gpjax.mean_functions.AbstractMeanFunction):
         n_orthants = 2**ndim
         self.L_raw = gpjax.parameters.Real(jnp.zeros((n_orthants, n_ltri)))
 
-    def _cholesky_transform(self, L_raw_row: jnp.ndarray) -> jnp.ndarray:
+    def choleskyTrans(self, L_raw_row: jnp.ndarray) -> jnp.ndarray:
         L = jnp.zeros((self.ndim, self.ndim))
         rows, cols = jnp.tril_indices(self.ndim)
         L = L.at[rows, cols].set(L_raw_row)
@@ -251,7 +249,7 @@ class AsymmetricLaplaceMean(gpjax.mean_functions.AbstractMeanFunction):
         L = L.at[diag_idx, diag_idx].set(jnp.exp(jnp.diag(L)))  # Positive diagonal
         return L
 
-    def _orthant_index(self, delta: jnp.ndarray) -> jnp.ndarray:
+    def orthantIdx(self, delta: jnp.ndarray) -> jnp.ndarray:
         signs = (delta >= 0).astype(jnp.int32)
         powers = 2 ** jnp.arange(self.ndim)
         return jnp.einsum("nd,d->n", signs, powers)
@@ -260,8 +258,8 @@ class AsymmetricLaplaceMean(gpjax.mean_functions.AbstractMeanFunction):
         scale = jnp.exp(self.log_scale.value)
         delta = (x - self.mu.value) / scale
 
-        orthant_idx = self._orthant_index(delta)
-        all_L = jax.vmap(self._cholesky_transform)(self.L_raw.value)
+        orthant_idx = self.orthantIdx(delta)
+        all_L = jax.vmap(self.choleskyTrans)(self.L_raw.value)
         L_per_point = all_L[orthant_idx]
 
         # L1 norm after linear transformation
@@ -369,9 +367,7 @@ class ConstantMeanConfig(MeanFunctionConfig):
         val = self.init_val
         if val is None:
             val = kwargs.get("poisson_log_rate", 0.0)
-        return gpjax.mean_functions.Constant(
-            gpjax.parameters.Real(jnp.array(val))
-        )
+        return gpjax.mean_functions.Constant(gpjax.parameters.Real(jnp.array(val)))
 
 
 @attrs.define
@@ -758,6 +754,10 @@ class GaussianFitSignalMeanFunction(gpjax.mean_functions.AbstractMeanFunction):
 
 @attrs.define
 class SignalTemplateMeanConfig(MeanFunctionConfig):
+    """
+    Could be used for fully bayesian inference
+    """
+
     use_gaussian_fit: bool = False
     amplitude_prior: PriorConfig | None = None
 
@@ -770,7 +770,6 @@ class SignalTemplateMeanConfig(MeanFunctionConfig):
                 "SignalTemplateMeanConfig requires 'signal_data' provided in kwargs from the pipeline"
             )
 
-        # Apply domain mask if provided
         domain_mask = kwargs.get("domain_mask", None)
         if domain_mask is not None:
             masked_data = signal_data.masked(domain_mask)
@@ -800,18 +799,10 @@ class SignalTemplateMeanConfig(MeanFunctionConfig):
 
 
 class MultiFidelityMeanFunction(gpjax.mean_functions.AbstractMeanFunction):
-    """Autoregressive multi-fidelity mean: m(x) = ρ · μ_MC(x) [+ tilt].
-
+    """
     Wraps a frozen low-fidelity (MC) GP posterior. The posterior mean
     is computed with stop_gradient so the MC GP parameters are not
     updated when fitting the high-fidelity (data) GP.
-
-    Args:
-        mc_posterior: Frozen GP posterior fit to QCD MC data.
-        mc_dataset: Training dataset used for the MC posterior.
-        learn_scale: Whether ρ is a trainable parameter.
-        learn_tilt: Whether to add a learnable linear tilt correction.
-        ndim: Input dimensionality.
     """
 
     _mc_dataset: gpjax.Dataset = nnx.data()

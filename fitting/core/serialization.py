@@ -24,19 +24,15 @@ def _makeConverter() -> cattrs.Converter:
     """Build a cattrs Converter with all custom hooks registered."""
     converter = cattrs.Converter()
 
-    # --- JAX array hooks ---
     converter.register_unstructure_hook(jnp.ndarray, lambda v: np.asarray(v).tolist())
     converter.register_structure_hook(jnp.ndarray, lambda v, _: jnp.array(v))
 
-    # --- numpy array hooks (for any stray numpy arrays) ---
     converter.register_unstructure_hook(np.ndarray, lambda v: v.tolist())
     converter.register_structure_hook(np.ndarray, lambda v, _: np.array(v))
 
-    # --- Path hooks ---
     converter.register_unstructure_hook(Path, str)
     converter.register_structure_hook(Path, lambda v, _: Path(v))
 
-    # Handle the specific Union[Path, list[Path], None] for signal_path
     def _structurePathUnion(obj, _):
         if obj is None:
             return None
@@ -71,15 +67,10 @@ def _makeConverter() -> cattrs.Converter:
     return converter
 
 
-# Module-level converter instance
 converter = _makeConverter()
 
 
 def registerHierarchy(base_cls: type) -> None:
-    """Register a new class hierarchy for polymorphic serialization.
-
-    Call this from submodule __init__.py after defining all subclasses.
-    """
     _tagged_union = partial(configure_tagged_union, tag_name="_type")
     include_subclasses(base_cls, converter, union_strategy=_tagged_union)
 
@@ -135,15 +126,8 @@ def limitedSummary(state: AnalysisState):
 
 
 def save(state: AnalysisState, path: Path) -> None:
-    """Save an AnalysisState to a compressed pickle file.
-
-    Args:
-        path: Output directory path. Will be created if it doesn't exist.
-    """
     out_dir = Path(path)
     out_dir.mkdir(parents=True, exist_ok=True)
-
-    # Save the full state as compressed pickle
     pkl_path = out_dir / "state.pklz4"
     with lz4.frame.open(pkl_path, "wb") as f:
         pickle.dump(state, f)
@@ -161,11 +145,6 @@ def save(state: AnalysisState, path: Path) -> None:
 
 
 def load(path: Path) -> AnalysisState:
-    """Load an AnalysisState from a compressed pickle file.
-
-    Args:
-        path: Directory containing 'state.pklz4' or direct path to a file.
-    """
     p = Path(path)
     if p.is_dir():
         pkl_path = p / "state.pklz4"

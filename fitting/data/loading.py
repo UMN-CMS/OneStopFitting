@@ -49,6 +49,8 @@ class Lz4PickleLoader(FileLoader):
             return pkl.load(f)
 
 
+# The logic in some places here feels kinda messy
+
 def extractHistogram(raw_data: Any, key: str | None = None) -> hist.Hist:
     if isinstance(raw_data, hist.Hist):
         return raw_data

@@ -1,11 +1,3 @@
-"""Data transformations for normalization and scaling.
-
-Provides a hierarchy of TransformConfig classes that build
-DataTransformation objects. DataTransformation handles both
-values and variances (for weighted histograms), and includes
-invertMVN for back-transforming predictions to real space.
-"""
-
 from __future__ import annotations
 
 import logging
@@ -30,10 +22,9 @@ logger = logging.getLogger(__name__)
 class DataTransformation:
     """Paired X and Y affine/nonlinear transformations.
 
-    Handles forward/inverse transforms for both values and variances,
-    critical for weighted histogram data. The invertMVN method
-    back-transforms a multivariate normal from normalized space
-    to real bin counts using accumulated Jacobians.
+    Handles forward/inverse transforms for both values and variances.
+    invertMVN method back-transforms a multivariate normal from normalized space
+    to real bin counts using Jacobians.
     """
 
     transform_x: Transform
@@ -52,15 +43,12 @@ class DataTransformation:
         return self.transform_y.inv(y)
 
     def applyVariance(self, y_raw: jnp.ndarray, v: jnp.ndarray) -> jnp.ndarray:
-        # Delta method via log_abs_det_jacobian
-        # Var(f(Y)) ≈ exp(2 * log|f'(Y)|) * Var(Y)
         log_jac = self.transform_y.log_abs_det_jacobian(y_raw, self.transform_y(y_raw))
         return v * jnp.exp(2.0 * log_jac)
 
     def invertVariance(self, y_transformed: jnp.ndarray, v: jnp.ndarray) -> jnp.ndarray:
         y_raw = self.transform_y.inv(y_transformed)
         log_jac = self.transform_y.log_abs_det_jacobian(y_raw, y_transformed)
-        # Var(f^{-1}(Y')) ≈ Var(Y') / exp(2 * log|f'(Y)|)
         return v * jnp.exp(-2.0 * log_jac)
 
     def applyEdges(self, edges: tuple[jnp.ndarray, ...]) -> tuple[jnp.ndarray, ...]:
@@ -95,9 +83,8 @@ class DataTransformation:
         self, mean: jnp.ndarray, cov: jnp.ndarray
     ) -> tuple[jnp.ndarray, jnp.ndarray]:
         y_raw = self.transform_y.inv(mean)
-        # Jacobian of inverse = 1 / Jacobian of forward, evaluated at y_raw
         log_jac = self.transform_y.log_abs_det_jacobian(y_raw, mean)
-        J = jnp.exp(-log_jac)  # d(inverse)/dy pointwise
+        J = jnp.exp(-log_jac)  
 
         real_mean = y_raw
         if cov.ndim == 2:
@@ -172,15 +159,6 @@ class SafeSqrtTransform(Transform):
 
 
 class AnscombeTransform(Transform):
-    """Anscombe variance-stabilizing transformation for Poisson data.
-
-    Forward:  z = 2 * sqrt(y + 3/8)
-    Inverse:  y = (z / 2)^2 - 3/8
-
-    Stabilizes variance to approximately 1 for large means,
-    making it well-suited for Poisson-distributed bin counts.
-    """
-
     domain = constraints.real
     codomain = constraints.positive
 
@@ -265,8 +243,6 @@ class SqrtStandardizationConfig(TransformConfig):
             scale=1.0 / x_range,
         )
 
-        # Stabilize Y via sqrt, then standardize
-        # It's better to ensure values are weakly positive for safety
         sqrt_Y = jnp.sqrt(jnp.maximum(Y, 0.0))
         y_mean = jnp.mean(sqrt_Y)
         y_std = jnp.std(sqrt_Y)
@@ -337,7 +313,6 @@ class AnscombeStandardizationConfig(TransformConfig):
             scale=1.0 / x_range,
         )
 
-        # Compute standardization parameters in Anscombe space
         anscombe_Y = 2.0 * jnp.sqrt(jnp.maximum(Y + 3.0 / 8.0, 0.0))
         y_mean = jnp.mean(anscombe_Y)
         y_std = jnp.std(anscombe_Y)

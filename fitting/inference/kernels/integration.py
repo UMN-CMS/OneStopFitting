@@ -24,19 +24,6 @@ def computeQuadratureGrid(
     n_quad: int = 3,
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
     """Compute Gauss-Legendre quadrature points and weights for every bin.
-
-    Parameters
-    ----------
-    X : array, shape (n_bins, ndim)
-    edges : tuple of arrays
-    n_quad : int
-        Number of quadrature nodes per axis.  Total sub-points per bin
-        is ``n_quad ^ ndim``.
-
-    Returns
-    -------
-    points : array, shape (n_bins, n_quad^ndim, ndim)
-    weights : array, shape (n_bins, n_quad^ndim)
     """
     ndim = len(edges)
     n_bins = X.shape[0]
@@ -45,7 +32,6 @@ def computeQuadratureGrid(
     ref_nodes = jnp.array(ref_nodes, dtype=jnp.float64)
     ref_weights = jnp.array(ref_weights, dtype=jnp.float64)
 
-    # --- Find the lower/upper edge for each bin in each dimension ----------
     bin_lo = jnp.empty((n_bins, ndim))
     bin_hi = jnp.empty((n_bins, ndim))
 
@@ -93,11 +79,8 @@ class BinIntegratedKernel(AbstractKernel):
         super().__init__(compute_engine=DenseKernelComputation())
         self.base_kernel = base_kernel
         self.n_quad = n_quad
-        # Registry: n_points → (quad_points, quad_weights)
-        # Not an nnx.Variable — purely auxiliary, not trainable.
         self._quad_registry: dict[int, tuple[jnp.ndarray, jnp.ndarray]] = {}
 
-    # ---- registry ---------------------------------------------------------
 
     def registerQuadrature(
         self,
@@ -151,7 +134,6 @@ class BinIntegratedKernel(AbstractKernel):
         py, wy = quad_y
         return self._integratedCrossCovariance(px, wx, py, wy)
 
-    # ---- integrated diagonal ----------------------------------------------
 
     def diagonal(self, x):
         """Compute the integrated diagonal of the Gram matrix."""
@@ -162,14 +144,13 @@ class BinIntegratedKernel(AbstractKernel):
 
         points, weights = quad
 
-        def _one_diag(pts, wts):
-            # pts: (n_q, ndim), wts: (n_q,)
+        def oneDiag(pts, wts):
             k_mat = jax.vmap(
                 lambda xi: jax.vmap(lambda yj: self.base_kernel(xi, yj))(pts)
             )(pts)
             return jnp.sum(wts[:, None] * wts[None, :] * k_mat)
 
-        diag = jax.vmap(_one_diag)(points, weights)
+        diag = jax.vmap(oneDiag)(points, weights)
         return psd(Diagonal(diag))
 
     def _integratedCrossCovariance(
@@ -180,18 +161,18 @@ class BinIntegratedKernel(AbstractKernel):
         weights_y: jnp.ndarray,
     ) -> jnp.ndarray:
 
-        def _one_pair(pts_i, wts_i, pts_j, wts_j):
+        def onePair(pts_i, wts_i, pts_j, wts_j):
             k_mat = jax.vmap(
                 lambda xi: jax.vmap(lambda yj: self.base_kernel(xi, yj))(pts_j)
             )(pts_i)
             return jnp.sum(wts_i[:, None] * wts_j[None, :] * k_mat)
 
-        def _over_j(pts_i, wts_i):
-            return jax.vmap(lambda pj, wj: _one_pair(pts_i, wts_i, pj, wj))(
+        def overJ(pts_i, wts_i):
+            return jax.vmap(lambda pj, wj: onePair(pts_i, wts_i, pj, wj))(
                 points_y, weights_y
             )
 
-        return jax.vmap(_over_j)(points_x, weights_x)  # (nx, ny)
+        return jax.vmap(overJ)(points_x, weights_x)  # (nx, ny)
 
 
 class BinIntegratedMeanFunction(AbstractMeanFunction):
@@ -217,7 +198,6 @@ class BinIntegratedMeanFunction(AbstractMeanFunction):
         points, weights = quad  # (n, nq, D), (n, nq)
 
         def _one_bin(pts, wts):
-            # pts: (nq, D), wts: (nq,)
             vals = self.base_mean_fn(pts)  # (nq, 1) or (nq,)
             vals = vals.squeeze(-1) if vals.ndim > 1 else vals
             return jnp.sum(wts * vals)
@@ -225,8 +205,7 @@ class BinIntegratedMeanFunction(AbstractMeanFunction):
         return jax.vmap(_one_bin)(points, weights).reshape(-1, 1)
 
 
-def _default_base_kernel():
-    """Lazy import to avoid circular dependency."""
+def getDefaultKern():
     from .standard import RBFConfig
 
     return RBFConfig()
@@ -234,7 +213,7 @@ def _default_base_kernel():
 
 @attrs.define
 class BinIntegratedKernelConfig(KernelConfig):
-    base_kernel: KernelConfig = attrs.Factory(lambda: _default_base_kernel())
+    base_kernel: KernelConfig = attrs.Factory(lambda: getDefaultKern())
     n_quad: int = 3
 
     def buildKernel(

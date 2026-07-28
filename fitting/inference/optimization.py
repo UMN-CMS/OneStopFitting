@@ -743,7 +743,6 @@ def runMCMC(
 
 
 def setAtPath(obj: Any, path: tuple[str, ...], value: Any) -> None:
-    """Helper to set an attribute or list element at a given path."""
     for part in path[:-1]:
         if isinstance(obj, (list, nnx.List)):
             obj = obj[int(part)]

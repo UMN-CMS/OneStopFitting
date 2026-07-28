@@ -32,27 +32,6 @@ def computeEnsemblePrediction(
     samples_list: list[dict[str, jnp.ndarray] | None] | None = None,
     losses: list[float] | None = None,
 ) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
-    """Compute ensemble-averaged prediction in real space.
-
-    For each seed, computes the posterior mean and covariance in real
-    space, then combines using BMA decomposition.
-
-    Args:
-        posteriors: List of trained posterior objects, one per seed.
-        datasets: List of training datasets (one per seed, or a single
-            dataset replicated).
-        test_data: BinnedData for prediction points.
-        transform: DataTransformation for converting to real space.
-        mode: How to combine predictions (average, median, best_mll).
-        rng_key: RNG key for predictions.
-        samples_list: Optional MCMC samples per seed (usually None).
-        losses: Final MLL losses per seed (needed for best_mll mode).
-
-    Returns:
-        (ensemble_mean, ensemble_cov, seed_means_arr) — the combined
-        mean and covariance in real space, plus all per-seed means
-        for downstream diagnostics.
-    """
     from .prediction import predictInRealSpace
 
     num_seeds = len(posteriors)

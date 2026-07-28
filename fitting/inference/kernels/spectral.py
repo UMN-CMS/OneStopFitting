@@ -16,14 +16,6 @@ from ..priors import PriorConfig
 
 
 class SpectralMixtureKernel(AbstractKernel):
-    """Spectral Mixture kernel (Wilson & Adams, 2013).
-
-    k(τ) = Σ_q w_q Π_d exp(-2π²τ_d²/ℓ_{q,d}²) cos(2πμ_{q,d}τ_d)
-
-    Parameters are stored with shapes weights (Q,), lengthscales (Q, D),
-    frequencies (Q, D).
-    """
-
     compute_engine: AbstractKernelComputation = attrs.field(
         factory=DenseKernelComputation
     )
@@ -54,8 +46,6 @@ class SpectralMixtureKernel(AbstractKernel):
 
 @attrs.define
 class SpectralMixtureConfig(KernelConfig):
-    """Spectral Mixture kernel (Wilson & Adams, 2013)."""
-
     n_components: int = 3
     ard: bool = True
     weight_prior: PriorConfig | None = None

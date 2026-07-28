@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 class Window(ABC):
     @abstractmethod
     def __call__(self, X: jnp.ndarray) -> jnp.ndarray:
-        """Return boolean mask: True for bins inside the window."""
+        """Return boolean mask: **True** for bins inside the window."""
         ...
 
 
@@ -75,6 +75,7 @@ class FunctionSliceWindow(Window):
             env["x2"] = X[..., 2]
 
         try:
+            # Use eval since we should only ever be running on trusted code
             mask = eval(self.expression, {"__builtins__": {}}, env)
             return jnp.asarray(mask, dtype=bool)
         except Exception as e:
@@ -200,6 +201,7 @@ def _numpyGaussian2D(X, amplitude, xo, yo, sigma_x, sigma_y, theta):
     )
 
 
+# Maybe should pivot to using jax native optimization?
 def fitGaussianWindow(signal_data: BinnedData, spread: float = 1.3) -> GaussianWindow:
     X_np = np.asarray(signal_data.X)
     Y_np = np.asarray(signal_data.Y)
@@ -236,7 +238,7 @@ def fitGaussianWindow(signal_data: BinnedData, spread: float = 1.3) -> GaussianW
         raise NotImplementedError(f"Gaussian window fitting for {ndim}D not supported")
 
 
-def _smoothedGrid2D(
+def smoothedGrid2D(
     X_np: np.ndarray, Y_np: np.ndarray, smooth_sigma: float
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     x0_vals = np.unique(X_np[:, 0])
@@ -253,7 +255,9 @@ def _smoothedGrid2D(
     return x0_vals, x1_vals, Y_smooth
 
 
-def _dilateHull(vertices: np.ndarray, margin: float) -> np.ndarray:
+def dilateHull(vertices: np.ndarray, margin: float) -> np.ndarray:
+    # Note that we dilate by a constant amount, not proprotional to the existing distance
+    # No real reason for this, and is probably the wrong choice.....
     centroid = vertices.mean(axis=0)
     directions = vertices - centroid
     radii = np.linalg.norm(directions, axis=1, keepdims=True)
@@ -269,6 +273,9 @@ def fitCoreDilatedWindow(
     smooth_sigma: float = 1.5,
     dilation_margin: float = 0.25,
 ) -> ConvexHullWindow:
+    """
+    Simply algorithm to approximating the "significant region" of a 2D bump.
+    """
     X_np = np.asarray(signal_data.X)
     Y_np = np.asarray(signal_data.Y)
     ndim = signal_data.ndim
@@ -311,10 +318,10 @@ def fitCoreDilatedWindow(
     elif ndim == 2:
         from scipy.spatial import ConvexHull
 
-        x0_vals_raw, x1_vals_raw, _ = _smoothedGrid2D(X_np, Y_np, smooth_sigma)
+        x0_vals_raw, x1_vals_raw, _ = smoothedGrid2D(X_np, Y_np, smooth_sigma)
         x0_vals = (x0_vals_raw - x_min[0]) / x_range[0]
         x1_vals = (x1_vals_raw - x_min[1]) / x_range[1]
-        _, _, Y_smooth = _smoothedGrid2D(X_norm, Y_np, smooth_sigma)
+        _, _, Y_smooth = smoothedGrid2D(X_norm, Y_np, smooth_sigma)
 
         peak = Y_smooth.max()
         if peak <= 0:
@@ -346,7 +353,7 @@ def fitCoreDilatedWindow(
         else:
             hull = ConvexHull(core_pts)
             core_verts = core_pts[hull.vertices]
-            hull_norm = _dilateHull(core_verts, dilation_margin)
+            hull_norm = dilateHull(core_verts, dilation_margin)
 
         logger.info(
             f"CoreDilatedWindow 2D: {n_core}/{mask_grid.size} core bins, "
@@ -363,22 +370,8 @@ def fitCoreDilatedWindow(
 
 @attrs.define
 class WindowConfig(ABC):
-    """Base class for declarative window configuration.
-
-    Subclasses are registered as a tagged union (``_type`` key) so they can
-    be round-tripped through YAML / JSON via the project ``cattrs`` converter.
-    """
-
     @abstractmethod
     def buildWindow(self, signal_data: BinnedData | None = None) -> Window:
-        """Construct a concrete ``Window`` from this configuration.
-
-        Parameters
-        ----------
-        signal_data : BinnedData | None
-            Signal histogram, required by data-driven strategies
-            (Gaussian, CoreDilated).  Static window types may ignore it.
-        """
         ...
 
 
