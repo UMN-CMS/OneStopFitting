@@ -117,6 +117,9 @@ def loadData(config: PipelineConfig) -> AnalysisState:
         rebin=bkg_rebin,
         variation="central",
     )
+    if config.override_background_variances:
+        background.V = jnp.ones_like(background.V) * config.override_background_variances
+
     logger.info(f"Background yield is {background.Y.sum():0.2f}.")
 
     file_metadata = extractMetadata(bkg_raw)
