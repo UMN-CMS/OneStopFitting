@@ -143,11 +143,16 @@ def makesubmitCmd(
             parsed_params[key] = yaml.safe_load("[" + vals + "]")
         jobs = expandParameters(jobs, parsed_params, output / "batch_configs")
 
+    combined_dir_format = None
+    if combined_subdir_format is not None:
+        combined_dir_format = str(output / combined_subdir_format),
+        
+
     plan = buildPlan(
         jobs=jobs,
         output_dir=output,
         combine_eras=parsed_eras,
-        combined_dir_format=str(output / combined_subdir_format),
+        combined_dir_format=combined_dir_format,
         group_by_fields=group_by_fields,
         venv_path=venv,
         container=container,
