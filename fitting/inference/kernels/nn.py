@@ -24,7 +24,7 @@ class Network(nnx.Module):
         input_dim: int,
         output_dim: int,
         shape: list[int],
-        activation_name: str = "silu",
+        activation_name: list[str],
         weight_prior: PriorConfig | None = None,
         bias_prior: PriorConfig | None = None,
         out_kernel_init=nnx.initializers.zeros,
@@ -82,9 +82,10 @@ class Network(nnx.Module):
                 self.scale = gpp.PositiveReal(output_scale_init)
 
     def __call__(self, x: jax.Array) -> jax.Array:
-        activation = getattr(jax.nn, self.activation_name)
+        activation = getattr(jax.nn, self.activation_name[0])
         z = activation(self.in_layer(x))
-        for layer in self.layers:
+        for i, layer in enumerate(self.layers):
+            activation = getattr(jax.nn, self.activation_name[i + 1])
             z = activation(layer(z))
         delta = self.out_layer(z)
         if self.output_residual:
@@ -188,12 +189,16 @@ class NNWarpingKernelConfig(KernelConfig):
     input_dim: int = 2
     output_dim: int = 2
     hidden_shapes: list[int] = attrs.Factory(lambda: [20, 20])
-    activation: str = "silu"
+    activation: list[str] = attrs.Factory(lambda: ["silu", "silu"])
     weight_prior: PriorConfig | None = None
     bias_prior: PriorConfig | None = None
     output_scale_prior: PriorConfig | None = None
     output_scale_init: float = 0.01
     axis_decoupled: bool = False
+
+    def __attrs__post_init__(self):
+        if len(self.activation) != len(self.hidden_shapes) + 1:
+            raise ValueError("activation must have length len(hidden_shapes) + 1")
 
     def buildKernel(
         self, ndim: int, rngs: nnx.Rngs | None = None, **kwargs
