@@ -43,9 +43,9 @@ else
         ARGS="-B $HOME,/uscmst1b_scratch,$(realpath "$HOME"),/uscms_data,/cvmfs,/etc/condor/,/usr/local/bin/cmslpc-local-conf.py,$(realpath .):$PWD"
     else
         if [[ -d $(realpath "$HOME/.config") ]]; then 
-            ARGS="-B $(realpath .):$PWD,/local/cms/user/ckapsiak/,$(realpath "$HOME"),/cvmfs,$(realpath "$HOME/.local"),$(realpath "$HOME/.cache"),$(realpath "$HOME/.config")"
+            ARGS="-B $(realpath .):$PWD,/local/cms/user/bendi083/,$(realpath "$HOME"),/cvmfs,$(realpath "$HOME/.local"),$(realpath "$HOME/.cache"),$(realpath "$HOME/.config")"
         else
-            ARGS="-B $(realpath .):$PWD,/local/cms/user/ckapsiak/,$(realpath "$HOME"),/cvmfs"
+            ARGS="-B $(realpath .):$PWD,/local/cms/user/bendi083/,$(realpath "$HOME"),/cvmfs"
         fi
         
     fi

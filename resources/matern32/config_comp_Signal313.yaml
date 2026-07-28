@@ -1,0 +1,43 @@
+injection_rate: 0.0
+min_counts: -1
+rebin: 2
+# window_variance_inflation: 1.5
+
+window:
+  _type: CoreDilatedWindowConfig
+  core_threshold_fraction: 0.7
+  dilation_margin: 0.2
+
+domain_window:
+  _type: CutWindowConfig
+  axis: 1
+  lower: 0.1
+
+optimization:
+  mode: optimization
+  objective: mll
+  num_iters: 500
+  optimizer: adam
+  lr: 0.005
+  weight_decay: 0.0001
+  grad_clip_norm: 0.5
+  schedule:
+    _type: WarmupCosineScheduleConfig
+    warmup_steps: 50
+
+
+model:
+  _type: ExactGPConfig
+  kernel:
+    _type: NNWarpingKernelConfig
+    hidden_shapes: [20,20]
+    base_kernel_config:
+      _type: Matern32Config
+  likelihood:
+    _type: FixedGaussianNoiseConfig
+    variance_floor_quantile: 0.20
+  mean_function:
+    _type: ConstantMeanConfig
+
+combine:
+  eigenvar_threshold: 0.001

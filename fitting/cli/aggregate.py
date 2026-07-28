@@ -132,13 +132,13 @@ def _saveGroupPlots(plots, output, points_group, formats, cms_extra):
 @click.option(
     "--stop-dotpath",
     type=str,
-    default="metadata.other_data.stop_mass",
+    default="metadata.sig.other_data.stop_mass",
     show_default=True,
 )
 @click.option(
     "--chi-dotpath",
     type=str,
-    default="metadata.other_data.chargino_mass",
+    default="metadata.sig.other_data.chargino_mass",
     show_default=True,
 )
 @click.option("--pval-mode", default=False, is_flag=True)
