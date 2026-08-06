@@ -208,7 +208,7 @@ def generateCombineScriptCmd(
     )
     combine_container = combine_cfg.get(
         "combine_container",
-        "/cvmfs/unpacked.cern.ch/gitlab-registry.cern.ch/cms-analysis/general/combine-container:latest",
+        "/cvmfs/unpacked.cern.ch/gitlab-registry.cern.ch/cms-analysis/general/combine-container:CMSSW_14_1_0_pre4-combine_v10.6.1-harvester_v3.1.0",
     )
 
     context = CombineContext(signal_labels=["signal"], channel_name="combined")

@@ -57,7 +57,7 @@ class CombineConfig:
     )
     eigenvar_threshold: float = 0.01
     bg_rate_uncertainty: str = "none"
-    combine_container: str = "/cvmfs/unpacked.cern.ch/gitlab-registry.cern.ch/cms-analysis/general/combine-container:latest"
+    combine_container: str = "/cvmfs/unpacked.cern.ch/gitlab-registry.cern.ch/cms-analysis/general/combine-container:CMSSW_14_1_0_pre4-combine_v10.6.1-harvester_v3.1.0"
     name_map: SystematicNameMap | None = DEFAULT_NAME_MAP
     rate_systematics: list[RateSystematic] = DEFAULT_RATE_SYSTEMATICS
     background_syst_prefix: str = "CMS_NPS_25_007"

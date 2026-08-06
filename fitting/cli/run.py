@@ -237,7 +237,7 @@ def runCmd(
             combine=CombineConfig(
                 combine_commands=list(combine_commands) if combine_commands else [],
                 combine_container=combine_container
-                or "/cvmfs/unpacked.cern.ch/gitlab-registry.cern.ch/cms-analysis/general/combine-container:latest",
+                or "/cvmfs/unpacked.cern.ch/gitlab-registry.cern.ch/cms-analysis/general/combine-container:CMSSW_14_1_0_pre4-combine_v10.6.1-harvester_v3.1.0",
             ),
             signal_pre_scale=signal_pre_scale,
         )
