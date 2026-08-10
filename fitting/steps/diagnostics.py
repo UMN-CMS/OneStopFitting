@@ -75,7 +75,10 @@ def runDiagnostics(state: AnalysisState, rng_key: jax.Array) -> AnalysisState:
     # likelihood_name = state.config.model.likelihood.__class__.__name__.lower()
     # if "poisson" in likelihood_name:
     #     likelihood_type = "poisson"
-    likelihood_type = "poisson"
+    if state.config.ppc_likelihood_type is not None:
+        likelihood_type =  state.config.ppc_likelihood_type
+    else:
+        likelihood_type = "poisson"
     # likelihood_type = "latent"
 
     ppc_results = posteriorPredictiveCheck(
