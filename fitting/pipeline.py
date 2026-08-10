@@ -102,6 +102,7 @@ class PipelineConfig:
     window_variance_increase: float | None = None
     signal_pre_scale: float = 16.0
     override_background_variances: float | None = None
+    ppc_likelihood_type: str | None = None
 
     @property
     def signalPaths(self) -> list[Path]:
