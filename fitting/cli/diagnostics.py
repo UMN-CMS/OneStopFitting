@@ -69,7 +69,11 @@ def smoothCmd(
     import pickle
     import jax
     from ..core.serialization import load
-    from ..steps.generators import generateSmoothedBackground, generateAsimovSmoothed
+    from ..steps.generators import (
+        generateSmoothedBackground,
+        generateAsimovSmoothed,
+        generateGPRUncSmoothed,
+    )
     from ..diagnostics.plot_utils import getPlotSaver
     from ..data.loading import (
         FileLoader,
@@ -133,6 +137,23 @@ def smoothCmd(
             analysis_state, rng_key, plot_saver=plot_saver
         )
         out_path = output_dir / "pure_smoothed.pklz4"
+        metadata = copy.deepcopy(analysis_state.metadata["bkg"])
+        with lz4.frame.open(out_path, "wb") as f:
+            to_save = {
+                "item": hist_asimov,
+                "metadata": metadata,
+            }
+            pickle.dump(to_save, f)
+
+        pure_plot_dir = output_dir / "pure_gpr_unc_smoothed_diagnostics"
+        plot_saver = getPlotSaver(
+            pure_plot_dir,
+            [analysis_state.metadata],
+            formats=analysis_state.config.image_formats,
+        )
+        pure_plot_dir.mkdir(exist_ok=True, parents=True)
+        hist_asimov = generateGPRUncSmoothed(analysis_state, rng_key, plot_saver=plot_saver)
+        out_path = output_dir / "pure_gpr_unc_smoothed.pklz4"
         metadata = copy.deepcopy(analysis_state.metadata["bkg"])
         with lz4.frame.open(out_path, "wb") as f:
             to_save = {

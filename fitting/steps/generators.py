@@ -74,6 +74,61 @@ def generateAsimovSmoothed(
 
     return h
 
+def generateGPRUncSmoothed(
+    state: AnalysisState,
+    rng_key: jax.Array,
+    plot_saver,
+) -> tuple[list[hist.Hist], dict[str, Any]]:
+    assert state.test_data is not None
+    assert state.transform is not None
+    assert state.background is not None
+
+    if state.training_result is None or state.dataset is None:
+        raise ValueError("Cannot generate smoothed background without training.")
+
+    pred_key, sample_key = random.split(rng_key)
+    test_data = state.test_data
+
+    pred_mean, pred_cov = predictInRealSpace(
+        posterior=state.training_result.posterior,
+        dataset_train=state.dataset,
+        test_data=state.test_data,
+        transform=state.transform,
+        samples=state.training_result.samples,
+        rng_key=pred_key,
+    )
+    if len(state.test_data.edges) == 2:
+        axis_x = hist.axis.Variable(
+            state.test_data.edges[0], name=state.test_data.axis_names[0]
+        )
+        axis_y = hist.axis.Variable(
+            state.test_data.edges[1], name=state.test_data.axis_names[1]
+        )
+        axes = [axis_x, axis_y]
+    else:
+        axis_x = hist.axis.Variable(
+            state.test_data.edges[0], name=state.test_data.axis_names[0]
+        )
+        axes = [axis_x]
+
+    h = hist.Hist(*axes, storage=hist.storage.Weight())
+    shape = tuple(len(edges) - 1 for edges in state.test_data.edges)
+    counts_grid = pred_mean.reshape(shape)
+    counts_grid = np.round(counts_grid)
+    counts_grid = np.maximum(counts_grid, 0)
+    h.view().value = counts_grid
+    h.view().variance = np.diag(pred_cov).reshape(shape)
+    b_data = histToBinnedData(h, rebin=1, variation=None)
+    makeSmoothingPlots(
+        smoothed_data=b_data,
+        original_data=state.background,
+        pred_mean=pred_mean,
+        plot_saver=plot_saver,
+        pred_cov=pred_cov,
+    )
+
+    return h
+
 
 def generateSmoothedBackground(
     state: AnalysisState,

@@ -115,7 +115,7 @@ def _inferCoupling(gathered: list[dict]) -> str:
 
 
 def _computePointDiagnosis(
-    mstop: float, mchi: float, toys: list[dict], use_ppc_pval=False
+    mstop: float, mchi: float, toys: list[dict], use_ppc_pval=True
 ) -> PointDiagnosis:
     r_vals = []
     r_err_vals = []
