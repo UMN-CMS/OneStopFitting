@@ -349,7 +349,6 @@ def makeAggregateMassPlanePlot(
     )
     cax = mplhep.append_axes(ax, size="5%", pad=0.05, position="right")
     cb = fig.colorbar(sc, cax=cax)
-
     cb.set_label(colorbar_label or metric_name)
     ax.set_xlabel(r"$m_{\tilde{t}}$ [GeV]")
     ax.set_ylabel(r"$m_{\tilde{\chi}^{\pm}}$ [GeV]")

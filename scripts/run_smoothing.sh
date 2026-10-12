@@ -1,17 +1,13 @@
 #!/bin/bash
 
 # Default values
-OUTPUT_BASE=${1:-"smoothed_complete_backgrounds/{era.name}/{pipeline}/"}
+OUTPUT_BASE=${1:-"smoothed_1d_verycomp_sel/{bkg.era.name}"}
 PYTHON=".venv/bin/python"
 
 # Signal versions and categories
-YEARS=${2:-"2016,2017,2018,Run3"}  # Comma-separated or space-separated years
-# VERSIONS=("Signal313" "Signal312")
-# CATEGORIES=("comp" "uncomp" "verycomp")
-
-# YEARS=${2:-"2016"}  # Comma-separated or space-separated years
-VERSIONS=("Signal313" )
-CATEGORIES=("comp" "uncomp" "verycomp")
+YEARS=${2:-"2018"}  # Comma-separated or space-separated years
+VERSIONS=("Signal312VeryComp" "Signal313VeryComp")
+CATEGORIES=("comp")
 
 # Convert YEARS to an array
 IFS=', ' read -r -a YEAR_ARRAY <<< "$YEARS"
@@ -24,9 +20,10 @@ for YEAR in "${YEAR_ARRAY[@]}"; do
         for CATEGORY in "${CATEGORIES[@]}"; do
             echo "Processing year: $YEAR, version: $VERSION, category: $CATEGORY"
             
-            BG_FILE="combined_backgrounds/$VERSION/${YEAR}/sm_bkg/${CATEGORY}_mStop_vs_mChiRatio.pklz4"
-            CONFIG="resources/smoothing_configs/config_${CATEGORY}_${VERSION}.yaml"
-            OUT_DIR="${OUTPUT_BASE}/${CATEGORY}"
+            BG_FILE="2026_09_10__dbs_verycomp_sel_w_1d_dump/${VERSION}/${YEAR}/sm_bkg/${CATEGORY}_mStop.pklz4"
+
+            CONFIG="resources/smoothing_configs_1d/config_${CATEGORY}_${VERSION}.yaml"
+            OUT_DIR="${OUTPUT_BASE}/${VERSION}/${CATEGORY}"
             
             if [ ! -f "$BG_FILE" ]; then
                 echo "Skipping: $BG_FILE not found."
@@ -62,7 +59,7 @@ for YEAR in "${YEAR_ARRAY[@]}"; do
                 --name "$CATEGORY" \
                 --output-dir "$SMOOTHED_OUTPUT" \
                 --num-samples 100 \
-                --scale-to "combined_backgrounds/${VERSION}/${YEAR}/data/${CATEGORY}_mStop_vs_mChiRatio.pklz4"
+                --scale-to "2026_09_10__dbs_verycomp_sel_w_1d_dump/${VERSION}/${YEAR}/data/${CATEGORY}_mStop.pklz4"
 
             echo "Completed: $CATEGORY for $YEAR/$VERSION"
             echo "----------------------------------------"

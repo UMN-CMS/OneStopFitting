@@ -372,8 +372,8 @@ def makeSlicePlots2D(
         return
 
     if blind_mask is None or not np.any(np.asarray(blind_mask)):
-        logger.info("makeSlicePlots2D: no blind mask provided; skipping slice plots")
-        return
+        blind_mask = np.ones_like(pred_mean, dtype=int)
+        logger.info("makeSlicePlots2D: no blind mask provided; using np.ones_like(pred_mean)")
 
     X = np.asarray(test_data.X)
 

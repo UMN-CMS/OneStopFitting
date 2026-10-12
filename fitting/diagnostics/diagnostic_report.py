@@ -131,7 +131,6 @@ def _computePointDiagnosis(
             gof = toy["ppc"]["test_stats"]["chi2"]["blinded"]["pvalue"]
         else:
             gof = combine.get("gof_p_value")
-
         if r is not None and r_err is not None:
             r_vals.append(float(r))
             r_err_vals.append(float(r_err))
@@ -144,13 +143,11 @@ def _computePointDiagnosis(
 
     r_arr = np.array(r_vals) if r_vals else np.array([0.0])
     r_err_arr = np.array(r_err_vals) if r_err_vals else np.array([1.0])
-
     median_r = float(np.median(r_arr))
     median_r_err = float(np.median(r_err_arr))
     mean_r = float(np.mean(r_arr))
     std_r = float(np.std(r_arr, ddof=1)) if len(r_arr) > 1 else 0.0
     coverage = float(np.mean(np.abs(r_arr) < r_err_arr))
-
     gof_stats = computeBasicStatistics(gof_pvals)
     gof_stats.update(computePValueStats(gof_pvals))
     gof_ks = gof_stats.get("ks_pvalue_uniform")
@@ -476,17 +473,18 @@ def plotVerdictMap(report: DiagnosticReport) -> tuple[plt.Figure, plt.Axes]:
     cat_handles = [
         Patch(facecolor="none", edgecolor=c, label=n) for n, c in CAT_COLORS.items()
     ]
-    ax.legend(
-        handles=cat_handles,
-        title="Category",
-        loc="lower right",
-        fontsize="small",
-        framealpha=0.9,
-    )
+    #ax.legend(
+    #    handles=cat_handles,
+    #   title="Category",
+    #    loc="lower right",
+    #    fontsize="small",
+    #    framealpha=0.9,
+    #)
     _addCMSLabel(
         ax,
         report,
         f"GOF KS $p$-value\n{report.n_ok} OK, {report.n_conservative} CONS, {report.n_dangerous} DANG",
+    #    f"GOF KS $p$-value",
     )
     return fig, ax
 
