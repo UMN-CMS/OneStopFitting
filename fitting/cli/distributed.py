@@ -7,8 +7,8 @@ import yaml
 
 
 @click.command("makesubmit")
-@click.option("--signal", required=True, multiple=True, help="Signal pattern")
-@click.option("--background", required=True, help="Background pattern")
+@click.option("--signal", multiple=True, help="Signal pattern")
+@click.option("--background", default=None, help="Background pattern")
 @click.option("--years", multiple=True, required=True, help="Years to process")
 @click.option("--pipelines", multiple=True, required=True, help="Pipelines to process")
 @click.option("--config-pattern", "-c", type=str, help="Config file pattern")
@@ -64,9 +64,37 @@ import yaml
     default=None,
     help="YAML match rules file",
 )
+@click.option(
+    "--fit-plan",
+    type=click.Path(exists=True, path_type=Path),
+    default=None,
+    help="Python fit plan (a .py file defining PLAN = FitPlan(...)) routing mass "
+    "points to fit profiles, e.g. 1D vs 2D. Replaces --signal, --background and "
+    "--config-pattern.",
+)
+@click.option(
+    "--all-matching-profiles",
+    is_flag=True,
+    default=False,
+    help="With --fit-plan, run every matching profile plus the default for each "
+    "point, instead of only the first match. Requires {fit_mode} in --subdir-format.",
+)
+@click.option(
+    "--allow-missing-profile-inputs",
+    is_flag=True,
+    default=False,
+    help="With --fit-plan, skip (with a warning) jobs assigned to a profile that has "
+    "no input files for them, instead of failing.",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    default=False,
+    help="Print which profile/config each job gets and exit without writing anything.",
+)
 def makesubmitCmd(
     signal: tuple[str, ...],
-    background: str,
+    background: str | None,
     years: tuple[str, ...],
     pipelines: tuple[str, ...],
     config_pattern: str | None,
@@ -83,16 +111,52 @@ def makesubmitCmd(
     extra_params: tuple[str, ...],
     match_rules_cli: tuple[str, ...] | None,
     match_rule_config: Path | None,
+    fit_plan: Path | None,
+    all_matching_profiles: bool,
+    allow_missing_profile_inputs: bool,
+    dry_run: bool,
 ) -> None:
     """Generate HTCondor submit files."""
     from ..utils import MatchRules
     from ..distributed.condor_tools import (
         makeEraJobs,
+        makePlannedEraJobs,
         mergeSignals,
+        formatJobTable,
+        groupIntoJobs,
+        DEFAULT_ERA_GROUP_FIELDS,
         buildPlan,
         generateFiles,
     )
     from ..distributed.batch_tools import expandParameters
+    from ..distributed.fit_plan import loadFitPlan
+
+    plan = None
+    if fit_plan is not None:
+        if signal or background or config_pattern:
+            raise click.UsageError(
+                "--fit-plan replaces --signal, --background and --config-pattern; "
+                "set those per profile in the plan instead."
+            )
+        plan = loadFitPlan(fit_plan)
+    else:
+        if not signal or not background:
+            raise click.UsageError(
+                "Must specify either --fit-plan or both --signal and --background."
+            )
+        if all_matching_profiles:
+            raise click.UsageError("--all-matching-profiles requires --fit-plan.")
+
+    if all_matching_profiles:
+        for name, fmt in (
+            ("--subdir-format", subdir_format),
+            ("--combined-subdir-format", combined_subdir_format),
+        ):
+            if fmt is not None and "{fit_mode}" not in fmt:
+                raise click.UsageError(
+                    f"{name} must contain {{fit_mode}} with --all-matching-profiles, "
+                    "otherwise 1D and 2D outputs of the same point overwrite each other."
+                )
 
     if match_rules_cli:
         match_rules = MatchRules.fromCLI(match_rules_cli)
@@ -108,10 +172,31 @@ def makesubmitCmd(
     group_by_fields = (
         tuple(f.strip() for f in group_by_str.split(",")) if group_by_str else None
     )
+    if plan is not None and group_by_fields and "fit_mode" not in group_by_fields:
+        # Never combine eras fit with different profiles into one job
+        group_by_fields = group_by_fields + ("fit_mode",)
 
     toys = range(num_toys) if num_toys else [0]
     jobs = []
     for t in toys:
+        if plan is not None:
+            try:
+                planned = makePlannedEraJobs(
+                    plan=plan,
+                    years=list(years),
+                    pipelines=list(pipelines),
+                    output_dir=str(output / subdir_format),
+                    toy_index=t + toy_offset,
+                    match_rules=match_rules,
+                    all_matching=all_matching_profiles,
+                    allow_missing=allow_missing_profile_inputs,
+                )
+            except FileNotFoundError as e:
+                # Missing inputs are an expected user-facing error; anything else
+                # (e.g. a bug in the plan's choose()) keeps its full traceback
+                raise click.ClickException(str(e))
+            jobs.extend(planned)
+            continue
         jobs.extend(
             makeEraJobs(
                 signal_pattern=signal,
@@ -136,6 +221,18 @@ def makesubmitCmd(
         jobs = mergeSignals(jobs)
         print(f"Merged into {len(jobs)} multi-signal jobs")
 
+    if dry_run:
+        print("\n".join(formatJobTable(jobs)))
+        # Grouping only logs; it shows era groups dropped as incomplete
+        groups = groupIntoJobs(
+            jobs, parsed_eras, group_by_fields or DEFAULT_ERA_GROUP_FIELDS
+        )
+        print(
+            f"Dry run: {len(jobs)} era-job(s) -> {len(groups)} condor job(s), "
+            "nothing written."
+        )
+        return
+
     if extra_params:
         parsed_params = {}
         for p in extra_params:
@@ -145,10 +242,10 @@ def makesubmitCmd(
 
     combined_dir_format = None
     if combined_subdir_format is not None:
-        combined_dir_format = str(output / combined_subdir_format),
+        combined_dir_format = str(output / combined_subdir_format)
         
 
-    plan = buildPlan(
+    submission = buildPlan(
         jobs=jobs,
         output_dir=output,
         combine_eras=parsed_eras,
@@ -157,8 +254,8 @@ def makesubmitCmd(
         venv_path=venv,
         container=container,
     )
-    submit_path = generateFiles(plan)
-    print(f"Generated {len(plan.job_groups)} jobs in {submit_path}")
+    submit_path = generateFiles(submission)
+    print(f"Generated {len(submission.job_groups)} jobs in {submit_path}")
 
 
 @click.command("generate-combine-script")

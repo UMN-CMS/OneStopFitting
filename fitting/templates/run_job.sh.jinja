@@ -21,7 +21,20 @@ ls -alhtr
 
 export MPLCONFIGDIR=$_CONDOR_SCRATCH_DIR
 
+# "-" means unset (condor queue lists cannot hold empty values)
+function fit_mode_args {
+    local args=""
+    if [ -n "$FIT_MODE" ] && [ "$FIT_MODE" != "-" ]; then
+        args="$args --fit-mode \"$FIT_MODE\""
+    fi
+    if [ -n "$FIT_NDIM" ] && [ "$FIT_NDIM" != "-" ]; then
+        args="$args --expect-ndim $FIT_NDIM"
+    fi
+    echo "$args"
+}
+
 function resolve_output {
+    local sig_args=""
     IFS='|' read -ra sig_array <<< "$SIGNALS"
     for s in "${sig_array[@]}"; do
         sig_args="$sig_args --signal \"$s\""
@@ -30,6 +43,7 @@ function resolve_output {
         --background \"$BACKGROUND\" \
         $sig_args \
         --config \"$CONFIG\" \
+        $(fit_mode_args) \
         --output-format \"$OUTPUT_DIR_FORMAT\"")
     echo >&2 "ACTUAL OUTPUT: $resolved"
     echo "$resolved"
@@ -43,7 +57,7 @@ function run_single_era {
     done
 
     local actual_output=$(resolve_output "$sig_args")
-    run_fit "python3 -m fitting run $sig_args --background \"$BACKGROUND\" --output \"$OUTPUT_DIR_FORMAT\" --config \"$CONFIG\""
+    run_fit "python3 -m fitting run $sig_args --background \"$BACKGROUND\" --output \"$OUTPUT_DIR_FORMAT\" --config \"$CONFIG\" $(fit_mode_args)"
 
     local latex_script="${actual_output}/_latex_build/build_report.sh"
     if [[ -f "$latex_script" ]]; then
@@ -76,6 +90,8 @@ IFS='@' read -ra BKG_ARRAY <<< "$ERA_BACKGROUNDS"
 IFS='@' read -ra SIG_ARRAY <<< "$ERA_SIGNALS"
 IFS='@' read -ra CFG_ARRAY <<< "$ERA_CONFIGS"
 IFS='@' read -ra OUT_ARRAY <<< "$ERA_OUTPUTS"
+IFS='@' read -ra FIT_MODE_ARRAY <<< "$ERA_FIT_MODES"
+IFS='@' read -ra NDIM_ARRAY <<< "$ERA_NDIMS"
 
 
 
@@ -97,6 +113,8 @@ for i in "${!ERAS[@]}"; do
     export BACKGROUND="${BKG_ARRAY[$i]}"
     export CONFIG="${CFG_ARRAY[$i]}"
     export OUTPUT_DIR_FORMAT="${OUT_ARRAY[$i]}"
+    export FIT_MODE="${FIT_MODE_ARRAY[$i]}"
+    export FIT_NDIM="${NDIM_ARRAY[$i]}"
 
     actual_output=$(resolve_output)
     echo "ACTUAL OUTPUT IS '$actual_output'"

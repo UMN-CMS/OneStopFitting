@@ -103,6 +103,10 @@ class PipelineConfig:
     signal_pre_scale: float = 16.0
     override_background_variances: float | None = None
     ppc_likelihood_type: str | None = None
+    # Label of the fit-plan profile this run belongs to (e.g. "1d", "2d")
+    fit_mode: str | None = None
+    # If set, loading fails unless background and signals have this many axes
+    expected_ndim: int | None = None
 
     @property
     def signalPaths(self) -> list[Path]:

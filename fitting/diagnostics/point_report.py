@@ -93,6 +93,9 @@ def _requireFile(path: Path) -> None:
 def _inferNdim(
     summary: dict[str, Any], diagnostics_dir: Path, image_format: str
 ) -> int:
+    if "ndim" in summary:
+        return int(summary["ndim"])
+    # Older summaries do not record ndim
     meta = summary.get("metadata", {})
     name = str(meta.get("name", ""))
     if "vs" in name:

@@ -81,6 +81,9 @@ def getSummary(state: AnalysisState):
         "metadata": converter.unstructure(state.metadata),
     }
 
+    if state.background is not None:
+        summary["ndim"] = state.background.ndim
+
     if state.blind_mask is not None:
         summary["blind_mask_size"] = int(state.blind_mask.sum())
 

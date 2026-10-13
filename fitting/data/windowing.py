@@ -14,6 +14,20 @@ from ..core.data import BinnedData
 logger = logging.getLogger(__name__)
 
 
+def _dataNdim(X: jnp.ndarray) -> int:
+    return X.shape[-1] if X.ndim > 1 else 1
+
+
+def _checkAxisSize(window: str, name: str, size: int, X: jnp.ndarray) -> None:
+    # JAX clamps out-of-range indices and broadcasts silently, so check explicitly
+    ndim = _dataNdim(X)
+    if size not in (1, ndim):
+        raise ValueError(
+            f"{window}: {name} has {size} entries but the data is {ndim}D. "
+            f"For 1D fits set domain_window/window explicitly (e.g. domain_window: null)."
+        )
+
+
 @attrs.define
 class Window(ABC):
     @abstractmethod
@@ -53,6 +67,12 @@ class CutWindow(Window):
     upper: float = jnp.inf
 
     def __call__(self, X: jnp.ndarray) -> jnp.ndarray:
+        ndim = _dataNdim(X)
+        if not -ndim <= self.axis < ndim:
+            raise ValueError(
+                f"CutWindow: axis={self.axis} does not exist for {ndim}D data. "
+                f"For 1D fits set domain_window explicitly (e.g. domain_window: null)."
+            )
         return (X[:, self.axis] >= self.lower) & (X[:, self.axis] <= self.upper)
 
 
@@ -148,6 +168,8 @@ class RectangularWindow(Window):
     def __call__(self, X: jnp.ndarray) -> jnp.ndarray:
         lower = jnp.atleast_1d(self.lower)
         upper = jnp.atleast_1d(self.upper)
+        _checkAxisSize("RectangularWindow", "lower", lower.size, X)
+        _checkAxisSize("RectangularWindow", "upper", upper.size, X)
         inside = jnp.all((X >= lower) & (X <= upper), axis=-1)
         return inside
 
@@ -158,6 +180,8 @@ class EllipseWindow(Window):
     axes: jnp.ndarray = attrs.field(factory=lambda: jnp.array([0.1, 0.1]))
 
     def __call__(self, X: jnp.ndarray) -> jnp.ndarray:
+        _checkAxisSize("EllipseWindow", "center", jnp.size(self.center), X)
+        _checkAxisSize("EllipseWindow", "axes", jnp.size(self.axes), X)
         rel = ((X - self.center) ** 2) / self.axes**2
         return jnp.sum(rel, axis=-1) <= 1.0
 

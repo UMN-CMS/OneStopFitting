@@ -10,12 +10,21 @@ from collections import defaultdict
 from pathlib import Path
 
 import yaml
+import attrs
 from attrs import define
 from jinja2 import Environment, FileSystemLoader
 
 import fitting
 from .file_tools import tarDirectory, tarFiles
-from ..utils import getSignal, getCategory, getRecoCategory, MatchRules, deepCommonDict
+from ..utils import (
+    getSignal,
+    getCategory,
+    getRecoCategory,
+    MatchRules,
+    deepCommonDict,
+    formatLines,
+)
+from .fit_plan import FitPlan, Point
 
 logger = logging.getLogger("fitting")
 
@@ -31,8 +40,17 @@ DEFAULT_ERA_GROUP_FIELDS = (
     "pipeline",
     "toy_index",
     "config",
+    "fit_mode",
 )
-DEFAULT_SIGNAL_GROUP_FIELDS = ("mstop", "mchi", "category", "era", "background")
+DEFAULT_SIGNAL_GROUP_FIELDS = (
+    "mstop",
+    "mchi",
+    "category",
+    "era",
+    "background",
+    "fit_mode",
+)
+NO_VALUE = "-"
 
 
 @define
@@ -43,6 +61,7 @@ class EraJob:
     config: str
     output_dir: str
     metadata: dict[str, str]
+    expected_ndim: int | None = None
 
     @property
     def all_meta(self):
@@ -99,14 +118,7 @@ def mergeSignals(
     for _, group in groupBy(jobs, fields).items():
         base = group[0]
         merged.append(
-            EraJob(
-                era=base.era,
-                background=base.background,
-                signals=[s for j in group for s in j.signals],
-                config=base.config,
-                output_dir=base.output_dir,
-                metadata=base.metadata,
-            )
+            attrs.evolve(base, signals=[s for j in group for s in j.signals])
         )
     return merged
 
@@ -159,19 +171,26 @@ def makeEraJobs(
     config_pattern: str,
     toy_index: int | None = None,
     match_rules: MatchRules | None = None,
+    require_background: bool = True,
 ) -> list[EraJob]:
-    """You glob then you job"""
+    """You glob then you job
+
+    With require_background=False, jobs whose background file is missing are
+    still returned, so callers that filter jobs can check only the ones they keep.
+    """
     jobs = []
     for bkg_year, pipeline in it.product(years, pipelines):
         logger.info(f"Handling background year {bkg_year} and pipeline {pipeline}")
-        syp = match_rules.resolve(bkg_year, "year") if match_rules else [bkg_year]
+        syp = match_rules.resolve(bkg_year, "year") if match_rules else bkg_year
         logger.info(f"Signal year pattern: {syp}")
 
         sig_files: set[str] = set()
         for p in signal_pattern:
             sig_files |= set(
                 glob.glob(
-                    p.replace("{category}", "*").format(year=syp, pipeline=pipeline),
+                    p.replace("{category}", "*")
+                    .replace("{reco_category}", "*")
+                    .format(year=syp, pipeline=pipeline),
                     recursive=True,
                 )
             )
@@ -231,7 +250,7 @@ def makeEraJobs(
                 toy_index=toy_index,
                 reco_category=reco_category,
             )
-            if not Path(bkg_file).exists():
+            if require_background and not Path(bkg_file).exists():
                 raise FileNotFoundError(f"Background not found: {bkg_file}")
 
             jobs.append(
@@ -251,12 +270,171 @@ def makeEraJobs(
                         "category": category,
                         "pipeline": pipeline,
                         "reco_category": reco_category,
-                        "coupling": pipeline.removeprefix("Signal"),
+                        "coupling": str(sig_params[0]),
                         "toy_index": str(toy_index or 0),
                     },
                 )
             )
     return jobs
+
+
+def _jobPoint(job: EraJob) -> Point:
+    m = job.metadata
+    return Point(
+        mstop=int(m["mstop"]),
+        mchi=int(m["mchi"]),
+        coupling=m["coupling"],
+        category=m["category"],
+        reco_category=m["reco_category"],
+        year=job.era,
+        pipeline=m["pipeline"],
+        toy_index=int(m["toy_index"]),
+    )
+
+
+def formatJobTable(jobs: list[EraJob]) -> list[str]:
+    """One line per job: which fit profile and config each point gets."""
+
+    def sortKey(j):
+        m = j.metadata
+        return (j.era, m["coupling"], int(m["mstop"]), int(m["mchi"]),
+                m["reco_category"], m["toy_index"], m.get("fit_mode", NO_VALUE))
+
+    rows = [["era", "coupling", "mstop", "mchi", "reco_cat", "toy", "fit_mode", "ndim", "config"]]
+    for j in sorted(jobs, key=sortKey):
+        m = j.metadata
+        rows.append([
+            j.era, m["coupling"], m["mstop"], m["mchi"], m["reco_category"],
+            m["toy_index"], m.get("fit_mode", NO_VALUE),
+            str(j.expected_ndim or NO_VALUE), j.config,
+        ])
+    return formatLines(rows)
+
+
+_JOB_KEY_FIELDS = ("era", "pipeline", "coupling", "category", "mstop", "mchi", "reco_category", "toy")
+
+
+def _jobKey(job: EraJob) -> tuple:
+    m = job.metadata
+    return (
+        job.era,
+        m["pipeline"],
+        m["coupling"],
+        m["category"],
+        int(m["mstop"]),
+        int(m["mchi"]),
+        m["reco_category"],
+        m["toy_index"],
+    )
+
+
+def _formatJobKey(key: tuple) -> str:
+    return " ".join(f"{f}={v}" for f, v in zip(_JOB_KEY_FIELDS, key))
+
+
+def makePlannedEraJobs(
+    plan: FitPlan,
+    years: list[str],
+    pipelines: list[str],
+    output_dir: str,
+    toy_index: int | None = None,
+    match_rules: MatchRules | None = None,
+    all_matching: bool = False,
+    allow_missing: bool = False,
+) -> list[EraJob]:
+    """Build EraJobs for every profile in a fit plan and keep the assigned ones.
+
+    A job is identified by _JOB_KEY_FIELDS. Every profile's patterns are
+    globbed independently; each job is then kept only for the profile(s) the
+    plan assigns it to. A job assigned to a profile that has no inputs for it
+    is an error, unless allow_missing is set, in which case it is skipped with
+    a warning (it is never silently refit with another profile).
+    """
+    by_key: dict[tuple, dict[str, EraJob]] = defaultdict(dict)
+    for name, profile in plan.profiles.items():
+        logger.info(f"Collecting jobs for fit profile '{name}'")
+        profile_jobs = makeEraJobs(
+            signal_pattern=tuple(profile.signal),
+            background_pattern=profile.background,
+            years=years,
+            pipelines=pipelines,
+            output_dir=output_dir,
+            config_pattern=profile.config,
+            toy_index=toy_index,
+            match_rules=match_rules,
+            require_background=False,
+        )
+        for job in profile_jobs:
+            job = attrs.evolve(
+                job,
+                metadata=job.metadata | {"fit_mode": name},
+                expected_ndim=profile.ndim,
+            )
+            by_key[_jobKey(job)][name] = job
+
+    selected: list[EraJob] = []
+    missing: dict[str, list[tuple]] = defaultdict(list)
+    n_extra = 0
+    for key in sorted(by_key, key=str):
+        jobs_by_profile = by_key[key]
+        point = _jobPoint(next(iter(jobs_by_profile.values())))
+        for name in plan.assign(point, all_matching=all_matching):
+            if name in jobs_by_profile:
+                selected.append(jobs_by_profile[name])
+            elif name == plan.default:
+                # The default profile defines which jobs exist: a job found only in
+                # another profile's inputs but routed to the default is not a gap
+                n_extra += 1
+            else:
+                missing[name].append(key)
+
+    if n_extra:
+        logger.info(
+            f"Ignored {n_extra} job(s) found only in non-default profile inputs and "
+            f"routed to the default profile '{plan.default}'"
+        )
+
+    if missing and not allow_missing:
+        lines = [
+            f"  [{name}] {_formatJobKey(k)}" for name, keys in missing.items() for k in keys
+        ]
+        raise FileNotFoundError(
+            f"{len(lines)} job(s) are assigned to a profile that has no inputs for them:\n"
+            + "\n".join(lines)
+            + "\nFix the plan's choose() or the profile patterns, or pass "
+            "--allow-missing-profile-inputs to skip these jobs."
+        )
+
+    no_bkg = [j for j in selected if not Path(j.background).exists()]
+    if no_bkg:
+        listing = "\n".join(f"  [{j.metadata['fit_mode']}] {j.background}" for j in no_bkg)
+        raise FileNotFoundError(f"Backgrounds not found for {len(no_bkg)} job(s):\n{listing}")
+
+    _logPlanSummary(plan, selected, missing)
+    return selected
+
+
+def _logPlanSummary(plan: FitPlan, selected: list[EraJob], missing: dict[str, list[tuple]]):
+    counts = defaultdict(int)
+    for j in selected:
+        counts[j.metadata["fit_mode"]] += 1
+    for name in plan.profiles:
+        logger.info(f"Fit profile '{name}': {counts[name]} job(s)")
+
+    for name, keys in missing.items():
+        logger.warning(
+            f"{len(keys)} job(s) assigned to profile '{name}' have no '{name}' inputs "
+            f"and will NOT be run:"
+        )
+        for k in keys:
+            logger.warning("  " + _formatJobKey(k))
+
+    non_default = sorted(
+        {(j.metadata["fit_mode"], j.metadata["coupling"], int(j.metadata["mstop"]), int(j.metadata["mchi"]))
+         for j in selected if j.metadata["fit_mode"] != plan.default}
+    )
+    for mode, coupling, mstop, mchi in non_default:
+        logger.info(f"  [{mode}] coupling={coupling} mstop={mstop} mchi={mchi}")
 
 
 def compressNeededFiles(venv_path, condor_temp_loc, extra_files=None):
@@ -335,6 +513,13 @@ def _renderJobGroup(group: JobGroup) -> dict:
         "era_signals": d.join("|".join(j.signals) for j in group.era_jobs),
         "era_configs": d.join(j.config for j in group.era_jobs),
         "era_outputs": d.join(j.output_dir for j in group.era_jobs),
+        "era_fit_modes": d.join(
+            j.metadata.get("fit_mode", NO_VALUE) for j in group.era_jobs
+        ),
+        "era_ndims": d.join(
+            str(j.expected_ndim) if j.expected_ndim else NO_VALUE
+            for j in group.era_jobs
+        ),
         "combined_output_format": group.combined_output_format or "$(BLANK)",
     }
 

@@ -83,6 +83,21 @@ def _haveDifferentBinning(h1, h2) -> bool:
     return False
 
 
+def _checkDimensions(config, background, signals) -> None:
+    if config.expected_ndim is not None and background.ndim != config.expected_ndim:
+        raise ValueError(
+            f"Fit mode '{config.fit_mode}' expects {config.expected_ndim}D inputs, but "
+            f"background {config.background_path} is {background.ndim}D "
+            f"(axes {background.axis_names})."
+        )
+    for label, sig in signals.items():
+        if sig.ndim != background.ndim:
+            raise ValueError(
+                f"Signal '{label}' is {sig.ndim}D (axes {sig.axis_names}) but background "
+                f"is {background.ndim}D (axes {background.axis_names})."
+            )
+
+
 def loadData(config: PipelineConfig) -> AnalysisState:
     """Load background and optional signal data."""
 
@@ -121,10 +136,12 @@ def loadData(config: PipelineConfig) -> AnalysisState:
         background.V = jnp.ones_like(background.V) * config.override_background_variances
 
     logger.info(f"Background yield is {background.Y.sum():0.2f}.")
+    _checkDimensions(config, background, signals)
 
     file_metadata = extractMetadata(bkg_raw)
     combined_metadata = {
         "bkg": file_metadata,
+        "fit_mode": config.fit_mode or "default",
     }
 
     logger.info(f"Loaded {len(signals)} signals")
@@ -150,6 +167,7 @@ def loadData(config: PipelineConfig) -> AnalysisState:
         injection_signal = histToBinnedData(
             inj_hist, rebin=config.rebin, variation="central"
         )
+        _checkDimensions(config, background, {"injection": injection_signal})
         injection_signal_metadata = extractMetadata(inj_raw)
         logger.info(
             f"Loaded injection signal, total events = {float(injection_signal.Y.sum())}"

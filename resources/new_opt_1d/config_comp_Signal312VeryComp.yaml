@@ -7,10 +7,8 @@ window:
   core_threshold_fraction: 0.6
   dilation_margin: 0.2
 
-domain_window:
-  _type: CutWindowConfig
-  axis: 1
-  lower: 0.1
+# 1D (mStop only) fit: no mChiRatio axis to cut on
+domain_window: null
 
 optimization:
   mode: optimization

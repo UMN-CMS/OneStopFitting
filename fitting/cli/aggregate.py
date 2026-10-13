@@ -232,7 +232,6 @@ def massPlaneCmd(
     fmt_name = name_format or "{plot_type}_{metric_name}"
 
     for k, p in points.items():
-        breakpoint()
         fmt, fmt_ctx = _makeFmt(p, k)
         get_val = lambda x: x.stats.get(value_func, x.stats.get("median"))
 

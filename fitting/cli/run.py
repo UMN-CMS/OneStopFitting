@@ -127,6 +127,18 @@ from ..pipeline import PipelineStep
     type=str,
     help="Combine container image path.",
 )
+@click.option(
+    "--fit-mode",
+    type=str,
+    default=None,
+    help="Fit-plan profile label for this run (recorded in metadata as fit_mode).",
+)
+@click.option(
+    "--expect-ndim",
+    type=int,
+    default=None,
+    help="Fail unless the input histograms have this many axes.",
+)
 def runCmd(
     config: Path | None,
     background: Path | None,
@@ -155,6 +167,8 @@ def runCmd(
     combine_commands: tuple[str, ...],
     combine_container: str | None,
     signal_pre_scale: float,
+    fit_mode: str | None,
+    expect_ndim: int | None,
 ) -> None:
     from ..core.serialization import converter
     from ..pipeline import (
@@ -195,6 +209,10 @@ def runCmd(
             raw["rng_seed"] = seed
         if signal_pre_scale is not None:
             raw["signal_pre_scale"] = signal_pre_scale
+        if fit_mode is not None:
+            raw["fit_mode"] = fit_mode
+        if expect_ndim is not None:
+            raw["expected_ndim"] = expect_ndim
         if num_iters is not None:
             raw["optimization"]["num_iters"] = num_iters
         if lr is not None:
@@ -240,6 +258,8 @@ def runCmd(
                 or "/cvmfs/unpacked.cern.ch/gitlab-registry.cern.ch/cms-analysis/general/combine-container:CMSSW_14_1_0_pre4-combine_v10.6.1-harvester_v3.1.0",
             ),
             signal_pre_scale=signal_pre_scale,
+            fit_mode=fit_mode,
+            expected_ndim=expect_ndim,
         )
     else:
         raise click.UsageError("Must specify either --config or --background.")
@@ -281,12 +301,26 @@ def runCmd(
     default=None,
     help="Signal file to inject (for bias studies).",
 )
+@click.option(
+    "--fit-mode",
+    type=str,
+    default=None,
+    help="Fit-plan profile label for this run (recorded in metadata as fit_mode).",
+)
+@click.option(
+    "--expect-ndim",
+    type=int,
+    default=None,
+    help="Fail unless the input histograms have this many axes.",
+)
 def resolveOutputCmd(
     background: Path,
     signal: tuple[Path, ...],
     config: Path,
     output_format: str,
     injection_signal: Path | None,
+    fit_mode: str | None,
+    expect_ndim: int | None,
 ) -> None:
     from ..pipeline import PipelineConfig, loadData
     import yaml
@@ -305,6 +339,10 @@ def resolveOutputCmd(
         output_dir_format=output_format,
     )
     pipeline_config = attrs.evolve(pipeline_config, **config_data)
+    if fit_mode is not None:
+        pipeline_config = attrs.evolve(pipeline_config, fit_mode=fit_mode)
+    if expect_ndim is not None:
+        pipeline_config = attrs.evolve(pipeline_config, expected_ndim=expect_ndim)
     state = loadData(pipeline_config)
     output_path = state.getRealOutPath()
     logger.info(f"Resolved output to '{str(output_path)}'")
