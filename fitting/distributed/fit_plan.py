@@ -64,6 +64,9 @@ class Profile:
 def _chooseNothing(point: Point) -> list[str]:
     return []
 
+def _excludeNothing(point: Point) -> bool:
+    return False
+
 
 @attrs.frozen
 class FitPlan:
@@ -71,6 +74,7 @@ class FitPlan:
     default: str
     choose: Callable[[Point], list[str] | str | None] = _chooseNothing
     # Set by loadFitPlan; only used to point error messages at the plan file
+    exclude: Callable[[Point], bool] = _excludeNothing
     source: str | None = attrs.field(default=None, eq=False)
 
     def __attrs_post_init__(self):
@@ -111,6 +115,8 @@ class FitPlan:
                 f"known profiles: {list(self.profiles)}"
             )
         if not all_matching:
+            if self.exclude(point):
+                return []
             return [chosen[0] if chosen else self.default]
         return list(dict.fromkeys([*chosen, self.default]))
 
