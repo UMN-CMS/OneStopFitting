@@ -16,6 +16,7 @@ PROFILE_2D = Profile(
     signal="export_signal/{year}/{pipeline}/signal*/{reco_category}_mStop_vs_mChiRatio.pklz4",
     config="resources/new_opt/config_{reco_category}_{pipeline}.yaml",
     ndim=2,
+    pipelines=["Signal312", "Signal313"],
 )
 
 PROFILE_1D = Profile(
@@ -23,6 +24,8 @@ PROFILE_1D = Profile(
     signal="filtered_signals_1d_verycomp_pt_cuts/{year}/{pipeline}/signal*/comp_mStop.pklz4",  # only comp has 1D inputs
     config="resources/new_opt_1d/config_{reco_category}_{pipeline}.yaml",
     ndim=1,
+    pipelines=["*VeryComp"],
+    reco_category="comp",  # comp templates are used for verycomp points
 )
 EXTRA_1D_POINTS: set[tuple[int, int]] = set()
 def isCompressed(p: Point) -> bool:
@@ -34,17 +37,12 @@ def isForced1D(p: Point) -> bool:
 
 
 def choose(p: Point) -> list[str]:
-    if isForced1D(p) and "VeryComp" in p.pipeline and p.reco_category == "comp":
+    if isForced1D(p):
         return ["1d"]
     return []
-
-def exclude(p: Point) -> bool:
-    # These points are fit in 1D via the VeryComp pipeline, so skip the 2D fit
-    return isForced1D(p) and "VeryComp" not in p.pipeline and p.reco_category == "comp"
 
 
 PLAN = FitPlan(profiles={"2d": PROFILE_2D, "1d": PROFILE_1D},
     default="2d",
     choose=choose,
-    exclude=exclude,
     )

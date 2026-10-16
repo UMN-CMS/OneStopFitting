@@ -6,21 +6,31 @@ A fit plan is a Python file that defines a module-level ``PLAN``:
     from fitting.distributed.fit_plan import FitPlan, Profile, Point
 
     def choose(p: Point) -> list[str]:
-        if p.reco_category == "comp" and p.mstop >= 1500 and p.mchi >= 0.9 * p.mstop:
+        if p.mstop >= 1500 and p.mchi >= 0.9 * p.mstop:
             return ["1d"]
         return []
 
     PLAN = FitPlan(
-        profiles={"2d": Profile(...), "1d": Profile(...)},
+        profiles={
+            "2d": Profile(..., pipelines=["Signal312", "Signal313"]),
+            "1d": Profile(..., pipelines=["*VeryComp"], reco_category="comp"),
+        },
         default="2d",
         choose=choose,
     )
 
 Profile patterns accept the same placeholders as makesubmit's --signal,
---background and --config-pattern. ``choose`` is called once per job (mass
-point x reco category x era x toy) and returns profile names, best first. By
-default the first name is used, or the default profile if none is returned.
-With all_matching, every returned name plus the default is used.
+--background and --config-pattern. ``choose`` is called once per physical point
+(era x coupling x mstop x mchi x toy) and returns profile names, best first. By
+default the point gets exactly one fit: the first name, or the default profile
+if none is returned. With all_matching, every returned name plus the default is
+used. ``exclude`` drops a point entirely, in both modes.
+
+Each profile must supply exactly one job per point it is assigned. A profile
+restricts its inputs with ``pipelines`` (glob patterns over --pipelines) and
+``reco_category`` (the template category to use; by default the one the mass
+point belongs to). A point with several candidate jobs for one profile is an
+error, never more than one fit.
 """
 
 from __future__ import annotations
@@ -41,15 +51,20 @@ def _asList(v: str | list[str]) -> list[str]:
     return [v] if isinstance(v, str) else list(v)
 
 
+def _asOptionalList(v: str | list[str] | None) -> list[str] | None:
+    return None if v is None else _asList(v)
+
+
 @attrs.frozen
 class Point:
+    """A physical point to fit: what choose() and exclude() decide on."""
+
     mstop: int
     mchi: int
     coupling: str
+    # Category the mass point belongs to (utils.getCategory)
     category: str
-    reco_category: str
     year: str
-    pipeline: str
     toy_index: int
 
 
@@ -59,6 +74,10 @@ class Profile:
     signal: list[str] = attrs.field(converter=_asList)
     config: str
     ndim: int | None = None
+    # Glob patterns over --pipelines this profile takes inputs from; None means all
+    pipelines: list[str] | None = attrs.field(default=None, converter=_asOptionalList)
+    # Template category to fit with; None means the point's own category
+    reco_category: str | None = None
 
 
 def _chooseNothing(point: Point) -> list[str]:
@@ -114,9 +133,9 @@ class FitPlan:
                 f"choose() returned unknown profile(s) {unknown} for {point}; "
                 f"known profiles: {list(self.profiles)}"
             )
+        if self.exclude(point):
+            return []
         if not all_matching:
-            if self.exclude(point):
-                return []
             return [chosen[0] if chosen else self.default]
         return list(dict.fromkeys([*chosen, self.default]))
 

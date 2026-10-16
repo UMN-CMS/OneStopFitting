@@ -24,7 +24,7 @@ from ..utils import (
     deepCommonDict,
     formatLines,
 )
-from .fit_plan import FitPlan, Point
+from .fit_plan import FitPlan, Point, Profile
 
 logger = logging.getLogger("fitting")
 
@@ -172,11 +172,14 @@ def makeEraJobs(
     toy_index: int | None = None,
     match_rules: MatchRules | None = None,
     require_background: bool = True,
+    allow_category_mismatch: bool = False,
 ) -> list[EraJob]:
     """You glob then you job
 
     With require_background=False, jobs whose background file is missing are
     still returned, so callers that filter jobs can check only the ones they keep.
+    Signals whose file category (reco_category) differs from the category given
+    by their mass point are dropped unless allow_category_mismatch is set.
     """
     jobs = []
     for bkg_year, pipeline in it.product(years, pipelines):
@@ -200,6 +203,8 @@ def makeEraJobs(
             continue
 
         sig_param_groups = defaultdict(list)
+        # Points with a template only from a category other than their own
+        category_dropped: set[tuple] = set()
 
         num_good_signals = 0
         logger.info(f"Using signal patterns: {signal_pattern}")
@@ -209,6 +214,10 @@ def makeEraJobs(
             reco_category = getRecoCategory(Path(sig_file).name)
 
             if not reco_category:
+                continue
+            # {reco_category} in a pattern matches any prefix, so check explicitly
+            if not allow_category_mismatch and reco_category != category:
+                category_dropped.add(tuple(sig_params))
                 continue
 
             if not any(
@@ -237,6 +246,14 @@ def makeEraJobs(
         logger.info(
             f"Grouped {num_good_signals} signals into {len(sig_param_groups)} groups"
         )
+        lost = sorted(category_dropped - {k[0] for k in sig_param_groups})
+        if lost:
+            logger.warning(
+                f"{len(lost)} point(s) for {bkg_year}, {pipeline} have no template of "
+                "their own category and get NO job (pass --allow-category-mismatch "
+                "to fit them with other categories' templates):\n"
+                + "\n".join(f"  coupling={c} mstop={ms} mchi={mc}" for c, ms, mc in lost)
+            )
 
         for (
             sig_params,
@@ -285,9 +302,7 @@ def _jobPoint(job: EraJob) -> Point:
         mchi=int(m["mchi"]),
         coupling=m["coupling"],
         category=m["category"],
-        reco_category=m["reco_category"],
         year=job.era,
-        pipeline=m["pipeline"],
         toy_index=int(m["toy_index"]),
     )
 
@@ -311,25 +326,60 @@ def formatJobTable(jobs: list[EraJob]) -> list[str]:
     return formatLines(rows)
 
 
-_JOB_KEY_FIELDS = ("era", "pipeline", "coupling", "category", "mstop", "mchi", "reco_category", "toy")
+_POINT_KEY_FIELDS = ("era", "coupling", "mstop", "mchi", "toy")
 
 
-def _jobKey(job: EraJob) -> tuple:
+def _pointKey(job: EraJob) -> tuple:
+    """Identifies the physical point a job fits, whatever its pipeline or template."""
     m = job.metadata
-    return (
-        job.era,
-        m["pipeline"],
-        m["coupling"],
-        m["category"],
-        int(m["mstop"]),
-        int(m["mchi"]),
-        m["reco_category"],
-        m["toy_index"],
+    return (job.era, m["coupling"], int(m["mstop"]), int(m["mchi"]), m["toy_index"])
+
+
+def _formatPointKey(key: tuple) -> str:
+    return " ".join(f"{f}={v}" for f, v in zip(_POINT_KEY_FIELDS, key))
+
+
+def _usesTemplate(profile: Profile, job: EraJob) -> bool:
+    """Whether a job's template is the category this profile fits with."""
+    m = job.metadata
+    return m["reco_category"] == (profile.reco_category or m["category"])
+
+
+def _profileJobs(
+    name: str,
+    profile: Profile,
+    pipelines: list[str],
+    **kwargs,
+) -> list[EraJob]:
+    """Jobs from a profile's pipelines, every template category included.
+
+    Callers filter with _usesTemplate; the rest show which points the profile
+    has inputs for, but only in the wrong category.
+    """
+    if profile.pipelines is not None:
+        pipelines = [
+            p for p in pipelines if any(fnmatch.fnmatch(p, x) for x in profile.pipelines)
+        ]
+    if not pipelines:
+        logger.warning(f"Fit profile '{name}' matches none of the requested pipelines")
+        return []
+    jobs = makeEraJobs(
+        signal_pattern=tuple(profile.signal),
+        background_pattern=profile.background,
+        pipelines=pipelines,
+        config_pattern=profile.config,
+        require_background=False,
+        allow_category_mismatch=True,
+        **kwargs,
     )
-
-
-def _formatJobKey(key: tuple) -> str:
-    return " ".join(f"{f}={v}" for f, v in zip(_JOB_KEY_FIELDS, key))
+    return [
+        attrs.evolve(
+            j,
+            metadata=j.metadata | {"fit_mode": name},
+            expected_ndim=profile.ndim,
+        )
+        for j in jobs
+    ]
 
 
 def makePlannedEraJobs(
@@ -344,62 +394,85 @@ def makePlannedEraJobs(
 ) -> list[EraJob]:
     """Build EraJobs for every profile in a fit plan and keep the assigned ones.
 
-    A job is identified by _JOB_KEY_FIELDS. Every profile's patterns are
-    globbed independently; each job is then kept only for the profile(s) the
-    plan assigns it to. A job assigned to a profile that has no inputs for it
-    is an error, unless allow_missing is set, in which case it is skipped with
-    a warning (it is never silently refit with another profile).
+    The plan decides per physical point (_POINT_KEY_FIELDS), and each point is
+    fit once per profile it is assigned: once in total unless all_matching.
+    A profile with several candidate jobs for one point is an error. A point
+    assigned to a profile that has no inputs for it, or only templates of the
+    wrong category, is an error, unless allow_missing is set, in which case it
+    is skipped with a warning (it is never silently refit with another profile).
     """
-    by_key: dict[tuple, dict[str, EraJob]] = defaultdict(dict)
+    by_point: dict[tuple, dict[str, list[EraJob]]] = defaultdict(
+        lambda: defaultdict(list)
+    )
+    # Profiles with inputs for a point in any category, used to tell gaps apart
+    seen: dict[tuple, set[str]] = defaultdict(set)
+    points: dict[tuple, Point] = {}
     for name, profile in plan.profiles.items():
         logger.info(f"Collecting jobs for fit profile '{name}'")
-        profile_jobs = makeEraJobs(
-            signal_pattern=tuple(profile.signal),
-            background_pattern=profile.background,
+        for job in _profileJobs(
+            name,
+            profile,
+            pipelines,
             years=years,
-            pipelines=pipelines,
             output_dir=output_dir,
-            config_pattern=profile.config,
             toy_index=toy_index,
             match_rules=match_rules,
-            require_background=False,
-        )
-        for job in profile_jobs:
-            job = attrs.evolve(
-                job,
-                metadata=job.metadata | {"fit_mode": name},
-                expected_ndim=profile.ndim,
-            )
-            by_key[_jobKey(job)][name] = job
+        ):
+            key = _pointKey(job)
+            points.setdefault(key, _jobPoint(job))
+            seen[key].add(name)
+            if _usesTemplate(profile, job):
+                by_point[key][name].append(job)
 
     selected: list[EraJob] = []
-    missing: dict[str, list[tuple]] = defaultdict(list)
+    missing: dict[str, list[str]] = defaultdict(list)
+    ambiguous: list[tuple[str, tuple, list[EraJob]]] = []
     n_extra = 0
-    for key in sorted(by_key, key=str):
-        jobs_by_profile = by_key[key]
-        point = _jobPoint(next(iter(jobs_by_profile.values())))
+    for key in sorted(points, key=str):
+        point = points[key]
         for name in plan.assign(point, all_matching=all_matching):
-            if name in jobs_by_profile:
-                selected.append(jobs_by_profile[name])
+            candidates = by_point[key].get(name, [])
+            if len(candidates) == 1:
+                selected.append(candidates[0])
+            elif candidates:
+                ambiguous.append((name, key, candidates))
+            elif name in seen[key]:
+                wanted = plan.profiles[name].reco_category or point.category
+                missing[name].append(
+                    f"{_formatPointKey(key)} (no {wanted} template, only other categories)"
+                )
             elif name == plan.default:
-                # The default profile defines which jobs exist: a job found only in
-                # another profile's inputs but routed to the default is not a gap
+                # The default profile defines which points exist: a point found only
+                # in another profile's inputs but routed to the default is not a gap
                 n_extra += 1
             else:
-                missing[name].append(key)
+                missing[name].append(f"{_formatPointKey(key)} (no inputs)")
+
+    if ambiguous:
+        lines = [
+            f"  [{name}] {_formatPointKey(key)}: "
+            + ", ".join(
+                f"{j.metadata['pipeline']}/{j.metadata['reco_category']}" for j in jobs
+            )
+            for name, key, jobs in ambiguous
+        ]
+        raise ValueError(
+            f"{len(lines)} point(s) have more than one candidate job for a profile:\n"
+            + "\n".join(lines)
+            + "\nRestrict the profile with pipelines=... or reco_category=... so it "
+            "supplies one job per point."
+        )
 
     if n_extra:
         logger.info(
-            f"Ignored {n_extra} job(s) found only in non-default profile inputs and "
+            f"Ignored {n_extra} point(s) found only in non-default profile inputs and "
             f"routed to the default profile '{plan.default}'"
         )
 
     if missing and not allow_missing:
-        lines = [
-            f"  [{name}] {_formatJobKey(k)}" for name, keys in missing.items() for k in keys
-        ]
+        lines = [f"  [{name}] {d}" for name, descs in missing.items() for d in descs]
         raise FileNotFoundError(
-            f"{len(lines)} job(s) are assigned to a profile that has no inputs for them:\n"
+            f"{len(lines)} point(s) are assigned to a profile that has no usable inputs for them:\n"
             + "\n".join(lines)
             + "\nFix the plan's choose() or the profile patterns, or pass "
             "--allow-missing-profile-inputs to skip these jobs."
@@ -414,20 +487,20 @@ def makePlannedEraJobs(
     return selected
 
 
-def _logPlanSummary(plan: FitPlan, selected: list[EraJob], missing: dict[str, list[tuple]]):
+def _logPlanSummary(plan: FitPlan, selected: list[EraJob], missing: dict[str, list[str]]):
     counts = defaultdict(int)
     for j in selected:
         counts[j.metadata["fit_mode"]] += 1
     for name in plan.profiles:
         logger.info(f"Fit profile '{name}': {counts[name]} job(s)")
 
-    for name, keys in missing.items():
+    for name, descs in missing.items():
         logger.warning(
-            f"{len(keys)} job(s) assigned to profile '{name}' have no '{name}' inputs "
-            f"and will NOT be run:"
+            f"{len(descs)} point(s) assigned to profile '{name}' have no usable '{name}' "
+            f"inputs and will NOT be run:"
         )
-        for k in keys:
-            logger.warning("  " + _formatJobKey(k))
+        for d in descs:
+            logger.warning("  " + d)
 
     non_default = sorted(
         {(j.metadata["fit_mode"], j.metadata["coupling"], int(j.metadata["mstop"]), int(j.metadata["mchi"]))

@@ -87,6 +87,14 @@ import yaml
     "no input files for them, instead of failing.",
 )
 @click.option(
+    "--allow-category-mismatch",
+    is_flag=True,
+    default=False,
+    help="Without --fit-plan, also fit each point with templates from categories "
+    "other than its own (e.g. boundary studies). With --fit-plan, set "
+    "reco_category on a profile instead.",
+)
+@click.option(
     "--dry-run",
     is_flag=True,
     default=False,
@@ -114,6 +122,7 @@ def makesubmitCmd(
     fit_plan: Path | None,
     all_matching_profiles: bool,
     allow_missing_profile_inputs: bool,
+    allow_category_mismatch: bool,
     dry_run: bool,
 ) -> None:
     """Generate HTCondor submit files."""
@@ -137,6 +146,11 @@ def makesubmitCmd(
             raise click.UsageError(
                 "--fit-plan replaces --signal, --background and --config-pattern; "
                 "set those per profile in the plan instead."
+            )
+        if allow_category_mismatch:
+            raise click.UsageError(
+                "--allow-category-mismatch has no effect with --fit-plan; set "
+                "reco_category on the profile instead."
             )
         plan = loadFitPlan(fit_plan)
     else:
@@ -207,6 +221,7 @@ def makesubmitCmd(
                 config_pattern=config_pattern,
                 toy_index=t + toy_offset,
                 match_rules=match_rules,
+                allow_category_mismatch=allow_category_mismatch,
             )
         )
 
