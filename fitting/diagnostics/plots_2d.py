@@ -34,6 +34,7 @@ def makeDiagnosticPlots2D(
     total_pulls = np.asarray(
         totalPullDistribution(test_data.Y, pred_mean, test_data.V, pred_var)
     )
+    pulls_pred = np.asarray(pullDistribution(test_data.Y, pred_mean, pred_var))
 
     @contextmanager
     def makePlot(key):
@@ -144,8 +145,26 @@ def makeDiagnosticPlots2D(
             ax.set_ylabel(test_data.axis_names[1])
         plotBlinding2D(ax, edges, X, blind_mask)
 
-    # --- Pull map ---
-    with makePlot("pull_map") as ax:
+    # --- Pull map pred var ---
+    with makePlot("pull_map_pred_var") as ax:
+        plotRaw(
+            ax,
+            edges,
+            X,
+            jnp.array(pulls_pred),
+            cmap="coolwarm",
+            cmin=-3,
+            cmax=3,
+            cbar_title="Pull (w Pred Var)",
+        )
+        ax.set_title("Pull Map")
+        if test_data.axis_names and len(test_data.axis_names) >= 2:
+            ax.set_xlabel(test_data.axis_names[0])
+            ax.set_ylabel(test_data.axis_names[1])
+        plotBlinding2D(ax, edges, X, blind_mask)
+
+    # --- Pull map obs var ---
+    with makePlot("pull_map_obs_var") as ax:
         plotRaw(
             ax,
             edges,
@@ -154,7 +173,25 @@ def makeDiagnosticPlots2D(
             cmap="coolwarm",
             cmin=-3,
             cmax=3,
-            cbar_title="Pull",
+            cbar_title="Pull (w Obs Var)",
+        )
+        ax.set_title("Pull Map")
+        if test_data.axis_names and len(test_data.axis_names) >= 2:
+            ax.set_xlabel(test_data.axis_names[0])
+            ax.set_ylabel(test_data.axis_names[1])
+        plotBlinding2D(ax, edges, X, blind_mask)
+
+    # --- Pull map obs var ---
+    with makePlot("pull_map_total_var") as ax:
+        plotRaw(
+            ax,
+            edges,
+            X,
+            jnp.array(total_pulls),
+            cmap="coolwarm",
+            cmin=-3,
+            cmax=3,
+            cbar_title="Pull (w Total Var)",
         )
         ax.set_title("Pull Map")
         if test_data.axis_names and len(test_data.axis_names) >= 2:
@@ -248,6 +285,7 @@ def makeDiagnosticPlots2D(
         plot_saver(key, fig_h, ax_h)
 
     _plotSinglePullHist(pulls, "Stat", "Statistical Pull", "stat_pulls_hist")
+    _plotSinglePullHist(pulls_pred, "Pred", "Pred Var Pull", "pred_pulls_hist")
     _plotSinglePullHist(total_pulls, "Total", "Total Pull", "total_pulls_hist")
 
     if transform is not None and False:

@@ -83,6 +83,7 @@ def makeDiagnosticPlots1D(
     total_pulls = np.asarray(
         totalPullDistribution(test_data.Y, pred_mean, test_data.V, pred_var)
     )
+    pulls_pred = np.asarray(pullDistribution(test_data.Y, pred_mean, pred_var))
 
     fig, ax = plt.subplots(layout="tight")
     addAxesToHist(ax, size=1.5)
@@ -135,7 +136,8 @@ def makeDiagnosticPlots1D(
 
     ratio_ax = ax.bottom_axes[0]
     ratio_ax.set_ylim(-3, 3)
-    ratio_ax.plot(X, pulls, "o", color="black", markersize=2)
+    #ratio_ax.plot(X, pulls, "o", color="black", markersize=2)
+    ratio_ax.plot(X, pulls_pred, "o", color="black", markersize=2)
     ax.tick_params(axis="x", which="both", labelbottom=False)
     ratio_ax.axhline(0, ls="--", color="gray", alpha=0.5)
     ratio_ax.axhline(1, ls="-.", color="gray", alpha=0.3)
@@ -144,21 +146,22 @@ def makeDiagnosticPlots1D(
     if test_data.axis_names:
         ax.bottom_axes[0].set_xlabel(test_data.axis_names[0])
 
-    ratio_ax.bar(
-        x=X,
-        bottom=np.nan_to_num(-pred_std / np.sqrt(obs_V), nan=0),
-        height=np.nan_to_num(2 * pred_std / np.sqrt(obs_V), nan=0),
-        width=X[1] - X[0] if len(X) > 1 else 1.0,
-        color="orange",
-        alpha=0.3,
-        fill=True,
-        lw=0,
-    )
+    #ratio_ax.bar(
+    #    x=X,
+    #    bottom=np.nan_to_num(-pred_std / np.sqrt(obs_V), nan=0),
+    #    height=np.nan_to_num(2 * pred_std / np.sqrt(obs_V), nan=0),
+    #    width=X[1] - X[0] if len(X) > 1 else 1.0,
+    #    color="orange",
+    #    alpha=0.3,
+    #    fill=True,
+    #    lw=0,
+    #)
 
     ax.legend()
     plot_saver("summary_plot", fig, ax)
 
     _plotPullHistograms(pulls, plot_saver=plot_saver, blind_mask=blind_mask, tag="stat")
+    _plotPullHistograms(pulls_pred, plot_saver=plot_saver, blind_mask=blind_mask, tag="pred")
     _plotPullHistograms(
         total_pulls, plot_saver=plot_saver, blind_mask=blind_mask, tag="total"
     )
@@ -257,10 +260,7 @@ def _plotPullHistograms(
     ax.hist(pulls, bins=bins, density=True, alpha=0.7, label="All bins")
     ax.plot(gauss_x, gauss_y, "k-", label="Unit Normal")
     ax.set_xlabel(
-        rf"{tag.capitalize()} Pull: $(N_{{obs}} - N_{{pred}}) / \sigma_{{total}}$"
-        if tag == "total"
-        else r"Stat Pull: $(N_{obs} - N_{pred}) / \sigma_{obs}$"
-    )
+        rf"{tag.capitalize()} Pull: $(N_{{obs}} - N_{{pred}}) / \sigma_{{{tag}}}$")
     ax.set_ylabel("Density")
     ax.legend()
     plot_saver(f"global_{tag}_pulls_hist", fig, ax)
@@ -271,10 +271,7 @@ def _plotPullHistograms(
         ax.hist(pulls[np_mask], bins=bins, density=True, alpha=0.7, label="Window bins")
         ax.plot(gauss_x, gauss_y, "k-", label="Unit Normal")
         ax.set_xlabel(
-            rf"{tag.capitalize()} Pull: $(N_{{obs}} - N_{{pred}}) / \sigma_{{total}}$"
-            if tag == "total"
-            else r"Stat Pull: $(N_{obs} - N_{pred}) / \sigma_{obs}$"
-        )
+            rf"{tag.capitalize()} Pull: $(N_{{obs}} - N_{{pred}}) / \sigma_{{{tag}}}$")
         ax.set_ylabel("Density")
         ax.legend()
         plot_saver(f"window_{tag}_pulls_hist", fig, ax)

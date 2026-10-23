@@ -21,7 +21,7 @@ PROFILE_2D = Profile(
 
 PROFILE_1D = Profile(
     background="smoothed_1d_verycomp_sel/{year}/{pipeline}/{reco_category}/pure_smoothed.pklz4",
-    signal="filtered_signals_1d_verycomp_pt_cuts/{year}/{pipeline}/signal*/comp_mStop.pklz4",  # only comp has 1D inputs
+    signal="2026_10_22__dbs_1d_selection/export_signals_1d_selection/{year}/{pipeline}/signal*/comp_mStop.pklz4",
     config="resources/new_opt_1d/config_{reco_category}_{pipeline}.yaml",
     ndim=1,
     pipelines=["*VeryComp"],
