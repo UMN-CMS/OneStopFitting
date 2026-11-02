@@ -1,0 +1,36 @@
+injection_rate: 0.0
+min_counts: -1
+
+window:
+  _type: CoreDilatedWindowConfig
+  core_threshold_fraction: 0.5
+  dilation_margin: 0.15
+
+domain_window:
+  _type: CutWindowConfig
+  axis: 1
+  lower: 0.1
+
+optimization:
+  mode: optimization
+  objective: mll
+  num_iters: 500
+  optimizer: adam
+  lr: 0.005
+  weight_decay: 0.0001
+  grad_clip_norm: 0.5
+  schedule:
+    _type: WarmupCosineScheduleConfig
+    warmup_steps: 50
+
+
+model: 
+  _type: ExactGPConfig
+  kernel: 
+    _type: NNWarpingKernelConfig
+    hidden_shapes: [20,20]
+  likelihood:
+    _type: FixedGaussianNoiseConfig
+    variance_floor_quantile: 0.05
+  mean_function:
+    _type: ConstantMeanConfig

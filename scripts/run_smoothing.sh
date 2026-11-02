@@ -6,8 +6,9 @@ PYTHON=".venv/bin/python"
 
 # Signal versions and categories
 YEARS=${2:-"2016, 2017, 2022_preEE, Run3"}  # Comma-separated or space-separated years
-VERSIONS=("Signal312VeryComp" "Signal313VeryComp")
-CATEGORIES=("comp")
+# VERSIONS=("Signal312VeryComp" "Signal313VeryComp")
+VERSIONS=("Signal312" "Signal313")
+CATEGORIES=("uncomp","comp", "verycomp")
 
 # Convert YEARS to an array
 IFS=', ' read -r -a YEAR_ARRAY <<< "$YEARS"
@@ -20,9 +21,10 @@ for YEAR in "${YEAR_ARRAY[@]}"; do
         for CATEGORY in "${CATEGORIES[@]}"; do
             echo "Processing year: $YEAR, version: $VERSION, category: $CATEGORY"
             
-            BG_FILE="2026_10_22__dbs_1d_selection/${VERSION}/${YEAR}/sm_bkg/${CATEGORY}_mStop.pklz4"
+            #BG_FILE="2026_10_22__dbs_1d_selection/${VERSION}/${YEAR}/sm_bkg/${CATEGORY}_mStop.pklz4"
+            BG_FILE="smoothed_complete_backgrounds/${YEAR}/${VERSION}/${CATEGORY}/smoothed_complete.pklz4"
 
-            CONFIG="resources/smoothing_configs_1d/config_${CATEGORY}_${VERSION}.yaml"
+            CONFIG="resources/smoothing_configs/config_${CATEGORY}_${VERSION}.yaml"
             OUT_DIR="${OUTPUT_BASE}/${VERSION}/${CATEGORY}"
             
             if [ ! -f "$BG_FILE" ]; then
