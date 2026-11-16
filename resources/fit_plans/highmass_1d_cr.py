@@ -12,7 +12,7 @@ Profile patterns take the same placeholders as makesubmit's --signal/--backgroun
 from fitting.distributed.fit_plan import FitPlan, Point, Profile
 
 PROFILE_2D = Profile(
-    background="export_combined_backgrounds/export_combined_backgrounds/Control/{year}/data/{reco_category}_mStop_vs_mChiRatio.pklz4",
+    background="export_combined_backgrounds/Control/{year}/data/{reco_category}_mStop_vs_mChiRatio.pklz4",
     signal="subset/{year}/{pipeline}/signal*/{reco_category}_mStop_vs_mChiRatio.pklz4",
     config="resources/new_opt/config_{reco_category}_{pipeline}.yaml",
     ndim=2,
