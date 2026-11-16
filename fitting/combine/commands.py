@@ -105,7 +105,7 @@ class GoodnessOfFit(CombineCommand):
         base = f"combine -M GoodnessOfFit --algorithm {self.algorithm} -d datacard.root"
         return [
             f"{base} --name gof_{self.algorithm} --fixedSignalStrength=0",
-            f"{base} --name gof_{self.algorithm}_toys --toys {self.num_toys} --fixedSignalStrength=0",
+            f"{base} --name gof_{self.algorithm}_toys --toys {self.num_toys} --toysFrequentist --fixedSignalStrength=0",
         ]
 
 

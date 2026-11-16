@@ -182,7 +182,7 @@ def makeDiagnosticPlots2D(
         plotBlinding2D(ax, edges, X, blind_mask)
 
     # --- Pull map obs var ---
-    with makePlot("pull_map_total_var") as ax:
+    with makePlot("pull_map") as ax:
         plotRaw(
             ax,
             edges,

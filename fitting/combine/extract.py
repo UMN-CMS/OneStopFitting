@@ -69,7 +69,7 @@ def extractGof(obs_tree: uproot.TTree, toys_tree: uproot.TTree) -> tuple[dict, d
         ret["gof_test_statistic"] = float(obs_vals[0])
     if len(toys_vals):
         ret["gof_test_statistic_toys"] = [float(val) for val in toys_vals]
-    ret["gof_p_value"] = np.mean(np.array(toys_vals) <= obs_vals[0])
+    ret["gof_p_value"] = np.mean(np.array(toys_vals) >= obs_vals[0])
 
     fig, ax = plt.subplots()
     plotPPD(

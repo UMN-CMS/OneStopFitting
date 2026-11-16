@@ -581,6 +581,47 @@ def plotRvsRErr(report: DiagnosticReport) -> tuple[plt.Figure, plt.Axes]:
     _addCMSLabel(ax, report, "Normalized Signal Strength (bkg-only)")
     return fig, ax
 
+def plotpValues(report: DiagnosticReport) -> tuple[plt.Figure, plt.Axes]:
+    plots = []
+    for point in report.points:
+        fig, ax = plt.subplots()
+        pvalue_arr = np.array(point.gof_pvalues)
+        ax.scatter(
+            x=np.arange(len(pvalue_arr)),
+            y=pvalue_arr,
+            c="black",
+            alpha=1,
+            s=8,
+            zorder=2,
+        )
+
+        ax.axhline(1, color="black", linestyle="--", linewidth=0.8)
+        ax.axhline(0, color="black", linestyle="--", linewidth=0.8)
+        ax.axhspan(0, 1, color=CMS_COLORS[3], alpha=0.1)
+
+        ax.set_xlabel(r"Toy Index")
+        ax.set_ylabel(r"GOF p-value")
+        ax.legend(fontsize="small")
+        _addCMSLabel(ax, report, f'{int(point.mstop)}_{int(point.mchi)}\nKS p-val: {point.gof_ks_pvalue:.3f}')
+
+        plots.append((f'{int(point.mstop)}_{int(point.mchi)}', fig, ax))
+        plt.close(fig)
+    return plots
+
+def plotpValuesHists(report: DiagnosticReport) -> tuple[plt.Figure, plt.Axes]:
+    plots = []
+    for point in report.points:
+        fig, ax = plt.subplots()
+        pvalue_arr = np.array(point.gof_pvalues)
+        ax.hist(pvalue_arr, bins = np.linspace(0,1,11))
+        ax.set_ylabel(r"Num of Toys")
+        ax.set_xlabel(r"GOF p-value")
+        ax.legend(fontsize="small")
+        _addCMSLabel(ax, report, f'{int(point.mstop)}_{int(point.mchi)}\nKS p-val: {point.gof_ks_pvalue:.3f}')
+
+        plots.append((f'{int(point.mstop)}_{int(point.mchi)}', fig, ax))
+        plt.close(fig)
+    return plots
 
 def generateDiagnosticPlots(
     report: DiagnosticReport, output_dir: Path
@@ -595,16 +636,29 @@ def generateDiagnosticPlots(
         "coverage_by_category": plotCoverageBarByCategory,
         "gof_verdict_summary": plotGofVerdictSummary,
         "r_vs_r_err": plotRvsRErr,
+        "p_values": plotpValues,
+        "p_values_hists": plotpValuesHists,
     }
 
     saved: dict[str, Path] = {}
     for name, func in plots.items():
-        fig, ax = func(report)
-        path = output_dir / f"{name}.pdf"
-        fig.savefig(path)
-        plt.close(fig)
-        saved[name] = path
-        logger.info(f"Saved {path}")
+        result = func(report)
+        if isinstance(result, list):
+            for sub_name, fig, ax in result:
+                sub_output_dir = output_dir / name
+                sub_output_dir.mkdir(parents=True, exist_ok=True)
+                path = sub_output_dir / f"{sub_name}.pdf"
+                fig.savefig(path)
+                plt.close(fig)
+                saved[name] = path
+                logger.info(f"Saved {path}")
+        elif isinstance(result, tuple):
+            fig, ax = result
+            path = output_dir / f"{name}.pdf"
+            fig.savefig(path)
+            plt.close(fig)
+            saved[name] = path
+            logger.info(f"Saved {path}")
 
     return saved
 
