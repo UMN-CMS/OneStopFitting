@@ -13,7 +13,7 @@ from fitting.distributed.fit_plan import FitPlan, Point, Profile
 
 PROFILE_2D = Profile(
     background="smoothed_complete_backgrounds/{year}/{pipeline}/{reco_category}/{reco_category}_{toy_index}.pklz4",
-    signal="export_signal/{year}/{pipeline}/signal*/{reco_category}_mStop_vs_mChiRatio.pklz4",
+    signal="subset/{year}/{pipeline}/signal*/{reco_category}_mStop_vs_mChiRatio.pklz4",
     config="resources/new_opt/config_{reco_category}_{pipeline}.yaml",
     ndim=2,
     pipelines=["Signal312", "Signal313"],
@@ -21,7 +21,7 @@ PROFILE_2D = Profile(
 
 PROFILE_1D = Profile(
     background="smoothed_1d_verycomp_sel/{year}/{pipeline}/{reco_category}/{reco_category}_{toy_index}.pklz4",
-    signal="filtered_signals_1d_verycomp_pt_cuts/{year}/{pipeline}/signal*/comp_mStop.pklz4",  # only comp has 1D inputs
+    signal="2026_10_22__dbs_1d_selection/export_signals_1d_selection/{year}/{pipeline}/signal*/comp_mStop.pklz4",  # only comp has 1D inputs
     config="resources/new_opt_1d/config_{reco_category}_{pipeline}.yaml",
     ndim=1,
     pipelines=["*VeryComp"],

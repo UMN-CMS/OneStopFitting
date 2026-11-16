@@ -30,6 +30,8 @@ model:
   kernel: 
     _type: NNWarpingKernelConfig
     hidden_shapes: [20,20]
+    base_kernel_config:
+      _type: Matern32Config
   likelihood:
     _type: FixedGaussianNoiseConfig
     variance_floor_quantile: 0.05

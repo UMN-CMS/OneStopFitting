@@ -30,6 +30,7 @@ model:
     _type: RBFConfig
     #_type: NNWarpingKernelConfig
     #hidden_shapes: [20,20]
+    #_type: Matern32Config
   likelihood:
     _type: FixedGaussianNoiseConfig
     variance_floor_quantile: 0.20

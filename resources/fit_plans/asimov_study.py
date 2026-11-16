@@ -14,7 +14,7 @@ from fitting.distributed.fit_plan import FitPlan, Point, Profile
 PROFILE_2D = Profile(
     background="smoothed_complete_backgrounds/{year}/{pipeline}/{reco_category}/pure_smoothed.pklz4",
     signal="export_signal/{year}/{pipeline}/signal*/{reco_category}_mStop_vs_mChiRatio.pklz4",
-    config="resources/new_opt/config_{reco_category}_{pipeline}.yaml",
+    config="resources/matern32/config_{reco_category}_{pipeline}.yaml",
     ndim=2,
     pipelines=["Signal312", "Signal313"],
 )

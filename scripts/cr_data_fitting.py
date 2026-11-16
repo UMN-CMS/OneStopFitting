@@ -1,4 +1,4 @@
-OUTPUT_BASE=${1:-"results/2026_10_30__cr_test/{bkg.era.name}"}
+OUTPUT_BASE=${1:-"results/2026_11_04__cr_test_matern32/{bkg.era.name}"}
 PYTHON=".venv/bin/python"
 
 # Signal versions and categories
@@ -18,7 +18,7 @@ for YEAR in "${YEAR_ARRAY[@]}"; do
             echo "Processing year: $YEAR, version: $VERSION, category: $CATEGORY"
 
             BG_FILE="export_combined_backgrounds/${VERSION}/${YEAR}/data/${CATEGORY}_mStop_vs_mChiRatio.pklz4"
-            CONFIG="resources/new_opt/config_${CATEGORY}_${VERSION}.yaml"
+            CONFIG="resources/matern32/config_${CATEGORY}_${VERSION}.yaml"
             OUT_DIR="${OUTPUT_BASE}/${VERSION}/${CATEGORY}"
 
             if [ ! -f "$BG_FILE" ]; then

@@ -33,6 +33,7 @@ model:
     #output_dim: 1
     #base_kernel_config:
     #  _type: Matern32Config
+    #_type: Matern32Config
   likelihood:
     _type: FixedGaussianNoiseConfig
     variance_floor_quantile: 0.05

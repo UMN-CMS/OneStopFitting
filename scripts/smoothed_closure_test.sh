@@ -1,4 +1,4 @@
-OUTPUT_BASE=${1:-"results/2026_10_26__smoothed_closure_test/second_smoothing/{bkg.era.name}"}
+OUTPUT_BASE=${1:-"results/2026_11_03__smoothed_closure_test_matern32/{bkg.era.name}"}
 PYTHON=".venv/bin/python"
 
 # Signal versions and categories
@@ -18,8 +18,8 @@ for YEAR in "${YEAR_ARRAY[@]}"; do
             echo "Processing year: $YEAR, version: $VERSION, category: $CATEGORY"
             
             #BG_FILE="2026_10_22__dbs_1d_selection/${VERSION}/${YEAR}/sm_bkg/${CATEGORY}_mStop.pklz4"
-            #BG_FILE="smoothed_complete_backgrounds/${YEAR}/${VERSION}/${CATEGORY}/pure_smoothed.pklz4"
-            BG_FILE="results/2026_10_26__smoothed_closure_test/${YEAR}/${VERSION}/${CATEGORY}/pure_smoothed.pklz4"
+            BG_FILE="smoothed_complete_backgrounds/${YEAR}/${VERSION}/${CATEGORY}/pure_smoothed.pklz4"
+            #BG_FILE="results/2026_10_26__smoothed_closure_test/${YEAR}/${VERSION}/${CATEGORY}/pure_smoothed.pklz4"
 
             CONFIG="resources/new_opt_closure_test/config_${CATEGORY}_${VERSION}.yaml"
             OUT_DIR="${OUTPUT_BASE}/${VERSION}/${CATEGORY}"
@@ -50,13 +50,13 @@ for YEAR in "${YEAR_ARRAY[@]}"; do
                 --output "$OUT_DIR"
 
             # 2. Run the smoothing
-            SMOOTHED_OUTPUT="${OUT_PATH}"
-            echo "Running smoothing..."
-            $PYTHON -m fitting smooth \
-                --state "$OUT_PATH" \
-                --name "$CATEGORY" \
-                --output-dir "$SMOOTHED_OUTPUT" \
-                --num-samples 1 \
+            #SMOOTHED_OUTPUT="${OUT_PATH}"
+            #echo "Running smoothing..."
+            #$PYTHON -m fitting smooth \
+            #    --state "$OUT_PATH" \
+            #    --name "$CATEGORY" \
+            #    --output-dir "$SMOOTHED_OUTPUT" \
+            #    --num-samples 1 \
 
             echo "Completed: $CATEGORY for $YEAR/$VERSION"
             echo "----------------------------------------"
