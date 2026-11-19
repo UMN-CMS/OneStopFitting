@@ -153,6 +153,12 @@ def posteriorPredictiveCheck(
 
     obs_Y = test_data.Y
     obs_V = test_data.V
+    total_V = obs_V + jnp.diag(pred_cov)
+
+    stat_variances = {name: obs_V for name in test_statistics}
+    if "chi2_total" not in test_statistics:
+        test_statistics = {**test_statistics, "chi2_total": chi2TestStatistic}
+        stat_variances["chi2_total"] = total_V
 
     test_stat_results: dict[str, dict[str, dict[str, Any]]] = {}
     test_stat_reps: dict[str, dict[str, jnp.ndarray]] = {}
@@ -172,7 +178,7 @@ def posteriorPredictiveCheck(
                 continue
 
             y_obs_masked = obs_Y[r_mask]
-            v_obs_masked = obs_V[r_mask]
+            v_obs_masked = stat_variances[name][r_mask]
             pred_mean_masked = pred_mean[r_mask]
 
             obs_val = stat_fn(y_obs_masked, pred_mean_masked, v_obs_masked)

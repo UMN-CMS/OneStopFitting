@@ -57,6 +57,9 @@ def computeDiagnosticMetrics(
         metrics["blinded_chi2_pred_per_bin"] = chi2PerBin(
             test_data_Y, pred_mean, pred_var, mask=blind_mask
         )
+        metrics["blinded_chi2_total_per_bin"] = chi2PerBin(
+            test_data_Y, pred_mean, test_data_V + pred_var, mask=blind_mask
+        )
 
     if min_count_mask is not None and jnp.any(min_count_mask):
         metrics["highstat_chi2_per_bin"] = chi2PerBin(
