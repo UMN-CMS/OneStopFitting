@@ -8,7 +8,7 @@ from typing import Any, Callable
 
 from ..core.data import BinnedData
 from .metrics import pullDistribution, totalPullDistribution
-from .plot_utils import addAxesToHist, plotBinnedData, plotPPD
+from .plot_utils import addAxesToHist, annotateChi2Stats, plotBinnedData, plotPPD
 
 
 def makePosteriorPredictivePlots1D(
@@ -165,6 +165,11 @@ def makeDiagnosticPlots1D(
     _plotPullHistograms(
         total_pulls, plot_saver=plot_saver, blind_mask=blind_mask, tag="total"
     )
+    _plotChi2Histograms(pulls, plot_saver=plot_saver, blind_mask=blind_mask, tag="stat")
+    _plotChi2Histograms(pulls_pred, plot_saver=plot_saver, blind_mask=blind_mask, tag="pred")
+    _plotChi2Histograms(
+        total_pulls, plot_saver=plot_saver, blind_mask=blind_mask, tag="total"
+    )
 
     if transform is not None:
         norm_data = transform.applyToBinnedData(test_data)
@@ -275,6 +280,42 @@ def _plotPullHistograms(
         ax.set_ylabel("Density")
         ax.legend()
         plot_saver(f"window_{tag}_pulls_hist", fig, ax)
+
+
+def _plotChi2Histograms(
+    pulls: np.ndarray,
+    plot_saver: Callable,
+    blind_mask: jnp.ndarray | None = None,
+    tag: str = "stat",
+) -> None:
+    chi2 = np.asarray(pulls) ** 2
+    bins = np.linspace(0.0, 25.0, 51)
+    chi2_x = np.linspace(1e-3, 25, 500)
+    chi2_y = np.exp(-chi2_x / 2) / np.sqrt(2 * np.pi * chi2_x)
+    xlabel = (
+        rf"{tag.capitalize()} $\chi^2$ per bin: "
+        rf"$(N_{{obs}} - N_{{pred}})^2 / \sigma_{{{tag}}}^2$"
+    )
+
+    fig, ax = plt.subplots(layout="tight")
+    ax.hist(chi2, bins=bins, density=True, alpha=0.7, label="All bins")
+    ax.plot(chi2_x, chi2_y, "k-", label=r"$\chi^2_{1}$")
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel("Density")
+    annotateChi2Stats(ax, {"": chi2})
+    ax.legend(loc="center right")
+    plot_saver(f"global_{tag}_chi2_hist", fig, ax)
+
+    if blind_mask is not None and np.any(np.asarray(blind_mask)):
+        np_mask = np.asarray(blind_mask)
+        fig, ax = plt.subplots(layout="tight")
+        ax.hist(chi2[np_mask], bins=bins, density=True, alpha=0.7, label="Window bins")
+        ax.plot(chi2_x, chi2_y, "k-", label=r"$\chi^2_{1}$")
+        ax.set_xlabel(xlabel)
+        ax.set_ylabel("Density")
+        annotateChi2Stats(ax, {"": chi2[np_mask]})
+        ax.legend(loc="center right")
+        plot_saver(f"window_{tag}_chi2_hist", fig, ax)
 
 
 def plotNNTransformation1D(

@@ -34,6 +34,15 @@ PLOT_REGISTRY: dict[int, dict[str, str]] = {
     },
 }
 
+OPTIONAL_PLOT_REGISTRY: dict[int, dict[str, str]] = {
+    1: {
+        "chi2": "global_total_chi2_hist",
+    },
+    2: {
+        "total_chi2": "total_chi2_hist",
+    },
+}
+
 SPOT_CHECK_THRESHOLDS = {
     "limit_vs_unc_ratio": 5.0,
     "ppc_pvalue_low": 0.01,
@@ -131,6 +140,11 @@ def _resolveImagePaths(
             img_path = (diagnostics_dir / f"{plot_name}.{image_format}").resolve()
         _requireFile(img_path)
         image_paths[role] = str(img_path)
+
+    for role, plot_name in OPTIONAL_PLOT_REGISTRY.get(ndim, {}).items():
+        img_path = (diagnostics_dir / f"{plot_name}{version}.{image_format}").resolve()
+        if img_path.exists():
+            image_paths[role] = str(img_path)
 
     return image_paths
 

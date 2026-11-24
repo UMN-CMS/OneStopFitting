@@ -523,3 +523,27 @@ def savePlots(plots: dict[str, tuple], save_dir, all_meta, formats=("pdf",), **k
     for name, (fig, ax) in plots.items():
         saver(name, fig, ax)
     logger.info(f"Saved {len(plots)} to directory {save_dir}")
+
+
+def annotateChi2Stats(ax, chi2_groups: dict[str, np.ndarray]) -> None:
+    lines = []
+    for label, chi2_vals in chi2_groups.items():
+        vals = np.asarray(chi2_vals)
+        vals = vals[np.isfinite(vals)]
+        n = vals.size
+        total = float(np.sum(vals)) if n else float("nan")
+        reduced = total / n if n else float("nan")
+        prefix = f"{label}: " if label else ""
+        lines.append(
+            rf"{prefix}$\chi^2$ = {total:.4g}, $\chi^2/N_{{bins}}$ = {reduced:.4g} (N = {n})"
+        )
+    ax.text(
+        0.97,
+        0.97,
+        "\n".join(lines),
+        transform=ax.transAxes,
+        ha="right",
+        va="top",
+        fontsize="small",
+        bbox=dict(boxstyle="round", facecolor="white", alpha=0.8, edgecolor="gray"),
+    )

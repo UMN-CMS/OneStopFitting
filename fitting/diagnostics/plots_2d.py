@@ -8,7 +8,13 @@ import itertools as it
 from ..core.data import BinnedData
 from .metrics import pullDistribution, totalPullDistribution
 from typing import Any, Callable
-from .plot_utils import plotBinnedData, plotRaw, plotPPD, plotBlinding2D
+from .plot_utils import (
+    annotateChi2Stats,
+    plotBinnedData,
+    plotRaw,
+    plotPPD,
+    plotBlinding2D,
+)
 from contextlib import contextmanager
 
 
@@ -287,6 +293,39 @@ def makeDiagnosticPlots2D(
     _plotSinglePullHist(pulls, "Stat", "Statistical Pull", "stat_pulls_hist")
     _plotSinglePullHist(pulls_pred, "Pred", "Pred Var Pull", "pred_pulls_hist")
     _plotSinglePullHist(total_pulls, "Total", "Total Pull", "total_pulls_hist")
+
+    chi2_bins = np.linspace(0.0, 25.0, 51)
+    chi2_x = np.linspace(1e-3, 25, 500)
+    chi2_y = np.exp(-chi2_x / 2) / np.sqrt(2 * np.pi * chi2_x)
+
+    def _plotSingleChi2Hist(p_vals, tag_name, title_prefix, key):
+        chi2_vals = np.asarray(p_vals) ** 2
+        fig_h, ax_h = plt.subplots()
+        ax_h.hist(chi2_vals, bins=chi2_bins, density=True, alpha=0.7, label="All bins")
+        stat_groups = {"All": chi2_vals}
+        if blind_mask is not None and np.any(np.asarray(blind_mask)):
+            np_mask = np.asarray(blind_mask)
+            ax_h.hist(
+                chi2_vals[np_mask],
+                bins=chi2_bins,
+                density=True,
+                alpha=0.7,
+                label="Window bins",
+            )
+            stat_groups["Window"] = chi2_vals[np_mask]
+        ax_h.plot(chi2_x, chi2_y, "k-", label=r"$\chi^2_{1}$")
+        ax_h.set_xlabel(
+            rf"{tag_name} $\chi^2$ per bin: $(N_{{obs}} - N_{{pred}})^2 / \sigma^2$"
+        )
+        ax_h.set_ylabel("Density")
+        ax_h.set_title(f"{title_prefix} Distribution")
+        annotateChi2Stats(ax_h, stat_groups)
+        ax_h.legend(loc="center right")
+        plot_saver(key, fig_h, ax_h)
+
+    _plotSingleChi2Hist(pulls, "Stat", r"Statistical $\chi^2$", "stat_chi2_hist")
+    _plotSingleChi2Hist(pulls_pred, "Pred", r"Pred Var $\chi^2$", "pred_chi2_hist")
+    _plotSingleChi2Hist(total_pulls, "Total", r"Total $\chi^2$", "total_chi2_hist")
 
     if transform is not None and False:
         norm_data = transform.applyToBinnedData(test_data)
