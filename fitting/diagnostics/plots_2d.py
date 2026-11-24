@@ -320,6 +320,20 @@ def makeDiagnosticPlots2D(
         ax_h.legend(loc="center right")
         plot_saver(key, fig_h, ax_h)
 
+        if "Window" in stat_groups:
+            fig_c, ax_c = plt.subplots()
+            ax_c.hist(
+                stat_groups["Window"], bins=chi2_bins, alpha=0.7, label="Window bins"
+            )
+            ax_c.set_xlabel(
+                rf"{tag_name} $\chi^2$ per bin: $(N_{{obs}} - N_{{pred}})^2 / \sigma^2$"
+            )
+            ax_c.set_ylabel("Number of bins")
+            ax_c.set_title(f"{title_prefix} Distribution (Window)")
+            annotateChi2Stats(ax_c, {"Window": stat_groups["Window"]})
+            ax_c.legend(loc="center right")
+            plot_saver(f"window_{key.removesuffix('_hist')}_counts_hist", fig_c, ax_c)
+
     _plotSingleChi2Hist(pulls, "Stat", r"Statistical $\chi^2$", "stat_chi2_hist")
     _plotSingleChi2Hist(pulls_pred, "Pred", r"Pred Var $\chi^2$", "pred_chi2_hist")
     _plotSingleChi2Hist(total_pulls, "Total", r"Total $\chi^2$", "total_chi2_hist")

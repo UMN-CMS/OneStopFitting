@@ -313,6 +313,14 @@ def _plotChi2Histograms(
         ax.legend(loc="center right")
         plot_saver(f"window_{tag}_chi2_hist", fig, ax)
 
+        fig, ax = plt.subplots(layout="tight")
+        ax.hist(chi2[np_mask], bins=bins, alpha=0.7, label="Window bins")
+        ax.set_xlabel(xlabel)
+        ax.set_ylabel("Number of bins")
+        annotateChi2Stats(ax, {"": chi2[np_mask]})
+        ax.legend(loc="center right")
+        plot_saver(f"window_{tag}_chi2_counts_hist", fig, ax)
+
 
 def plotNNTransformation1D(
     kernel: Any,
