@@ -205,6 +205,28 @@ def makeDiagnosticPlots2D(
             ax.set_ylabel(test_data.axis_names[1])
         plotBlinding2D(ax, edges, X, blind_mask)
 
+    for key, p_vals, var_label in [
+        ("chi2_map_pred_var", pulls_pred, "Pred Var"),
+        ("chi2_map_obs_var", pulls, "Obs Var"),
+        ("chi2_map", total_pulls, "Total Var"),
+    ]:
+        with makePlot(key) as ax:
+            plotRaw(
+                ax,
+                edges,
+                X,
+                jnp.array(np.asarray(p_vals) ** 2),
+                cmap="viridis",
+                cmin=0,
+                cmax=9,
+                cbar_title=rf"$\chi^2$ (w {var_label})",
+            )
+            ax.set_title(r"$\chi^2$ Map")
+            if test_data.axis_names and len(test_data.axis_names) >= 2:
+                ax.set_xlabel(test_data.axis_names[0])
+                ax.set_ylabel(test_data.axis_names[1])
+            plotBlinding2D(ax, edges, X, blind_mask)
+
     # --- Covariance at blinding center ---
     if (
         pred_cov is not None
